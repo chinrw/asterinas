@@ -24,3 +24,9 @@ The Docker images are tagged according to the version specified
 in the `DOCKER_IMAGE_VERSION` file at the project root.
 Check out the [version bump](https://asterinas.github.io/book/to-contribute/version-bump.html) documentation
 on how new versions of the Docker images are released.
+
+## Develop with Nix (alternative to Docker)
+
+See [nix/README.md](../../nix/README.md): the flake at the repository root
+provides a dev shell with the Rust toolchain and boot stack pinned to the
+versions this Docker image uses.
