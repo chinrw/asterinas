@@ -408,7 +408,7 @@ book/mermaid.min.js book/mermaid-init.js:
 .PHONY: format
 format:
 	@./tools/format_all.sh
-	@nixfmt ./distro
+	@nixfmt flake.nix ./distro ./nix
 	@$(MAKE) --no-print-directory -C test/initramfs format
 	@$(MAKE) --no-print-directory -C test/nixos format
 
@@ -438,8 +438,8 @@ check: $(CARGO_OSDK)
 	@
 	@# Check typos
 	@typos
-	@# Check formatting issues of Nix files under distro directory
-	@nixfmt --check ./distro
+	@# Check Nix formatting
+	@nixfmt --check flake.nix ./distro ./nix
 
 .PHONY: clean
 clean:
