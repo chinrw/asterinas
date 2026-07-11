@@ -1,5 +1,9 @@
 # Nix Development Environment
 
+See the [development environment](https://asterinas.github.io/book/to-contribute/development-environment.html)
+page in the Book for how this shell relates to the canonical Docker-based
+environment.
+
 The flake at the repository root provides a development shell as an
 alternative to the [Docker-based environment](../tools/docker). The Rust
 toolchain (from `rust-toolchain.toml`), the boot stack (QEMU, GRUB, OVMF,

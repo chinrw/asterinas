@@ -1,6 +1,6 @@
 # Asterinas Development Docker Images
 
-Asterinas development Docker images are provided to facilitate developing and testing Asterinas project. These images can be found in the [asterinas/asterinas](https://hub.docker.com/r/asterinas/asterinas/) repository on DockerHub.
+Asterinas development Docker images are provided to facilitate developing and testing Asterinas project. These images can be found in the [asterinas/asterinas](https://hub.docker.com/r/asterinas/asterinas/) repository on DockerHub. Nix users can instead use the dev shell in [`nix/`](../../nix/) as an alternative to these images.
 
 ## Building Docker Images
 

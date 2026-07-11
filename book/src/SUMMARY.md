@@ -86,6 +86,7 @@
 # How to Contribute
 
 * [Before You Contribute](to-contribute/README.md)
+* [Development Environment](to-contribute/development-environment.md)
 * [Code Organization]()
 * [Coding Guidelines](to-contribute/coding-guidelines/README.md)
     * [How Guidelines Are Written](to-contribute/coding-guidelines/how-guidelines-are-written.md)
