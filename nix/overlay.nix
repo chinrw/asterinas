@@ -26,6 +26,23 @@ in {
   # OVMF is built through pkgsCross.gnu64, so the edk2 pin must live at the
   # top level and propagate into that package set.
   edk2 = final.callPackage ./packages/edk2.nix { };
+
+  # Lint/doc tools `cargo install`ed by the Docker image, pinned to match
+  # where nixpkgs' own rustc can still build the pin (this nixpkgs revision
+  # ships rustc 1.86.0):
+  #   - typos-cli@1.39.0 builds fine and is pinned below.
+  #   - cargo-expand@1.0.122, lychee@0.24.2, mdbook@0.5.2, and
+  #     mdbook-mermaid@0.17.0 all need rustc >= 1.88, so they stay on
+  #     nixpkgs' own (older) versions rather than pulling in a second Rust
+  #     toolchain just for lint tools.
+  #   - cargo-binutils has no version pin in the Dockerfile to track, so it
+  #     also stays on whatever nixpkgs ships.
+  #
+  # `typos = prev.typos`: callPackage's auto-args resolve against the
+  # overlay's fixed point either way, so leaving it to auto-inject the
+  # `typos` argument would look up the attribute being defined here and
+  # recurse; it must be passed the pre-overlay derivation explicitly.
+  typos = final.callPackage ./packages/typos.nix { typos = prev.typos; };
 }
 # Boot-time tools are Linux-only; Darwin gets the build/lint shell.
 // lib.optionalAttrs stdenv.isLinux {

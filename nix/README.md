@@ -5,9 +5,12 @@ alternative to the [Docker-based environment](../tools/docker). The Rust
 toolchain (from `rust-toolchain.toml`), the boot stack (QEMU, GRUB, OVMF,
 klint), and the nixpkgs commit are pinned to the versions the Docker image
 uses; each pin lives next to a comment naming its Dockerfile counterpart, so
-bump them together. Lint and doc tools (typos, mdbook, ...) come from nixpkgs
-and may lag the versions the Docker image installs with `cargo install`;
-`make check` inside the Docker image is what CI runs.
+bump them together. Of the lint and doc tools installed with `cargo install`,
+only typos is likewise pinned to the Docker image's version; cargo-expand,
+lychee, mdbook, and mdbook-mermaid need a newer rustc than this nixpkgs
+revision ships, and cargo-binutils has no version pin in the Dockerfile to
+match, so those four stay on whatever nixpkgs ships (see
+`nix/overlay.nix`). `make check` inside the Docker image is what CI runs.
 
 With a flakes-enabled Nix, enter the dev shell from the repository root:
 

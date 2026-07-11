@@ -4,8 +4,11 @@
 #   Linux  : toolchain, cargo tools, boot stack, and host build tools.
 #   darwin : build/lint subset. Booting the kernel still needs Linux.
 { lib, mkShell, stdenv, asterinas-rust-toolchain, asterinas-vdso
-# Tools the Docker image installs with `cargo install`; nixpkgs provides
-# them here, so versions may lag the Docker pins.
+# Tools the Docker image installs with `cargo install`. The overlay pins
+# typos to the Dockerfile's version; cargo-expand, lychee, mdbook, and
+# mdbook-mermaid need a newer rustc than this nixpkgs revision ships, and
+# cargo-binutils has no Docker pin to match, so those four stay on nixpkgs'
+# own versions (see nix/overlay.nix).
 , cargo-binutils, cargo-expand, lychee, mdbook, mdbook-mermaid, typos
 # Host tools used on Linux and Darwin.
 , clang, clang-tools, git, python3, yq, jq, gnumake, pkg-config, sqlite, file
