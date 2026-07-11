@@ -8,7 +8,7 @@ use bin::{AsterBin, AsterBinType};
 use file::{BundleFile, Initramfs};
 use std::{
     io::{BufRead, BufReader, Write},
-    os::unix::net::UnixStream,
+    os::unix::{fs::PermissionsExt, net::UnixStream},
     process::{self, ExitStatus},
     time::Duration,
 };
@@ -310,7 +310,8 @@ impl Bundle {
         };
 
         match shlex::split(&action.qemu.args) {
-            Some(v) => {
+            Some(mut v) => {
+                make_pflash_vars_writable(&mut v, &self.path);
                 for arg in v {
                     qemu_cmd.arg(arg);
                 }
@@ -416,5 +417,180 @@ impl Bundle {
         {
             crate::util::dump_coverage_from_qemu(file, qemu_monitor_stream);
         }
+    }
+}
+
+/// Makes the OVMF variable store (the writable `-drive if=pflash` image,
+/// as opposed to the read-only OVMF code image) writable by QEMU.
+///
+/// `OVMF_DIR` may point into the read-only Nix store, in which case QEMU
+/// cannot open the variable store for writing. When that happens, this
+/// copies the file into `bundle_dir` and rewrites the argument to point at
+/// the writable copy.
+///
+/// The copy is skipped whenever the configured file is already writable,
+/// so the default Docker firmware path (`/root/ovmf/release`) keeps
+/// persisting UEFI variable changes into the same file across runs, exactly
+/// as it did before this function existed.
+fn make_pflash_vars_writable(args: &mut [String], bundle_dir: &Path) {
+    for i in 1..args.len() {
+        if args[i - 1] != "-drive" {
+            continue;
+        }
+
+        let drive = &args[i];
+        // The read-only OVMF code image is also passed as `if=pflash`, but
+        // it is marked `readonly=on`; only the variable store needs to be
+        // writable.
+        if !drive.contains("if=pflash") || drive.contains("readonly=on") {
+            continue;
+        }
+
+        let Some(src) = pflash_drive_file(drive) else {
+            continue;
+        };
+        if is_writable(&src) {
+            continue;
+        }
+
+        let dest = bundle_dir.join(src.file_name().unwrap());
+        std::fs::copy(&src, &dest).unwrap_or_else(|err| {
+            error_msg!(
+                "Failed to copy `{}` to `{}`: {}",
+                src.display(),
+                dest.display(),
+                err
+            );
+            process::exit(Errno::RunBundle as _);
+        });
+        // `fs::copy` preserves the source's permission bits, which are
+        // read-only for files coming from the Nix store. Make the copy
+        // writable so QEMU can persist UEFI variable changes into it.
+        let mut perms = std::fs::metadata(&dest).unwrap().permissions();
+        perms.set_mode(perms.mode() | 0o200);
+        std::fs::set_permissions(&dest, perms).unwrap();
+
+        args[i] = drive.replace(
+            &format!("file={}", src.display()),
+            &format!("file={}", dest.display()),
+        );
+    }
+}
+
+/// Extracts the `file=` value out of a `-drive` argument's comma-separated
+/// key-value list.
+fn pflash_drive_file(drive: &str) -> Option<PathBuf> {
+    drive
+        .split(',')
+        .find_map(|kv| kv.strip_prefix("file="))
+        .map(PathBuf::from)
+}
+
+/// Checks whether `path` can be opened for writing, without modifying its
+/// contents.
+fn is_writable(path: &Path) -> bool {
+    std::fs::OpenOptions::new().write(true).open(path).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pflash_drive_file_extracts_path() {
+        let drive = "if=pflash,format=raw,unit=1,file=/root/ovmf/release/OVMF_VARS.fd";
+        assert_eq!(
+            pflash_drive_file(drive),
+            Some(PathBuf::from("/root/ovmf/release/OVMF_VARS.fd"))
+        );
+    }
+
+    #[test]
+    fn pflash_drive_file_returns_none_without_file_key() {
+        let drive = "if=pflash,format=raw,unit=0,readonly=on";
+        assert_eq!(pflash_drive_file(drive), None);
+    }
+
+    #[test]
+    fn make_pflash_vars_writable_copies_readonly_file_and_rewrites_arg() {
+        let src_dir = tempfile::tempdir().unwrap();
+        let bundle_dir = tempfile::tempdir().unwrap();
+
+        let src_path = src_dir.path().join("OVMF_VARS.fd");
+        std::fs::write(&src_path, b"vars").unwrap();
+        let mut perms = std::fs::metadata(&src_path).unwrap().permissions();
+        perms.set_mode(0o444);
+        std::fs::set_permissions(&src_path, perms).unwrap();
+
+        let mut args = vec![
+            "-drive".to_string(),
+            format!(
+                "if=pflash,format=raw,unit=1,file={}",
+                src_path.to_string_lossy()
+            ),
+        ];
+
+        make_pflash_vars_writable(&mut args, bundle_dir.path());
+
+        let dest_path = bundle_dir.path().join("OVMF_VARS.fd");
+        assert!(dest_path.exists());
+        assert_eq!(std::fs::read(&dest_path).unwrap(), b"vars");
+        assert!(is_writable(&dest_path));
+        assert_eq!(
+            args[1],
+            format!(
+                "if=pflash,format=raw,unit=1,file={}",
+                dest_path.to_string_lossy()
+            )
+        );
+    }
+
+    #[test]
+    fn make_pflash_vars_writable_leaves_already_writable_file_in_place() {
+        let src_dir = tempfile::tempdir().unwrap();
+        let bundle_dir = tempfile::tempdir().unwrap();
+
+        let src_path = src_dir.path().join("OVMF_VARS.fd");
+        std::fs::write(&src_path, b"vars").unwrap();
+
+        let mut args = vec![
+            "-drive".to_string(),
+            format!(
+                "if=pflash,format=raw,unit=1,file={}",
+                src_path.to_string_lossy()
+            ),
+        ];
+        let original_args = args.clone();
+
+        make_pflash_vars_writable(&mut args, bundle_dir.path());
+
+        assert_eq!(args, original_args);
+        assert!(!bundle_dir.path().join("OVMF_VARS.fd").exists());
+    }
+
+    #[test]
+    fn make_pflash_vars_writable_ignores_readonly_code_image() {
+        let src_dir = tempfile::tempdir().unwrap();
+        let bundle_dir = tempfile::tempdir().unwrap();
+
+        let src_path = src_dir.path().join("OVMF.fd");
+        std::fs::write(&src_path, b"code").unwrap();
+        let mut perms = std::fs::metadata(&src_path).unwrap().permissions();
+        perms.set_mode(0o444);
+        std::fs::set_permissions(&src_path, perms).unwrap();
+
+        let mut args = vec![
+            "-drive".to_string(),
+            format!(
+                "if=pflash,format=raw,unit=0,readonly=on,file={}",
+                src_path.to_string_lossy()
+            ),
+        ];
+        let original_args = args.clone();
+
+        make_pflash_vars_writable(&mut args, bundle_dir.path());
+
+        assert_eq!(args, original_args);
+        assert!(!bundle_dir.path().join("OVMF.fd").exists());
     }
 }

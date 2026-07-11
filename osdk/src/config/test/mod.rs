@@ -57,3 +57,35 @@ fn conditional_manifest() {
 
     fs::remove_file(tmp_file).unwrap();
 }
+
+#[test]
+fn eval_falls_back_to_default_when_env_var_unset() {
+    // SAFETY: no other thread reads or writes this test-only variable name.
+    unsafe {
+        std::env::remove_var("OSDK_TEST_OVMF_DIR_UNSET");
+    }
+    let result = eval(
+        ".",
+        &"${OSDK_TEST_OVMF_DIR_UNSET:-/root/ovmf/release}".to_string(),
+    )
+    .unwrap();
+    assert_eq!(result, "/root/ovmf/release");
+}
+
+#[test]
+fn eval_uses_env_var_when_set() {
+    // SAFETY: no other thread reads or writes this test-only variable name.
+    unsafe {
+        std::env::set_var("OSDK_TEST_OVMF_DIR_SET", "/some/nix/store/ovmf");
+    }
+    let result = eval(
+        ".",
+        &"${OSDK_TEST_OVMF_DIR_SET:-/root/ovmf/release}".to_string(),
+    )
+    .unwrap();
+    // SAFETY: no other thread reads or writes this test-only variable name.
+    unsafe {
+        std::env::remove_var("OSDK_TEST_OVMF_DIR_SET");
+    }
+    assert_eq!(result, "/some/nix/store/ovmf");
+}
