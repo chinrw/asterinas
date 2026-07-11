@@ -440,6 +440,9 @@ check: $(CARGO_OSDK)
 	@typos
 	@# Check Nix formatting
 	@nixfmt --check flake.nix ./distro ./nix
+	@# Check that version pins duplicated between the Docker image and the
+	@# Nix flake stay in sync
+	@./tools/check_version_pins.sh
 
 .PHONY: clean
 clean:
