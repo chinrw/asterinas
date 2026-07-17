@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="An opt-in Nix development shell for Asterinas, pinned component-for-component to the Docker environment.">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">&#10052;&#65039;</text></svg>'>
+<style>*,*::before,*::after{box-sizing:border-box}html,body{margin:0;padding:0}</style>
+<title>A Nix Dev Shell for Asterinas</title>
+<style>
+  :root {
+    --ground:  #ECEDF1;
+    --surface: #F8F9FC;
+    --sunken:  #E2E4EB;
+    --ink:     #13161F;
+    --muted:   #5B6070;
+    --faint:   #878C9C;
+    --rule:    #D0D3DD;
+    --accent:  #22337C;
+    --accent-soft: #4E5FB4;
+    --ok:      #1D6B45;
+    --warn:    #8A5A0F;
+    --ok-bg:   rgba(29, 107, 69, 0.07);
+    --warn-bg: rgba(138, 90, 15, 0.08);
+
+    --font-display: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, "Times New Roman", serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "JetBrains Mono", "SFMono-Regular", "SF Mono", "Cascadia Code", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:  #0E1017;
+      --surface: #161923;
+      --sunken:  #0A0C12;
+      --ink:     #E3E5EC;
+      --muted:   #969CAC;
+      --faint:   #6B7080;
+      --rule:    #282D3A;
+      --accent:  #93A2F2;
+      --accent-soft: #6E7FD4;
+      --ok:      #5CBC89;
+      --warn:    #D5A24F;
+      --ok-bg:   rgba(92, 188, 137, 0.10);
+      --warn-bg: rgba(213, 162, 79, 0.10);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:  #0E1017;
+    --surface: #161923;
+    --sunken:  #0A0C12;
+    --ink:     #E3E5EC;
+    --muted:   #969CAC;
+    --faint:   #6B7080;
+    --rule:    #282D3A;
+    --accent:  #93A2F2;
+    --accent-soft: #6E7FD4;
+    --ok:      #5CBC89;
+    --warn:    #D5A24F;
+    --ok-bg:   rgba(92, 188, 137, 0.10);
+    --warn-bg: rgba(213, 162, 79, 0.10);
+  }
+
+  :root[data-theme="light"] {
+    --ground:  #ECEDF1;
+    --surface: #F8F9FC;
+    --sunken:  #E2E4EB;
+    --ink:     #13161F;
+    --muted:   #5B6070;
+    --faint:   #878C9C;
+    --rule:    #D0D3DD;
+    --accent:  #22337C;
+    --accent-soft: #4E5FB4;
+    --ok:      #1D6B45;
+    --warn:    #8A5A0F;
+    --ok-bg:   rgba(29, 107, 69, 0.07);
+    --warn-bg: rgba(138, 90, 15, 0.08);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16.5px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .doc {
+    max-width: 46rem;
+    margin-inline: auto;
+    padding: 3.5rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2.9rem;
+  }
+  .doc > .wide { max-width: none; }
+
+  .eyebrow { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.2em; color: var(--faint); }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(2rem, 1.3rem + 2.8vw, 3rem);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .lede { font-size: 1.12rem; color: var(--muted); text-wrap: pretty; }
+
+  .masthead { display: flex; flex-direction: column; gap: 1.1rem; }
+  .status-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .pill {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.04em;
+    border: 1px solid var(--rule); padding: 0.22em 0.7em; color: var(--muted); background: var(--surface);
+  }
+  .pill.p-ok { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); }
+  a.pill:hover { border-width: 1px; filter: brightness(1.1); }
+
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.45rem;
+    line-height: 1.35;
+    padding-bottom: 0.45rem;
+    border-bottom: 1px solid var(--rule);
+    text-wrap: balance;
+  }
+  section { display: flex; flex-direction: column; gap: 1rem; }
+  p { text-wrap: pretty; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+  a:hover { border-bottom-width: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  code { font-family: var(--font-mono); font-size: 0.85em; background: var(--sunken); padding: 0.1em 0.34em; }
+
+  .code {
+    background: var(--sunken); border: 1px solid var(--rule);
+    padding: 1rem 1.15rem; overflow-x: auto;
+    font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.8; color: var(--ink);
+  }
+  .code code { background: none; padding: 0; font-size: inherit; }
+  .code .cm { color: var(--faint); }
+
+  ul, ol { display: flex; flex-direction: column; gap: 0.55rem; padding-left: 1.2rem; }
+  li::marker { color: var(--accent-soft); }
+  li { text-wrap: pretty; }
+
+  .tbl-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--rule); vertical-align: top; line-height: 1.6; }
+  thead th { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--ink); }
+  td code { white-space: nowrap; }
+  td { font-variant-numeric: tabular-nums; }
+
+  .callout {
+    border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+    background: var(--surface); padding: 0.9rem 1.2rem;
+    font-size: 0.95rem; color: var(--muted);
+  }
+  .callout strong { color: var(--ink); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.7rem; }
+  .tile { border: 1px solid var(--rule); background: var(--surface); padding: 0.7rem 0.95rem; display: flex; flex-direction: column; gap: 0.25rem; }
+  .tile-t { font-weight: 600; font-size: 0.92rem; }
+  .tile-s { font-size: 0.82rem; color: var(--muted); line-height: 1.55; }
+
+  /* ---- dependency diagram ---- */
+  .dg-wrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); padding: 1.1rem 0.5rem; }
+  .dg-wrap svg { min-width: 600px; display: block; margin-inline: auto; }
+  .dg text { font-family: var(--font-body); font-size: 12.5px; fill: var(--ink); text-anchor: middle; }
+  .dg text.t { font-weight: 600; }
+  .dg text.s { font-size: 10.5px; fill: var(--muted); }
+  .dg text.hd { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; fill: var(--faint); }
+  .dg text.tm { font-size: 11px; font-weight: 600; }
+  .dg text.s2 { font-size: 9.5px; fill: var(--muted); }
+  .dg rect.node { fill: var(--ground); stroke: var(--rule); }
+  .dg rect.gate { fill: var(--ground); stroke: var(--accent); stroke-width: 1.5; }
+  .dg line.dep { stroke: var(--faint); stroke-width: 1.2; }
+  .dg line.gateline { stroke: var(--rule); stroke-dasharray: 4 5; }
+  .caption { font-family: var(--font-mono); font-size: 0.71rem; color: var(--faint); line-height: 1.7; }
+
+  footer.doc-end { border-top: 1px solid var(--rule); padding-top: 1.1rem; font-family: var(--font-mono); font-size: 0.73rem; color: var(--faint); line-height: 1.9; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<main class="doc">
+
+  <header class="masthead">
+    <p class="eyebrow">ASTERINAS · DEVELOPER EXPERIENCE</p>
+    <h1>A Nix dev shell for Asterinas</h1>
+    <p class="lede">An opt-in alternative to the Docker development environment, pinned component-for-component to what the Dockerfiles build. Docker stays canonical; nothing about the existing workflow changes.</p>
+    <div class="status-row">
+      <a class="pill p-ok" href="https://github.com/asterinas/asterinas/pull/3548">PR #3548 open · CI green</a>
+      <span class="pill">9 commits</span>
+      <span class="pill">4-stage roadmap below</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Why a Nix dev shell</h2>
+    <p><strong>Nix is already load-bearing in this repository:</strong> the test initramfs is built with <code>nix-build</code>, the AsterNixOS distribution under <code>distro/</code> is a NixOS configuration, CI publishes to a Cachix cache, and the development Docker image installs Nix <em>inside</em> the container to drive those builds. The development environment was the one piece not yet expressed in Nix. The flake closes that gap — pinning the exact nixpkgs commit the repository already uses twice — and implements the development-shell half of <a href="https://github.com/asterinas/asterinas/issues/2642">#2642</a>. It is also a concrete step toward developing Asterinas <em>on</em> Asterinas: AsterNixOS guests already run the Nix-provisioned development tools, direnv included.</p>
+    <ul>
+      <li><strong>Granular fetching.</strong> Docker ships one ~3 GB all-in-one image; Nix resolves individual store paths — a lint-only task pulls a fraction of the closure, macOS never downloads the Linux boot stack, and nothing is fetched twice.</li>
+      <li><strong>Editor integration.</strong> The toolchain and a matching <code>rust-analyzer</code> derive from <code>rust-toolchain.toml</code>, with <code>VDSO_LIBRARY_DIR</code> exported — an editor started inside the shell checks the kernel crates out of the box.</li>
+      <li><strong>One prerequisite.</strong> Just the Nix package manager — one installer command on any distro or macOS, preinstalled on NixOS; no daemon, no privileged container, and on macOS no Linux-VM detour.</li>
+      <li><strong>Reproducibility as security.</strong> Every input is content-addressed and hash-pinned: a tampered dependency fails closed, and bit-identical builds can be verified independently.</li>
+    </ul>
+    <div class="callout"><strong>The design constraint: no drift.</strong> The flake packages the boot stack at exactly the versions the Dockerfiles build, every pin carries a comment naming its Dockerfile counterpart, and a sync-check script (first wave, below) turns any future divergence into a CI failure.</div>
+  </section>
+
+  <section>
+    <h2>What <a href="https://github.com/asterinas/asterinas/pull/3548">#3548</a> ships</h2>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th scope="col">Component</th><th scope="col">Version</th><th scope="col">Matches</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>QEMU</td><td><a href="https://gitlab.com/qemu-project/qemu/-/tags/v10.2.1">10.2.1</a>, Asterinas target list</td><td>Docker <code>build-qemu</code> stage</td></tr>
+          <tr><td>OVMF / MICROVM firmware</td><td><a href="https://github.com/tianocore/edk2/releases/tag/edk2-stable202508">edk2-stable202508</a></td><td>Docker <code>build-ovmf</code> stage</td></tr>
+          <tr><td>GRUB (Asterinas fork)</td><td><a href="https://github.com/asterinas/grub/commit/0633bc8c08fd61b64cc19bb7ebafc871e8c4172b">0633bc8</a>, x86_64-efi</td><td>Docker <code>build-grub</code> stage</td></tr>
+          <tr><td>klint</td><td><a href="https://github.com/Rust-for-Linux/klint/commit/7d7c522b66a3e2456bc6024ff69dea619c4b9c2a">7d7c522</a>, built with the pinned nightly</td><td>Docker <code>cargo install</code></td></tr>
+          <tr><td>nixpkgs</td><td><a href="https://github.com/NixOS/nixpkgs/commit/c0bebd16e69e631ac6e52d6eb439daba28ac50cd">c0bebd1</a></td><td>Docker <code>nix</code> layer &amp; initramfs</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The shell exports <code>VDSO_LIBRARY_DIR</code> and <code>OVMF_DIR</code> when not already set, so <code>nix develop</code> followed by <code>make run_kernel</code> needs no manual setup. A tracked <code>.envrc</code> adds direnv support — approval is bound to the file's content hash, so nothing executes without an explicit <code>direnv allow</code>. Changes to existing files are deliberately small: <code>tools/qemu_args.sh</code> reads the firmware directory from <code>OVMF_DIR</code> with the default unchanged, so Docker is unaffected. The branch also carries the flake’s CI workflow: evaluation across all systems, builds of the four packages, and an isolated dev-shell smoke test.</p>
+  </section>
+
+  <section>
+    <h2>How it was validated</h2>
+    <ul>
+      <li><code>nix flake check --all-systems</code>, plus the repo's nixfmt and typos gates extended over the new files.</li>
+      <li>Boot smoke (<code>make run_kernel AUTO_TEST=boot</code>) on x86_64 Linux with KVM — repeated under <code>nix develop --ignore-environment</code> to rule out anything leaking in from the host.</li>
+      <li>All four packages built and inspected on x86_64-linux and aarch64-linux; on aarch64 the GRUB userland tools are a native build while the EFI modules stay x86_64.</li>
+      <li>On an Apple-silicon Mac: clippy, the ostd cross-build, typos and mdbook work; the boot-stack packages are correctly Linux-only.</li>
+      <li>Outside the shell, <code>./tools/qemu_args.sh</code> still emits the original <code>/root/ovmf/release</code> paths.</li>
+    </ul>
+    <p><strong>Known gaps</strong>, stated up front: <code>cargo osdk new</code> scaffolds still hardcode the Docker firmware paths (fix in the first wave, below); the gvisor tests need the Docker image's prebuilt binaries; and some nixpkgs-provided lint tools lag the versions Docker pins, so <code>make check</code> in Docker remains the CI reference.</p>
+  </section>
+
+  <section>
+    <h2>Try it</h2>
+    <pre class="code"><code><span class="cm"># One-time setup: enable flakes (an experimental feature of Nix) by adding
+# this line to /etc/nix/nix.conf or ~/.config/nix/nix.conf:</span>
+experimental-features = nix-command flakes
+
+<span class="cm"># From the repository root, one command prepares the complete development
+# environment — pinned Rust toolchain + rust-analyzer, QEMU, GRUB, OVMF,
+# klint, and the host tools the Docker image provides:</span>
+nix develop
+
+<span class="cm"># The usual targets then work without further setup:</span>
+make kernel
+make run_kernel
+
+<span class="cm"># Or build / run a single component without entering the shell (Linux only):</span>
+nix build .#qemu               <span class="cm"># also .#grub, .#ovmf, .#klint</span>
+nix run .#qemu -- --version    <span class="cm"># runs the packaged qemu-system-x86_64</span></code></pre>
+    <p class="caption">Flakes and the unified <code>nix</code> CLI are opt-in Nix features; the <a href="https://wiki.nixos.org/wiki/Flakes">NixOS wiki page on flakes</a> covers enabling them per-user or system-wide.</p>
+  </section>
+
+  <section>
+    <h2>What's next</h2>
+    <p>The follow-up work falls into three stages, each change small enough to review in one sitting. The first wave is ready to open as PRs once #3548 lands:</p>
+    <div class="tiles">
+      <div class="tile"><span class="tile-t">CI extensions</span><span class="tile-s">A full boot smoke through the dev shell, plus the binary cache once the credentials question is settled — both extend the workflow that ships with #3548.</span></div>
+      <div class="tile"><span class="tile-t">Book page</span><span class="tile-s">Both environments side by side, cross-linked with the Docker and Nix READMEs.</span></div>
+      <div class="tile"><span class="tile-t">OVMF_DIR through OSDK</span><span class="tile-s">Generated projects honor <code>OVMF_DIR</code>; <code>OVMF_VARS.fd</code> is copied out of the read-only store before QEMU writes to it.</span></div>
+      <div class="tile"><span class="tile-t">Version-pin sync check</span><span class="tile-s"><code>make check</code> fails on any drift between the Dockerfiles and <code>nix/</code>, covering all three nixpkgs copies.</span></div>
+      <div class="tile"><span class="tile-t">Then: stages 3–4</span><span class="tile-s">Tool parity, platform coverage, and Nix-owned images — mapped in the diagram below, ending the build half of <a href="https://github.com/asterinas/asterinas/issues/2642">#2642</a>.</span></div>
+    </div>
+  </section>
+
+  <section class="wide">
+    <h2>How it fits together</h2>
+    <div class="dg-wrap">
+      <svg class="dg" viewBox="0 0 720 584" role="img" aria-label="Roadmap: stages and dependencies, top to bottom">
+        <defs>
+          <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0 0 L8 4 L0 8 z" fill="var(--faint)"/>
+          </marker>
+        </defs>
+
+        <text class="hd" x="24" y="26" style="text-anchor:start">IN REVIEW</text>
+        <rect class="gate" x="256" y="36" width="208" height="78"/>
+        <text class="t" x="360" y="62">#3548</text>
+        <text x="360" y="82">flake + dev shell + CI</text>
+        <text class="s" x="360" y="100">open · CI green</text>
+
+        <text class="hd" x="360" y="134">AFTER #3548 MERGES</text>
+        <line class="gateline" x1="24" y1="144" x2="696" y2="144"/>
+
+        <text class="hd" x="24" y="174" style="text-anchor:start">STAGE 2 · CI + INTEGRATION</text>
+        <rect class="node" x="24" y="186" width="208" height="46"/>
+        <text class="t" x="128" y="205">Book page</text>
+        <text class="s" x="128" y="221">cross-linked with both READMEs</text>
+        <rect class="node" x="256" y="186" width="208" height="46"/>
+        <text class="t" x="360" y="205">OVMF_DIR through OSDK</text>
+        <text class="s" x="360" y="221">writable copy of OVMF_VARS.fd</text>
+        <rect class="node" x="488" y="186" width="208" height="46"/>
+        <text class="t" x="592" y="205">Version-pin sync check</text>
+        <text class="s" x="592" y="221">wired into make check</text>
+        <rect class="node" x="24" y="248" width="208" height="46"/>
+        <text class="t" x="128" y="267">Boot smoke in CI</text>
+        <text class="s" x="128" y="283">extends #3548's workflow</text>
+        <rect class="node" x="256" y="248" width="208" height="46"/>
+        <text class="t" x="360" y="267">Binary cache</text>
+        <text class="s" x="360" y="283">needs the credentials decision</text>
+
+        <text class="hd" x="24" y="326" style="text-anchor:start">STAGE 3 · PARITY · PLATFORMS · PACKAGING</text>
+        <rect class="node" x="24" y="338" width="208" height="46"/>
+        <text class="t" x="128" y="357">nixfmt-classic → RFC 166</text>
+        <text class="s" x="128" y="373">repo-wide reformat</text>
+        <line class="dep" x1="232" y1="361" x2="254" y2="361" marker-end="url(#arr)"/>
+        <rect class="node" x="256" y="338" width="208" height="46"/>
+        <text class="t" x="360" y="357">nixpkgs bump</text>
+        <text class="s" x="360" y="373">flake + Docker layer + initramfs</text>
+        <line class="dep" x1="464" y1="361" x2="486" y2="361" marker-end="url(#arr)"/>
+        <rect class="node" x="488" y="338" width="208" height="46"/>
+        <text class="t" x="592" y="357">Remaining cargo-tool pins</text>
+        <text class="s" x="592" y="373">need rustc ≥ 1.88</text>
+
+        <rect class="node" x="24" y="406" width="160" height="50"/>
+        <text class="tm" x="104" y="427">Kernel as flake packages</text>
+        <text class="s2" x="104" y="443">completes #2642</text>
+        <rect class="node" x="194" y="406" width="160" height="50"/>
+        <text class="tm" x="274" y="427">gvisor test binaries</text>
+        <text class="s2" x="274" y="443">independent</text>
+        <rect class="node" x="365" y="406" width="160" height="50"/>
+        <text class="tm" x="445" y="427">macOS boot (TCG / HVF)</text>
+        <text class="s2" x="445" y="443">independent</text>
+        <rect class="node" x="536" y="406" width="160" height="50"/>
+        <text class="tm" x="616" y="427">aarch64 hw validation</text>
+        <text class="s2" x="616" y="443">independent</text>
+
+        <text class="hd" x="24" y="494" style="text-anchor:start">STAGE 4 · IMAGES CONSUME THE FLAKE</text>
+        <rect class="node" x="235" y="506" width="250" height="64"/>
+        <text class="t" x="360" y="527">Docker images consume</text>
+        <text class="t" x="360" y="544">flake outputs</text>
+        <text class="s" x="360" y="561">Nix runs inside the builder stage</text>
+      </svg>
+    </div>
+    <p class="caption">Bands are rollout stages, top to bottom. Arrows mark the hard orderings inside a stage; the bottom Stage 3 row is order-independent, and the kernel-packaging item is what Stage 4 consumes.</p>
+    <div class="dg-wrap">
+      <svg class="dg" viewBox="0 0 720 172" role="img" aria-label="Docker-only builds keep working: Nix runs inside the builder stage">
+        <rect x="24" y="34" width="672" height="112" fill="none" stroke="var(--accent-soft)" stroke-width="1.5"/>
+        <text class="hd" x="40" y="58" style="text-anchor:start">DOCKER BUILD — THE ONLY TOOL ON THE HOST</text>
+        <rect class="node" x="56" y="76" width="180" height="50"/>
+        <text class="t" x="146" y="97">nix build</text>
+        <text class="s" x="146" y="113">inside a builder stage</text>
+        <line class="dep" x1="236" y1="101" x2="256" y2="101" marker-end="url(#arr)"/>
+        <rect class="node" x="258" y="76" width="180" height="50"/>
+        <text class="t" x="348" y="97">flake outputs</text>
+        <text class="s" x="348" y="113">substituted from the cache</text>
+        <line class="dep" x1="438" y1="101" x2="458" y2="101" marker-end="url(#arr)"/>
+        <rect class="node" x="460" y="76" width="180" height="50"/>
+        <text class="t" x="550" y="97">final image</text>
+        <text class="s" x="550" y="113">COPY --from=builder</text>
+      </svg>
+    </div>
+    <p class="caption">The through-line guarantee: Nix runs inside the container during the build, so a host without Nix produces the same image with a plain docker build — Nix is an implementation detail of the image, never a prerequisite for building it.</p>
+  </section>
+
+  <section>
+    <h2>Where maintainer input would help most</h2>
+    <ol>
+      <li><strong>Binary cache:</strong> reuse the existing <code>aster-nixos-dev</code> Cachix (zero new credentials) or provision a flake-specific one?</li>
+      <li><strong>Docs placement:</strong> is a Book page under <em>Before You Contribute</em> the right home, or should the READMEs stay the only entry points?</li>
+      <li><strong>Version pins:</strong> is a sync-check script enough for now, or is there appetite for a single-source <code>versions</code> file that both the Dockerfiles and the flake read?</li>
+      <li><strong>nixpkgs cadence:</strong> the flake pins the same commit as the Docker <code>nix</code> layer and the initramfs package set — should the three always move together?</li>
+    </ol>
+  </section>
+
+  <footer class="doc-end">
+    PR: <a href="https://github.com/asterinas/asterinas/pull/3548">#3548</a> · tracking issue: <a href="https://github.com/asterinas/asterinas/issues/3602">#3602</a> · context: <a href="https://github.com/asterinas/asterinas/issues/2642">#2642</a><br>
+    All version claims verified against the tree · 2026-07-17
+  </footer>
+
+</main>
+</body>
+</html>
