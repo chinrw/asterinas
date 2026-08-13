@@ -250,7 +250,12 @@ impl SubmittedBio {
             ..
         } = self;
 
-        // Set the status.
+        drop(segments);
+
+        general_complete_fn(metadata.type_(), status, complete_fn);
+
+        // Keep the BIO pending until its callback has finalized state that
+        // waiters may consume, such as a page-cache page's initialization.
         let result = metadata.status.compare_exchange(
             BioStatus::Submit as u32,
             status as u32,
@@ -258,10 +263,6 @@ impl SubmittedBio {
             Ordering::Relaxed,
         );
         assert!(result.is_ok());
-
-        drop(segments);
-
-        general_complete_fn(metadata.type_(), status, complete_fn);
 
         metadata.wait_queue.wake_all();
     }
@@ -299,7 +300,7 @@ impl BioMetadata {
     }
 
     pub fn status(&self) -> BioStatus {
-        BioStatus::try_from(self.status.load(Ordering::Relaxed)).unwrap()
+        BioStatus::try_from(self.status.load(Ordering::Acquire)).unwrap()
     }
 }
 
@@ -327,6 +328,56 @@ impl Debug for BioMetadata {
             .field("sid_range", &self.sid_range())
             .field("status", &self.status())
             .finish()
+    }
+}
+
+#[cfg(ktest)]
+mod tests {
+    use core::sync::atomic::AtomicBool;
+
+    use ostd::prelude::ktest;
+
+    use super::*;
+
+    fn assert_callback_precedes_terminal_status(final_status: BioStatus) -> Arc<BioMetadata> {
+        let callback_ran = Arc::new(AtomicBool::new(false));
+        let metadata = Arc::new(BioMetadata {
+            type_: BioType::Read,
+            sid_range: Sid::new(0)..Sid::new(0),
+            status: AtomicU32::new(BioStatus::Submit as u32),
+            wait_queue: WaitQueue::new(),
+        });
+
+        let callback_metadata = metadata.clone();
+        let callback_ran_clone = callback_ran.clone();
+        let bio = SubmittedBio {
+            metadata: metadata.clone(),
+            sid_offset: 0,
+            complete_fn: Some(Box::new(move |status| {
+                assert_eq!(status, final_status);
+                assert_eq!(callback_metadata.status(), BioStatus::Submit);
+                callback_ran_clone.store(true, Ordering::Release);
+            })),
+            segments: Vec::new(),
+        };
+
+        bio.complete(final_status);
+
+        assert!(callback_ran.load(Ordering::Acquire));
+        assert_eq!(metadata.status(), final_status);
+        metadata
+    }
+
+    #[ktest]
+    fn completion_callback_precedes_success_status() {
+        let metadata = assert_callback_precedes_terminal_status(BioStatus::Complete);
+        metadata.wait().unwrap();
+    }
+
+    #[ktest]
+    fn completion_callback_precedes_error_status() {
+        let metadata = assert_callback_precedes_terminal_status(BioStatus::IoError);
+        assert_eq!(metadata.wait(), Err(IoError::Failed));
     }
 }
 
