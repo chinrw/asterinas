@@ -24,9 +24,9 @@ set -e
 EXT2_DIR=/ext2
 STRESS_DIR="${EXT2_DIR}/bio_stress"
 READERS=8
-FILES_PER_READER=48
+FILES_PER_READER=64
 FILE_SIZE_KB=64
-ROUNDS=6
+ROUNDS=12
 
 cleanup() {
     rm -rf "${STRESS_DIR}" 2>/dev/null || true
