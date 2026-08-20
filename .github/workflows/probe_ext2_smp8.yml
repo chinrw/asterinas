@@ -1,0 +1,45 @@
+name: Probe ext2 SMP8
+
+# Fork-only experiment: roll the dice on the BIO completion-ordering race.
+# Each round is an independent debug-build boot running LTP on /ext2 with
+# SMP=8. A red round reproduces the bug on main; green rounds prove nothing
+# (the race is one-sided).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'ci/**'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    container:
+      image: asterinas/asterinas:0.18.0-20260702
+      options: -v /dev:/dev --privileged
+      volumes:
+        # Map the following directories on the host into the container so that
+        # the container can remove them to save some precious disk space (~16GB),
+        # which is quite limited on free-tier Github runners.
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    strategy:
+      fail-fast: false
+      matrix:
+        round: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - name: Free disk space
+        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+      - uses: actions/checkout@v4
+      - name: Run LTP on ext2 with SMP=8 (round ${{ matrix.round }})
+        uses: ./.github/actions/test
+        with:
+          auto_test: 'conformance'
+          release: false
+          smp: 8
+          netdev: 'tap'
+          conformance_test_suite: 'ltp'
+          conformance_test_workdir: '/ext2'
+          extra_blocklists: 'blocklists.ext2'
+          boot_protocol: 'linux-efi-handover64'
