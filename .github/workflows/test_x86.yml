@@ -89,7 +89,9 @@ jobs:
       matrix:
         include:
           - { variant: 'handover64-debug', release: false, boot_protocol: 'linux-efi-handover64' }
-          - { variant: 'multiboot2-smp4',  boot_protocol: 'multiboot2', smp: 4 }
+          # Debug build: bio_stress relies on the debug_assert in the page-cache
+          # mapping path, which release compiles out.
+          - { variant: 'multiboot2-smp4',  boot_protocol: 'multiboot2', smp: 4, release: false }
     steps:
       - name: Free disk space
         # Remove unused packages from the host to save disk space.

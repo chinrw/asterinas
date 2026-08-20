@@ -10,6 +10,7 @@ let
   commonBuild = dir: callPackage ./common.nix (commonArgs // { inherit dir; });
 
   subDirs = [
+    "bio_stress"
     "device"
     "fs"
     "hello_world"
