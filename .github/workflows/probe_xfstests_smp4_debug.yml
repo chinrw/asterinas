@@ -1,0 +1,48 @@
+name: Probe xfstests SMP4 debug
+
+# Fork-only experiment. CI runs xfstests as `release: true, SMP=1`, which
+# disables the `debug_assert` in the page-cache mapping path and closes the
+# race window structurally. This flips both knobs: debug build, SMP=4, so an
+# ordering violation surfaces as a panic rather than being absorbed by the
+# page lock.
+#
+# One-sided: a red round reproduces the bug on main; green proves nothing.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'ci/xfstests**'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    container:
+      image: asterinas/asterinas:0.18.0-20260702
+      options: -v /dev:/dev --privileged
+      volumes:
+        # Map the following directories on the host into the container so that
+        # the container can remove them to save some precious disk space (~16GB),
+        # which is quite limited on free-tier Github runners.
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        round: [1, 2, 3, 4]
+    steps:
+      - name: Free disk space
+        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+      - uses: actions/checkout@v4
+      - name: Run xfstests with SMP=4 in debug (round ${{ matrix.round }})
+        uses: ./.github/actions/test
+        with:
+          auto_test: 'conformance'
+          conformance_test_suite: 'xfstests'
+          release: false
+          smp: 4
+          mem: '12G'
+          xfstests_disk_size: '2G'
+          xfstests_runlist: '/opt/xfstests/short.list'
