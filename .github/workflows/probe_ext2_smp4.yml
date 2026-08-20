@@ -1,8 +1,9 @@
-name: Probe ext2 SMP8
+name: Probe ext2 SMP4
 
 # Fork-only experiment: roll the dice on the BIO completion-ordering race.
 # Each round is an independent debug-build boot running the regression suite
-# (including bio_stress: parallel cold reads on /ext2) with SMP=8. A red
+# (including bio_stress: parallel cold faults on /ext2) with SMP=4 -- a 1:1
+# vCPU-to-host-core mapping on the 4-core runner, no oversubscription. A red
 # round reproduces the bug on main; green rounds prove nothing (one-sided).
 
 on:
@@ -32,11 +33,11 @@ jobs:
       - name: Free disk space
         run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
       - uses: actions/checkout@v4
-      - name: Run bio_stress on ext2 with SMP=8 (round ${{ matrix.round }})
+      - name: Run bio_stress on ext2 with SMP=4 (round ${{ matrix.round }})
         uses: ./.github/actions/test
         with:
           auto_test: 'regression'
           release: false
-          smp: 8
+          smp: 4
           netdev: 'tap'
           boot_protocol: 'linux-efi-handover64'
