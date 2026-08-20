@@ -12,6 +12,7 @@ OUTPUT_DIR ?= $(BUILD_DIR)/initramfs/test
 
 # REMINDER: Whenever you change this list, update the corresponding `default.nix` file.
 SUBDIRS := \
+	bio_stress \
 	device \
 	fs \
 	hello_world \
