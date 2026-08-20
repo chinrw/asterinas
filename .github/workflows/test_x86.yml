@@ -123,12 +123,16 @@ jobs:
           - 'debug'
           - 'ext2-microvm'
           - 'ext2-iommu-debug'
+          - 'ext2-smp4-debug'
           - 'exfat-multiboot2-nokvm'
           - 'multiboot2-smp4'
         include:
           - { variant: 'debug', release: false, boot_protocol: 'linux-efi-pe64' }
           - { variant: 'ext2-microvm', scheme: 'microvm', extra_blocklists: 'blocklists.ext2', conformance_test_workdir: '/ext2' }
           - { variant: 'ext2-iommu-debug', scheme: 'iommu', extra_blocklists: 'blocklists.ext2', conformance_test_workdir: '/ext2', release: false }
+          # The matrix samples SMP and block-device I/O on separate variants; this is
+          # the missing combination: a debug build doing page-cache I/O on ext2 with SMP > 1.
+          - { variant: 'ext2-smp4-debug', extra_blocklists: 'blocklists.ext2', conformance_test_workdir: '/ext2', release: false, smp: 4 }
           - { variant: 'exfat-multiboot2-nokvm', boot_protocol: 'multiboot2', enable_kvm: false, extra_blocklists: 'blocklists.exfat', conformance_test_workdir: '/exfat' }
           - { variant: 'multiboot2-smp4', boot_protocol: 'multiboot2', smp: 4 }
     steps:
