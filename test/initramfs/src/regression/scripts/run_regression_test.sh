@@ -6,6 +6,9 @@ set -e
 
 SCRIPT_DIR=/test
 
+echo "DEBUG: contents of ${SCRIPT_DIR}:"
+ls -la "${SCRIPT_DIR}"
+
 for dir in $(find -L "${SCRIPT_DIR}" -mindepth 1 -maxdepth 1 -type d); do
     if [ -x "${dir}/run_test.sh" ]; then
         echo "Running test in $dir"
