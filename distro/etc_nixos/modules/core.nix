@@ -71,6 +71,10 @@ in {
   # Hook function will be called in stage-2-init and before running systemd.
   boot.postBootCommands = ''
     echo "Executing postBootCommands..."
+
+    # Repository scripts expect /bin/bash, which AsterNixOS does not create.
+    ln -sfn sh /bin/bash
+
     if [ "${config.aster_nixos.disable-systemd}" = "true" ]; then
       ${config.aster_nixos.stage-2-hook}
     fi
@@ -91,10 +95,14 @@ in {
     ln -s ${initramfs}/initrd $out/initrd
   '';
   system.activationScripts.modprobe = lib.mkForce "";
+  # TODO: Flip back to true once Asterinas gains the mount namespaces Nix uses
+  # to remount the store writable for itself; until then, sync after large writes.
+  boot.readOnlyNixStore = false;
 
   nix.nixPath = options.nix.nixPath.default
     ++ [ "nixpkgs-overlays=/etc/nixos/overlays" ];
   nix.settings = {
+    experimental-features = [ "nix-command" "flakes" ];
     filter-syscalls = false;
     require-sigs = false;
     sandbox = false;

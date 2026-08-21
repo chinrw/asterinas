@@ -18,6 +18,9 @@
   services.udev.enable = false;
 
   services.getty.autologinUser = "root";
+  # pam_loginuid aborts the login session ("Error in service module", getty
+  # respawn loop): it needs the audit subsystem, which Asterinas lacks.
+  security.pam.services.login.setLoginUid = false;
   users.users.root = {
     shell = "${pkgs.bash}/bin/bash";
     hashedPassword = null;
@@ -38,5 +41,8 @@
   systemd.extraConfig = ''
     LogLevel=crit
     ShowStatus=no
+    # Login sessions inherit these limits; large Nix closure realizations
+    # need far more file descriptors than the 1024 default.
+    DefaultLimitNOFILE=1048576:1048576
   '';
 }

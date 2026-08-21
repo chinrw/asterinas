@@ -3,7 +3,7 @@
 # Asterinas dev shell:
 #   Linux  : toolchain, cargo tools, boot stack, and host build tools.
 #   darwin : build/lint subset. Booting the kernel still needs Linux.
-{ lib, mkShell, stdenv, asterinas-rust-toolchain, asterinas-vdso
+{ lib, mkShell, stdenv, path, asterinas-rust-toolchain, asterinas-vdso
 # Tools the Docker image installs with `cargo install`; nixpkgs provides
 # them here, so versions may lag the Docker pins.
 , cargo-binutils, cargo-expand, lychee, mdbook, mdbook-mermaid, typos
@@ -68,6 +68,12 @@ in mkShell {
   '' + lib.optionalString stdenv.isLinux ''
     # Use the Nix-built firmware unless the caller supplied another OVMF tree.
     export OVMF_DIR="''${OVMF_DIR:-${asterinas-ovmf}}"
+    # The linux-efi-handover64 kernel build defaults to the Docker image's
+    # /usr/bin/grub-mkrescue; point it at the shell's unless the caller did.
+    export LINUX_EFI_GRUB_MKRESCUE="''${LINUX_EFI_GRUB_MKRESCUE:-${asterinas-grub}/bin/grub-mkrescue}"
+    # The installer/ISO expressions evaluate <nixpkgs>; pin it to the
+    # flake-locked revision so image builds cannot drift to an unrelated tip.
+    export NIX_PATH="nixpkgs=${path}"
   '' + lib.optionalString stdenv.isDarwin ''
     echo "asterinas dev shell (darwin): build/lint only; booting the kernel needs Linux." >&2
   '';
