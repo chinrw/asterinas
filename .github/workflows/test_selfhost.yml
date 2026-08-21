@@ -1,0 +1,44 @@
+name: Test self-host build
+
+# Build Asterinas inside Asterinas: install the normal AsterNixOS image,
+# boot it as L1, build the kernel in it, and boot the result as a nested
+# L2 guest. The chain takes about 90 minutes and the L1 guest needs KVM
+# plus 32 GiB of RAM, so it runs on a schedule and on demand rather than
+# as a pull-request gate.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * 6"
+
+env:
+  # The image installs Nix without enabling flakes; opt in here.
+  NIX_CONFIG: "experimental-features = nix-command flakes"
+  # The chain serves this checkout to the L1 guest and builds this revision there.
+  SELFHOST_REF: "${{ github.sha }}"
+
+jobs:
+  selfhost-x86:
+    runs-on: self-hosted
+    timeout-minutes: 180
+    container:
+      image: asterinas/kernel-dev:0.18.1-20260901
+      options: -v /dev:/dev --privileged
+    steps:
+      - uses: actions/checkout@v4
+      # The checkout is owned by another uid, which Nix's fetcher rejects.
+      - name: Fix workspace ownership
+        run: chown -R "$(id -u):$(id -g)" .
+      - name: Build the installer ISO
+        run: nix develop --command make iso TARGET_ARCH=x86_64
+      - name: Install the AsterNixOS disk
+        run: nix develop --command make run_iso TARGET_ARCH=x86_64 NIXOS_DISK_SIZE_IN_MB=65536
+      - name: Build Asterinas inside Asterinas and boot it (L1 -> L2)
+        run: nix develop --command bash ./tools/nixos/selfhost_chain.sh
+      - name: Upload the L1 console log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: l1-console-log
+          path: target/selfhost-chain/l1-console.log
+          if-no-files-found: ignore
