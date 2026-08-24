@@ -8,9 +8,9 @@ PROBE_MODE=${1:-}
 PROBE_RUNS=${2:-5000}
 
 case "$PROBE_MODE" in
-    baseline | synchronized) ;;
+    baseline | synchronized | udev-settle) ;;
     *)
-        echo "Usage: $0 <baseline|synchronized> [runs]" >&2
+        echo "Usage: $0 <baseline|synchronized|udev-settle> [runs]" >&2
         exit 2
         ;;
 esac
@@ -70,6 +70,11 @@ other_failure=0
 echo "mode=$PROBE_MODE runs=$PROBE_RUNS"
 echo "parted=$(parted --version | head -n 1)"
 echo "udevadm=$(command -v udevadm 2>/dev/null || echo absent)"
+
+if [ "$PROBE_MODE" = udev-settle ] && ! udevadm settle --timeout=10; then
+    echo "::error::udevadm cannot settle the host event queue"
+    exit 2
+fi
 
 for iteration in $(seq 1 "$PROBE_RUNS"); do
     probe_image="$probe_tmp/disk-$iteration.img"

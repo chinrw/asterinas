@@ -19,20 +19,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode:
-          - baseline
-          - synchronized
+        include:
+          - mode: baseline
+            extra-package: ""
+          - mode: udev-settle
+            extra-package: udev
     steps:
       - uses: actions/checkout@v4
       - name: Probe loop partition nodes
         run: |
           docker run --rm --privileged \
             -v /dev:/dev \
+            -v /run/udev:/run/udev \
             -v "${{ github.workspace }}/tools/github_workflows/probe_loop_partition_race.sh:/probe.sh:ro" \
             ubuntu:24.04 \
             bash -lc '
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
-              apt-get install -y -qq parted dosfstools e2fsprogs util-linux >/dev/null
+              apt-get install -y -qq parted dosfstools e2fsprogs util-linux ${{ matrix.extra-package }} >/dev/null
               bash /probe.sh "${{ matrix.mode }}" 2000
             '
