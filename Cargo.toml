@@ -48,6 +48,7 @@ members = [
     "kernel/libs/aster-fuse",
     "kernel/libs/aster-rights",
     "kernel/libs/aster-rights-proc",
+    "kernel/libs/aster-uapi",
     "kernel/libs/aster-util",
     "kernel/libs/atomic-integer-wrapper",
     "kernel/libs/cpio-decoder",
@@ -96,6 +97,7 @@ default-members = [
     "kernel/core/comps/virtio",
     "kernel/libs/aster-bigtcp",
     "kernel/libs/aster-fuse",
+    "kernel/libs/aster-uapi",
     "kernel/libs/aster-util",
     "kernel/libs/device-id",
     "kernel/libs/io-util",
@@ -155,7 +157,6 @@ ostd-test = { path = "ostd/libs/ostd-test", version = "0.18.0" }
 padding-struct = { path = "ostd/libs/padding-struct", version = "0.2.0" }
 
 aster-core = { path = "kernel/core", default-features = false }
-
 # Crates under kernel/core/comps
 aster-block = { path = "kernel/core/comps/block" }
 aster-cmdline = { path = "kernel/core/comps/cmdline" }
@@ -179,6 +180,7 @@ aster-bigtcp = { path = "kernel/libs/aster-bigtcp" }
 aster-fuse = { path = "kernel/libs/aster-fuse" }
 aster-rights = { path = "kernel/libs/aster-rights" }
 aster-rights-proc = { path = "kernel/libs/aster-rights-proc" }
+aster-uapi = { path = "kernel/libs/aster-uapi" }
 aster-util = { path = "kernel/libs/aster-util" }
 atomic-integer-wrapper = { path = "kernel/libs/atomic-integer-wrapper" }
 cpio-decoder = { path = "kernel/libs/cpio-decoder" }
