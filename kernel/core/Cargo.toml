@@ -25,6 +25,7 @@ aster-systree.workspace = true
 aster-time.workspace = true
 aster-uart.workspace = true
 aster-uapi.workspace = true
+aster-fd-protocol.workspace = true
 aster-util.workspace = true
 aster-virtio.workspace = true
 atomic-integer-wrapper.workspace = true
