@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Probe loop partition race
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - diagnostics/loop-partition-race
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: ${{ matrix.mode }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mode:
+          - baseline
+          - synchronized
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe loop partition nodes
+        run: |
+          docker run --rm --privileged \
+            -v /dev:/dev \
+            -v "${{ github.workspace }}/tools/github_workflows/probe_loop_partition_race.sh:/probe.sh:ro" \
+            ubuntu:24.04 \
+            bash -lc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq parted dosfstools e2fsprogs util-linux >/dev/null
+              bash /probe.sh "${{ matrix.mode }}" 5000
+            '
