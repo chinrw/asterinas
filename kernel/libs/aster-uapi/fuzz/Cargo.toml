@@ -1,0 +1,21 @@
+[package]
+name = "aster-uapi-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+aster-uapi = { path = ".." }
+libfuzzer-sys = "0.4"
+
+[[bin]]
+name = "fuzz_iovec"
+path = "fuzz_targets/fuzz_iovec.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

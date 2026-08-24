@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use aster_uapi::MAX_IO_VECTOR_LENGTH;
+
 use super::read_socket_addr_from_user;
 use crate::{
     net::socket::util::{ControlMessage, RecvFlags, SocketAddr},
     prelude::*,
-    util::{
-        VmReaderArray, VmWriterArray, iovec::MAX_IO_VECTOR_LENGTH,
-        net::write_socket_addr_with_max_len,
-    },
+    util::{VmReaderArray, VmWriterArray, net::write_socket_addr_with_max_len},
 };
 
 /// Standard well-defined IP protocols.

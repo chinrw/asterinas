@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use aster_uapi::{
+    IoVec, IovecError, MAX_IO_VECTOR_LENGTH, MAX_TOTAL_IOV_BYTES, UserIoVec, iovec_entry_addr,
+};
 use ostd::{
     Error as OstdError,
     mm::{Infallible, VmSpace},
@@ -7,73 +10,13 @@ use ostd::{
 
 use crate::prelude::*;
 
-/// A kernel space I/O vector.
-#[derive(Clone, Copy, Debug)]
-struct IoVec {
-    base: Vaddr,
-    len: usize,
+fn iovec_reader<'a>(iovec: &IoVec, vm_space: &'a VmSpace) -> Result<VmReader<'a>> {
+    Ok(vm_space.reader(iovec.base(), iovec.len())?)
 }
 
-/// A user space I/O vector.
-///
-/// The difference between `IoVec` and `UserIoVec`
-/// is that `UserIoVec` uses `isize` as the length type,
-/// while `IoVec` uses `usize`.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Pod)]
-struct UserIoVec {
-    base: Vaddr,
-    len: isize,
+fn iovec_writer<'a>(iovec: &IoVec, vm_space: &'a VmSpace) -> Result<VmWriter<'a>> {
+    Ok(vm_space.writer(iovec.base(), iovec.len())?)
 }
-
-impl TryFrom<UserIoVec> for IoVec {
-    type Error = Error;
-
-    fn try_from(value: UserIoVec) -> Result<Self> {
-        if value.len < 0 {
-            return_errno_with_message!(Errno::EINVAL, "the I/O buffer length cannot be negative");
-        }
-
-        Ok(IoVec {
-            base: value.base,
-            len: value.len as usize,
-        })
-    }
-}
-
-impl IoVec {
-    /// Returns whether the `IoVec` points to an empty user buffer.
-    const fn is_empty(&self) -> bool {
-        self.len == 0 || self.base == 0
-    }
-
-    fn reader<'a>(&self, vm_space: &'a VmSpace) -> Result<VmReader<'a>> {
-        Ok(vm_space.reader(self.base, self.len)?)
-    }
-
-    fn writer<'a>(&self, vm_space: &'a VmSpace) -> Result<VmWriter<'a>> {
-        Ok(vm_space.writer(self.base, self.len)?)
-    }
-}
-
-/// The maximum number of buffers in the I/O vector.
-///
-/// Reference: <https://elixir.bootlin.com/linux/v6.16/source/include/uapi/linux/uio.h#L46>.
-pub(super) const MAX_IO_VECTOR_LENGTH: usize = 1024;
-/// The maximum bytes of all buffers in the I/O vector.
-///
-/// According to man pages, the kernel should fail with [`Errno::EINVAL`] if the number of bytes in
-/// the I/O vector exceeds this threshold. See
-/// <https://man7.org/linux/man-pages/man2/writev.2.html>.
-///
-/// However, the actual Linux behavior is to truncate the buffer and ignore the remaining buffer
-/// space. See <https://elixir.bootlin.com/linux/v6.12.6/source/lib/iov_iter.c#L1463>.
-///
-/// Typical 64-bit architectures do not have 64-bit virtual address space, and the value of
-/// [`MAX_IO_VECTOR_LENGTH`] is relatively small. Therefore, userspace may not be able to supply a
-/// valid I/O vector containing so many bytes. Nevertheless, we should still check against this to
-/// prevent overflows in the future, e.g., when the virtual address space becomes larger.
-const MAX_TOTAL_IOV_BYTES: usize = isize::MAX as usize;
 
 /// The util function for create [`VmReader`]/[`VmWriter`]s.
 fn copy_iovs_and_convert<'a, T: 'a>(
@@ -93,17 +36,24 @@ fn copy_iovs_and_convert<'a, T: 'a>(
 
     for idx in 0..count {
         let mut iov = {
-            let addr = start_addr + idx * size_of::<UserIoVec>();
+            let Some(addr) = iovec_entry_addr(start_addr, idx) else {
+                return_errno_with_message!(Errno::EFAULT, "the I/O vector address overflows");
+            };
             let uiov: UserIoVec = vm_space.reader(addr, size_of::<UserIoVec>())?.read_val()?;
-            IoVec::try_from(uiov)?
+            match uiov.validate() {
+                Ok(iovec) => iovec,
+                Err(IovecError::NegativeLength) => {
+                    return_errno_with_message!(
+                        Errno::EINVAL,
+                        "the I/O buffer length cannot be negative"
+                    );
+                }
+            }
         };
 
         // Truncate the buffer if the number of bytes exceeds `MAX_TOTAL_IOV_BYTES`.
         // See comments above the `MAX_TOTAL_IOV_BYTES` constant for more details.
-        if iov.len > max_len {
-            iov.len = max_len;
-        }
-        max_len -= iov.len;
+        max_len = iov.truncate_to(max_len);
 
         if iov.is_empty() {
             continue;
@@ -136,7 +86,7 @@ impl<'a> VmReaderArray<'a> {
         start_addr: Vaddr,
         count: usize,
     ) -> Result<Self> {
-        let readers = copy_iovs_and_convert(user_space, start_addr, count, IoVec::reader)?;
+        let readers = copy_iovs_and_convert(user_space, start_addr, count, iovec_reader)?;
         Ok(Self(readers))
     }
 
@@ -162,7 +112,7 @@ impl<'a> VmWriterArray<'a> {
         start_addr: Vaddr,
         count: usize,
     ) -> Result<Self> {
-        let writers = copy_iovs_and_convert(user_space, start_addr, count, IoVec::writer)?;
+        let writers = copy_iovs_and_convert(user_space, start_addr, count, iovec_writer)?;
         Ok(Self(writers))
     }
 

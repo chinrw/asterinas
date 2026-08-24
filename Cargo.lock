@@ -149,6 +149,7 @@ dependencies = [
  "aster-softirq",
  "aster-systree",
  "aster-time",
+ "aster-uapi",
  "aster-uart",
  "aster-util",
  "aster-virtio",
@@ -369,6 +370,14 @@ dependencies = [
  "component",
  "ostd",
  "spin",
+]
+
+[[package]]
+name = "aster-uapi"
+version = "0.1.0"
+dependencies = [
+ "ostd-pod",
+ "zerocopy",
 ]
 
 [[package]]
