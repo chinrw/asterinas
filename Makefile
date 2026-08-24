@@ -67,6 +67,9 @@ ENABLE_REGRESSION_TEST ?= false
 # Network settings
 # NETDEV possible values are user,tap
 NETDEV ?= user
+# Disable user-mode host forwarding for isolated test runners that do not need
+# guest services. This also avoids coupling kernel tests to host port state.
+QEMU_HOSTFWD ?= on
 VHOST ?= off
 # The name server listed by /etc/resolv.conf inside the Asterinas VM
 DNS_SERVER ?= none
@@ -135,6 +138,12 @@ else ifeq ($(AUTO_TEST), vsock)
 ENABLE_REGRESSION_TEST := true
 export VSOCK=on
 CARGO_OSDK_BUILD_ARGS += --init-args="/test/run_vsock_test.sh"
+else ifeq ($(AUTO_TEST), syssec)
+ENABLE_REGRESSION_TEST := true
+ifeq ($(strip $(SYSSEC_CASE)),)
+$(error SYSSEC_CASE must name a path below /test)
+endif
+CARGO_OSDK_BUILD_ARGS += --init-args="/test/run_syssec_case.sh /test/$(SYSSEC_CASE)"
 endif
 
 include test/initramfs/src/conformance/xfstests/build_config.mk
@@ -315,6 +324,9 @@ else ifeq ($(AUTO_TEST), boot)
 else ifeq ($(AUTO_TEST), vsock)
 	@tail --lines 100 qemu.log | grep -q "^Vsock test passed." \
 		|| (echo "Vsock test failed" && exit 1)
+else ifeq ($(AUTO_TEST), syssec)
+	@grep -q "^SYSSEC_RESULT_END" qemu.log \
+		|| (echo "Syssec case failed" && exit 1)
 endif
 
 # Build the Asterinas NixOS ISO installer image
