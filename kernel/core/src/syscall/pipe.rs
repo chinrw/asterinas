@@ -37,11 +37,11 @@ pub(super) fn sys_pipe2(fds: Vaddr, flags: u32, ctx: &Context) -> Result<Syscall
     let file_table = ctx.thread_local.borrow_file_table();
     let mut file_table_locked = file_table.unwrap().write();
 
-    let reader_fd = file_table_locked.insert(pipe_reader, fd_flags);
-    let writer_fd = file_table_locked.insert(pipe_writer, fd_flags);
+    let reader_reservation = file_table_locked.reserve();
+    let writer_reservation = file_table_locked.reserve();
     let pipe_fds = PipeFds {
-        reader_raw_fd: reader_fd.into(),
-        writer_raw_fd: writer_fd.into(),
+        reader_raw_fd: reader_reservation.file_desc().into(),
+        writer_raw_fd: writer_reservation.file_desc().into(),
     };
     debug!("pipe_fds: {:?}", pipe_fds);
 
@@ -49,18 +49,18 @@ pub(super) fn sys_pipe2(fds: Vaddr, flags: u32, ctx: &Context) -> Result<Syscall
     drop(file_table_locked);
 
     if let Err(err) = ctx.user_space().write_val(fds, &pipe_fds) {
-        // FIXME: Introduce reserved FDs to ensure that the files are never visible to user space
-        // before `write_val` succeeds and cleanup closes the exact reserved FDs below.
-        let closed_files = {
-            let mut file_table_locked = file_table.unwrap().write();
-            [
-                file_table_locked.close_file(reader_fd),
-                file_table_locked.close_file(writer_fd),
-            ]
-        };
-        drop(closed_files);
+        let mut file_table_locked = file_table.unwrap().write();
+        file_table_locked.cancel_reserved(reader_reservation);
+        file_table_locked.cancel_reserved(writer_reservation);
         return Err(err.into());
     }
+
+    let mut file_table_locked = file_table.unwrap().write();
+    file_table_locked.install_reserved_pair(
+        [reader_reservation, writer_reservation],
+        [pipe_reader, pipe_writer],
+        [fd_flags, fd_flags],
+    )?;
 
     Ok(SyscallReturn::Return(0))
 }
