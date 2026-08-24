@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 #![no_main]
 
 use aster_uapi::{UserIoVec, iovec_entry_addr, truncate_iovec_len};
