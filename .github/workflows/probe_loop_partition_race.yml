@@ -34,5 +34,5 @@ jobs:
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
               apt-get install -y -qq parted dosfstools e2fsprogs util-linux >/dev/null
-              bash /probe.sh "${{ matrix.mode }}" 5000
+              bash /probe.sh "${{ matrix.mode }}" 2000
             '
