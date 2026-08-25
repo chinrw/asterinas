@@ -96,6 +96,31 @@ if [ ! -b "${BOOT_DEVICE}" ] && [ ! -b "${ROOT_DEVICE}" ]; then
     parted ${DISK} -- set 1 esp on
     echo "partition finished"
 
+    # parted returning does not prove the partition nodes are usable: the
+    # kernel publishes them asynchronously and udev can replace a node after
+    # it first appears. Wait until both stay openable for a stable window,
+    # or mkfs may hit ENOENT/ENXIO on a node that is about to be replaced.
+    partprobe "${DISK}" >/dev/null 2>&1 || true
+    attempt=0
+    readiness_streak=0
+    while [ "$attempt" -lt 500 ]; do
+        if blockdev --getsize64 "${BOOT_DEVICE}" >/dev/null 2>&1 &&
+            blockdev --getsize64 "${ROOT_DEVICE}" >/dev/null 2>&1; then
+            readiness_streak=$((readiness_streak + 1))
+            if [ "$readiness_streak" -ge 5 ]; then
+                break
+            fi
+        else
+            readiness_streak=0
+        fi
+        attempt=$((attempt + 1))
+        sleep 0.01
+    done
+    if [ "$readiness_streak" -lt 5 ]; then
+        echo "timed out waiting for ${BOOT_DEVICE} and ${ROOT_DEVICE}" >&2
+        exit 1
+    fi
+
     mkfs.fat -F 32 -n boot "${BOOT_DEVICE}"
     mkfs.ext2 -L nixos "${ROOT_DEVICE}"
     echo "mkfs finished"
