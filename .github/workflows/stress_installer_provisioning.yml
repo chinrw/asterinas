@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: MPL-2.0
+
+# Fork-only: stress the generated installer's provisioning path in the
+# same container and privilege setup as the minimal NixOS test.
+
+name: Stress installer provisioning
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - diagnostics/loop-fix-stress
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    name: round-${{ matrix.round }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        round: [1, 2]
+    steps:
+      - uses: endersonmenezes/free-disk-space@v3
+        with:
+          rm_cmd: "rmz"
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+      - uses: actions/checkout@v4
+      - name: Stress the installer provisioning path
+        uses: maus007/docker-run-action-fork@v1
+        with:
+          image: asterinas/kernel-dev:0.18.1-20260805
+          options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
+          run: |
+            set -e
+            bash /root/asterinas/tools/github_workflows/stress_installer_provisioning.sh 500
