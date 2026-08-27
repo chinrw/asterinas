@@ -5,6 +5,7 @@
 pub(crate) use core::{Clock, timer};
 
 use ::core::time::Duration;
+use aster_uapi::{CUserTimespec as RawCUserTimespec, NANOSECONDS_PER_SECOND};
 pub(crate) use system_time::{START_TIME, SystemTime};
 pub(crate) use timer::{Timer, TimerManager};
 
@@ -24,7 +25,7 @@ pub(crate) type suseconds_t = i64;
 
 const NSEC_PER_USEC: i64 = 1_000;
 const USEC_PER_SEC: i64 = 1_000_000;
-pub(crate) const NSEC_PER_SEC: i64 = 1_000_000_000;
+pub(crate) const NSEC_PER_SEC: i64 = NANOSECONDS_PER_SECOND;
 
 pub(super) fn init() {
     system_time::init();
@@ -37,28 +38,30 @@ pub(super) fn init_on_each_cpu() {
     cpu_time_stats::init_on_each_cpu();
 }
 
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy, Debug, Default, Pod)]
-pub(crate) struct timespec_t {
-    pub sec: time_t,
-    pub nsec: i64,
+pub(crate) struct timespec_t(RawCUserTimespec);
+
+impl timespec_t {
+    pub(crate) const fn new(sec: time_t, nsec: i64) -> Self {
+        Self(RawCUserTimespec::new(sec, nsec))
+    }
+
+    pub(crate) const fn nsec(self) -> i64 {
+        self.0.nanoseconds()
+    }
 }
 
 impl From<Duration> for timespec_t {
     fn from(duration: Duration) -> timespec_t {
-        let sec = duration.as_secs() as time_t;
-        let nsec = duration.subsec_nanos() as i64;
-        debug_assert!(sec >= 0); // nsec >= 0 always holds
-        timespec_t { sec, nsec }
+        Self(RawCUserTimespec::from(duration))
     }
 }
 
 impl From<timeval_t> for timespec_t {
     fn from(timeval: timeval_t) -> timespec_t {
-        let sec = timeval.sec;
         let nsec = timeval.usec * NSEC_PER_USEC;
-        debug_assert!(sec >= 0); // nsec >= 0 always holds
-        timespec_t { sec, nsec }
+        Self::new(timeval.sec, nsec)
     }
 }
 
@@ -66,17 +69,10 @@ impl TryFrom<timespec_t> for Duration {
     type Error = Error;
 
     fn try_from(value: timespec_t) -> Result<Self> {
-        if value.sec < 0 || value.nsec < 0 {
-            return_errno_with_message!(Errno::EINVAL, "timesepc_t cannot be negative");
-        }
-
-        if value.nsec >= NSEC_PER_SEC {
-            // The value of nanoseconds must be strictly less than 10^9,
-            // otherwise the value for seconds should be set.
-            return_errno_with_message!(Errno::EINVAL, "nsec is not normalized");
-        }
-
-        Ok(Duration::new(value.sec as u64, value.nsec as u32))
+        value
+            .0
+            .validated_duration()
+            .map_err(|_| Error::with_message(Errno::EINVAL, "timespec is not normalized"))
     }
 }
 

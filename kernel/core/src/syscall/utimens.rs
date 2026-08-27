@@ -93,14 +93,8 @@ pub(super) fn sys_utime(
     );
     let times = if utimbuf_ptr != 0 {
         let utimbuf = ctx.user_space().read_val::<Utimbuf>(utimbuf_ptr)?;
-        let atime = timespec_t {
-            sec: utimbuf.actime,
-            nsec: 0,
-        };
-        let mtime = timespec_t {
-            sec: utimbuf.modtime,
-            nsec: 0,
-        };
+        let atime = timespec_t::new(utimbuf.actime, 0);
+        let mtime = timespec_t::new(utimbuf.modtime, 0);
         Some(TimeSpecPair { atime, mtime })
     } else {
         None
@@ -258,17 +252,17 @@ trait UtimeExt {
 
 impl UtimeExt for timespec_t {
     fn is_utime_now(&self) -> bool {
-        self.nsec == UTIME_NOW
+        self.nsec() == UTIME_NOW
     }
 
     fn is_utime_omit(&self) -> bool {
-        self.nsec == UTIME_OMIT
+        self.nsec() == UTIME_OMIT
     }
 
     fn is_valid(&self) -> bool {
-        self.nsec == UTIME_OMIT
-            || self.nsec == UTIME_NOW
-            || (self.nsec >= 0 && self.nsec <= 999_999_999)
+        self.nsec() == UTIME_OMIT
+            || self.nsec() == UTIME_NOW
+            || (self.nsec() >= 0 && self.nsec() <= 999_999_999)
     }
 }
 
