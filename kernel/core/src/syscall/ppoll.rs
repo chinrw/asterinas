@@ -7,7 +7,10 @@ use ostd::mm::VmIo;
 use super::{SyscallReturn, poll::do_sys_poll};
 use crate::{
     prelude::*,
-    process::{posix_thread::ContextPthreadAdminApi, signal::sig_mask::SigMask},
+    process::{
+        posix_thread::ContextPthreadAdminApi,
+        signal::sig_mask::{SigMask, validate_sigset_size},
+    },
     time::timespec_t,
 };
 
@@ -29,9 +32,7 @@ pub(super) fn sys_ppoll(
     };
 
     if sigmask_addr != 0 {
-        if sigmask_size != size_of::<SigMask>() {
-            return_errno_with_message!(Errno::EINVAL, "invalid sigmask size");
-        }
+        validate_sigset_size(sigmask_size)?;
 
         let sigmask = user_space.read_val::<SigMask>(sigmask_addr)?;
         ctx.save_and_set_sig_mask(sigmask);

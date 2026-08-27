@@ -27,7 +27,7 @@ use crate::{
         signal::{
             HandlePendingSignal, PollHandle, Pollable, Poller,
             constants::{SIGKILL, SIGSTOP},
-            sig_mask::{AtomicSigMask, SigMask},
+            sig_mask::{AtomicSigMask, SigMask, validate_sigset_size},
             signals::Signal,
         },
     },
@@ -56,9 +56,7 @@ pub(super) fn sys_signalfd4(
         raw_fd, mask_ptr, sizemask, flags
     );
 
-    if sizemask != size_of::<SigMask>() {
-        return_errno_with_message!(Errno::EINVAL, "invalid mask size");
-    }
+    validate_sigset_size(sizemask)?;
 
     let mut mask = ctx.user_space().read_val::<SigMask>(mask_ptr)?;
     mask -= SIGKILL;

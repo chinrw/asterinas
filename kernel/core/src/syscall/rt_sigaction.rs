@@ -12,7 +12,7 @@ use crate::{
             c_types::sigaction_t,
             constants::{SIGKILL, SIGSTOP},
             sig_action::SigAction,
-            sig_mask::SigSet,
+            sig_mask::{SigSet, validate_sigset_size},
             sig_num::SigNum,
         },
     },
@@ -22,7 +22,7 @@ pub(super) fn sys_rt_sigaction(
     sig_num: u8,
     sig_action_addr: Vaddr,
     old_sig_action_addr: Vaddr,
-    sigset_size: u64,
+    sigset_size: usize,
     ctx: &Context,
 ) -> Result<SyscallReturn> {
     let sig_num = SigNum::try_from(sig_num)?;
@@ -34,9 +34,7 @@ pub(super) fn sys_rt_sigaction(
         sigset_size
     );
 
-    if sigset_size != 8 {
-        return_errno_with_message!(Errno::EINVAL, "sigset size is not equal to 8");
-    }
+    validate_sigset_size(sigset_size)?;
 
     let sig_dispositions = ctx.process.sig_dispositions().lock();
     let mut sig_dispositions = sig_dispositions.lock();

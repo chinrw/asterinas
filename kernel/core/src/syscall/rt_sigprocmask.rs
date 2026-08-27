@@ -5,7 +5,10 @@ use ostd::mm::VmIo;
 use super::SyscallReturn;
 use crate::{
     prelude::*,
-    process::{posix_thread::ContextPthreadAdminApi, signal::sig_mask::SigMask},
+    process::{
+        posix_thread::ContextPthreadAdminApi,
+        signal::sig_mask::{SigMask, validate_sigset_size},
+    },
 };
 
 pub(super) fn sys_rt_sigprocmask(
@@ -20,9 +23,7 @@ pub(super) fn sys_rt_sigprocmask(
         "mask op = {:?}, set_ptr = 0x{:x}, oldset_ptr = 0x{:x}, sigset_size = {}",
         mask_op, set_ptr, oldset_ptr, sigset_size
     );
-    if sigset_size != 8 {
-        return_errno_with_message!(Errno::EINVAL, "sigset size is not equal to 8");
-    }
+    validate_sigset_size(sigset_size)?;
     do_rt_sigprocmask(mask_op, set_ptr, oldset_ptr, ctx)?;
     Ok(SyscallReturn::Return(0))
 }

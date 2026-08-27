@@ -3,7 +3,10 @@
 use ostd::mm::VmIo;
 
 use super::SyscallReturn;
-use crate::{prelude::*, process::signal::HandlePendingSignal};
+use crate::{
+    prelude::*,
+    process::signal::{HandlePendingSignal, sig_mask::validate_sigset_size},
+};
 
 pub(super) fn sys_rt_sigpending(
     u_set_ptr: Vaddr,
@@ -14,9 +17,7 @@ pub(super) fn sys_rt_sigpending(
         "u_set_ptr = 0x{:x},  sigset_size = {}",
         u_set_ptr, sigset_size
     );
-    if sigset_size != 8 {
-        return_errno_with_message!(Errno::EINVAL, "sigset size is not equal to 8")
-    }
+    validate_sigset_size(sigset_size)?;
     do_rt_sigpending(u_set_ptr, ctx)?;
     Ok(SyscallReturn::Return(0))
 }

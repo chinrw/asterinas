@@ -10,7 +10,7 @@ use crate::{
     process::signal::{
         HandlePendingSignal,
         constants::{SIGKILL, SIGSTOP},
-        sig_mask::{SigMask, SigSet},
+        sig_mask::{SigMask, SigSet, validate_sigset_size},
         signals::Signal,
         with_sigmask_changed,
     },
@@ -29,10 +29,7 @@ pub(super) fn sys_rt_sigtimedwait(
         set_ptr, info_ptr, timeout_ptr, sigset_size
     );
 
-    // Validate sigset size
-    if sigset_size != size_of::<SigMask>() {
-        return_errno_with_message!(Errno::EINVAL, "invalid sigset size");
-    }
+    validate_sigset_size(sigset_size)?;
 
     // Read the signal set
     let mask = {
