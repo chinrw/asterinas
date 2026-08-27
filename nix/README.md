@@ -35,6 +35,17 @@ different Rust nightly. Use `nix develop .#kani` for verification or
 the official Kani bundle, its matching Rust toolchain, and the supported
 solvers; it does not require `cargo kani setup` or write to `~/.kani`.
 
+Run the production proofs for device-number encoding with:
+
+```sh
+nix develop .#kani -c \
+  kani kernel/libs/device-id/src/encoding.rs --output-format terse
+```
+
+CI runs `nix/tests/verify-device-id-encoding.sh` in the same shell instead;
+the script also runs the boundary unit tests and fails if a proof harness
+is dropped or renamed without updating its expected-harness list.
+
 ## Entering the shell automatically
 
 With [direnv](https://direnv.net/) installed, the shell loads on `cd` instead
