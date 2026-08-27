@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use align_ext::AlignExt;
+use aster_uapi::{CheckedAddressRange, checked_page_align};
 
 use super::SyscallReturn;
 use crate::{
@@ -157,11 +158,18 @@ fn check_len(len: usize) -> Result<usize> {
         return_errno_with_message!(Errno::ENOMEM, "the mapping length is too large");
     }
 
-    Ok(len.align_up(PAGE_SIZE))
+    let Some(len) = checked_page_align(len, PAGE_SIZE) else {
+        return_errno_with_message!(Errno::ENOMEM, "the mapping length overflows");
+    };
+    if len > VMAR_CAP_ADDR {
+        return_errno_with_message!(Errno::ENOMEM, "the mapping length is too large");
+    }
+
+    Ok(len)
 }
 
 fn check_addr(addr: Vaddr, len: usize) -> Result<()> {
-    if addr > VMAR_CAP_ADDR - len {
+    if CheckedAddressRange::new(addr, len, VMAR_CAP_ADDR).is_none() {
         return_errno_with_message!(Errno::ENOMEM, "the mapping address is too high");
     }
 
@@ -188,7 +196,7 @@ fn adjust_addr_hint(mut addr: Vaddr, len: usize) -> Vaddr {
         // Reference: <https://elixir.bootlin.com/linux/v6.19.3/source/mm/mmap.c#L219>.
         addr = VMAR_LOWEST_ADDR;
     }
-    if addr > VMAR_CAP_ADDR - len {
+    if CheckedAddressRange::new(addr, len, VMAR_CAP_ADDR).is_none() {
         // Illegal hint. Treat it as if there were no hint.
         addr = 0;
     }
@@ -205,10 +213,7 @@ fn check_offset(offset: usize, len: usize, flags: MMapFlags) -> Result<()> {
         return Ok(());
     }
 
-    if offset
-        .checked_add(len)
-        .is_none_or(|end| end >= isize::MAX as usize)
-    {
+    if CheckedAddressRange::new(offset, len, isize::MAX as usize - 1).is_none() {
         return_errno_with_message!(Errno::EOVERFLOW, "the mapping offset overflows");
     }
 

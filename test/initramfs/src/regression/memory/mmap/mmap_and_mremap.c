@@ -118,6 +118,23 @@ FN_TEST(mmap_and_mremap_fixed)
 }
 END_TEST()
 
+FN_TEST(mremap_fixed_overlap_is_rejected_before_resize)
+{
+	char *addr = TEST_SUCC(mmap(NULL, 2 * PAGE_SIZE, PROT_READ | PROT_WRITE,
+				    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+	addr[0] = 'a';
+	addr[PAGE_SIZE] = 'b';
+
+	TEST_ERRNO(mremap(addr, 2 * PAGE_SIZE, PAGE_SIZE,
+			  MREMAP_MAYMOVE | MREMAP_FIXED, addr + PAGE_SIZE),
+		   EINVAL);
+	TEST_RES(addr[0], _ret == 'a');
+	TEST_RES(addr[PAGE_SIZE], _ret == 'b');
+
+	TEST_SUCC(munmap(addr, 2 * PAGE_SIZE));
+}
+END_TEST()
+
 FN_TEST(mmap_and_mremap_auto_merge_anon)
 {
 	char *addr = TEST_SUCC(mmap(NULL, 6 * PAGE_SIZE, PROT_READ | PROT_WRITE,
@@ -221,11 +238,13 @@ FN_TEST(mremap_dontunmap)
 			  MREMAP_MAYMOVE | MREMAP_DONTUNMAP, 0),
 		   EINVAL);
 
-	// `MREMAP_DONTUNMAP` with unaligned sizes that would align
-	// to the same page.
-	TEST_ERRNO(mremap(old_addr, 1, PAGE_SIZE,
-			  MREMAP_MAYMOVE | MREMAP_DONTUNMAP, 0),
-		   EINVAL);
+	// Linux compares the sizes after page alignment.
+	char *unaligned_new = TEST_SUCC(mremap(
+		old_addr, 1, PAGE_SIZE, MREMAP_MAYMOVE | MREMAP_DONTUNMAP, 0));
+	TEST_RES(strcmp(unaligned_new, "hello"), _ret == 0);
+	TEST_RES(old_addr[0], _ret == '\0');
+	TEST_SUCC(munmap(unaligned_new, PAGE_SIZE));
+	strcpy(old_addr, "hello");
 
 	// Basic `MREMAP_MAYMOVE | MREMAP_DONTUNMAP`.
 	char *new_addr =
