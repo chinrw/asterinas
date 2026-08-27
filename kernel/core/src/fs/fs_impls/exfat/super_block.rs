@@ -48,14 +48,25 @@ impl TryFrom<ExfatBootSector> for ExfatSuperBlock {
     fn try_from(sector: ExfatBootSector) -> Result<ExfatSuperBlock> {
         const EXFAT_CLUSTERS_UNTRACKED: u32 = !0;
 
+        // `cluster_count` is raw image input, and its all-ones value is
+        // exFAT's "untracked" marker, so the reserved clusters do not
+        // always fit.
+        let Some(num_clusters) = sector.cluster_count.checked_add(EXFAT_RESERVED_CLUSTERS) else {
+            return_errno_with_message!(Errno::EINVAL, "bogus cluster count");
+        };
+        // Widening keeps the sum away from the u8 boundary; the caller
+        // has already rejected anything above 25.
+        let cluster_size_bits =
+            sector.sector_per_cluster_bits as u32 + sector.sector_size_bits as u32;
+
         let mut block = ExfatSuperBlock {
             num_sectors: sector.vol_length,
-            num_clusters: sector.cluster_count + EXFAT_RESERVED_CLUSTERS,
+            num_clusters,
 
             sector_size: 1 << sector.sector_size_bits,
 
-            cluster_size: 1 << (sector.sector_per_cluster_bits + sector.sector_size_bits) as u32,
-            cluster_size_bits: (sector.sector_per_cluster_bits + sector.sector_size_bits) as u32,
+            cluster_size: 1 << cluster_size_bits,
+            cluster_size_bits,
 
             sect_per_cluster: 1 << sector.sector_per_cluster_bits as u32,
             sect_per_cluster_bits: sector.sector_per_cluster_bits as u32,
@@ -68,9 +79,7 @@ impl TryFrom<ExfatBootSector> for ExfatSuperBlock {
 
             root_dir: sector.root_cluster,
 
-            dentries_per_clu: 1
-                << ((sector.sector_per_cluster_bits + sector.sector_size_bits) as u32
-                    - DENTRY_SIZE_BITS),
+            dentries_per_clu: 1 << (cluster_size_bits - DENTRY_SIZE_BITS),
 
             vol_flags: sector.vol_flags as u32,
             vol_flags_persistent: (sector.vol_flags & (VOLUME_DIRTY | MEDIA_FAILURE)) as u32,
@@ -115,4 +124,40 @@ pub(super) struct ExfatBootSector {
     pub reserved: [u8; 7],
     pub boot_code: [u8; 390],
     pub signature: u16,
+}
+
+#[cfg(ktest)]
+mod tests {
+    use ostd::prelude::ktest;
+
+    use super::*;
+
+    fn zeroed_boot_sector() -> ExfatBootSector {
+        let mut sector = ExfatBootSector::new_zeroed();
+        // The smallest sector size the mount path accepts; every test
+        // below varies one other field.
+        sector.sector_size_bits = 9;
+        sector
+    }
+
+    #[ktest]
+    fn rejects_cluster_count_that_leaves_no_room_for_reserved_clusters() {
+        let mut sector = zeroed_boot_sector();
+        // exFAT's "untracked" marker, and the value that used to wrap.
+        sector.cluster_count = u32::MAX;
+
+        assert!(ExfatSuperBlock::try_from(sector).is_err());
+    }
+
+    #[ktest]
+    fn accepts_largest_cluster_count_that_fits() {
+        let mut sector = zeroed_boot_sector();
+        sector.cluster_count = u32::MAX - EXFAT_RESERVED_CLUSTERS;
+
+        let block = ExfatSuperBlock::try_from(sector).unwrap();
+        // Copied out first: the superblock is packed, so the field
+        // cannot be borrowed.
+        let num_clusters = block.num_clusters;
+        assert_eq!(num_clusters, u32::MAX);
+    }
 }
