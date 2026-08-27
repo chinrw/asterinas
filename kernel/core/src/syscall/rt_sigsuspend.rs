@@ -5,7 +5,10 @@ use ostd::{mm::VmIo, sync::Waiter};
 use super::SyscallReturn;
 use crate::{
     prelude::*,
-    process::{posix_thread::ContextPthreadAdminApi, signal::sig_mask::SigMask},
+    process::{
+        posix_thread::ContextPthreadAdminApi,
+        signal::sig_mask::{SigMask, validate_sigset_size},
+    },
 };
 
 pub(super) fn sys_rt_sigsuspend(
@@ -18,9 +21,7 @@ pub(super) fn sys_rt_sigsuspend(
         sigmask_addr, sigmask_size
     );
 
-    if sigmask_size != size_of::<SigMask>() {
-        return_errno_with_message!(Errno::EINVAL, "invalid sigmask size");
-    }
+    validate_sigset_size(sigmask_size)?;
 
     let sigmask = ctx.user_space().read_val::<SigMask>(sigmask_addr)?;
     ctx.save_and_set_sig_mask(sigmask);

@@ -8,7 +8,10 @@ use super::{SyscallReturn, select::do_sys_select};
 use crate::{
     fs::file::file_table::RawFileDesc,
     prelude::*,
-    process::{posix_thread::ContextPthreadAdminApi, signal::sig_mask::SigMask},
+    process::{
+        posix_thread::ContextPthreadAdminApi,
+        signal::sig_mask::{SigMask, validate_sigset_size},
+    },
     time::timespec_t,
 };
 
@@ -33,9 +36,7 @@ pub(super) fn sys_pselect6(
     if sigmask_addr != 0 {
         let sigmask_with_size = user_space.read_val::<SigMaskWithSize>(sigmask_addr)?;
         if sigmask_with_size.addr != 0 {
-            if sigmask_with_size.size != size_of::<SigMask>() {
-                return_errno_with_message!(Errno::EINVAL, "invalid sigmask size");
-            }
+            validate_sigset_size(sigmask_with_size.size)?;
 
             let sigmask = user_space.read_val::<SigMask>(sigmask_with_size.addr)?;
             ctx.save_and_set_sig_mask(sigmask);

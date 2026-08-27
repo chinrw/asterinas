@@ -12,7 +12,10 @@ use crate::{
         file_table::{FdFlags, RawFileDesc, get_file_fast},
     },
     prelude::*,
-    process::{posix_thread::ContextPthreadAdminApi, signal::sig_mask::SigMask},
+    process::{
+        posix_thread::ContextPthreadAdminApi,
+        signal::sig_mask::{SigMask, validate_sigset_size},
+    },
     time::timespec_t,
 };
 
@@ -112,9 +115,7 @@ fn do_epoll_pwait2(
     };
 
     if sigmask_addr != 0 {
-        if sigmask_size != size_of::<SigMask>() {
-            return_errno_with_message!(Errno::EINVAL, "invalid sigmask size");
-        }
+        validate_sigset_size(sigmask_size)?;
 
         let sigmask = ctx.user_space().read_val::<SigMask>(sigmask_addr)?;
         ctx.save_and_set_sig_mask(sigmask);

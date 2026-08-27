@@ -10,6 +10,7 @@ use ostd_pod::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 mod cmsg;
 mod msghdr;
+mod sigset;
 mod timespec;
 
 pub use cmsg::{
@@ -17,6 +18,9 @@ pub use cmsg::{
     ControlMessageHeader, ControlMessageLayout, ControlMessageReadStep,
 };
 pub use msghdr::{CUserMsgHdr, MessageHeaderError, USER_MSGHDR_LAYOUT};
+pub use sigset::{
+    CUserSigSet, SigsetSizeError, USER_SIGSET_LAYOUT, USER_SIGSET_SIZE, validate_sigset_size,
+};
 pub use timespec::{CUserTimespec, NANOSECONDS_PER_SECOND, TimespecError, USER_TIMESPEC_LAYOUT};
 
 /// The maximum number of buffers in one Linux I/O vector.
