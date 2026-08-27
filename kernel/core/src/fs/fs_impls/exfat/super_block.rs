@@ -48,9 +48,8 @@ impl TryFrom<ExfatBootSector> for ExfatSuperBlock {
     fn try_from(sector: ExfatBootSector) -> Result<ExfatSuperBlock> {
         const EXFAT_CLUSTERS_UNTRACKED: u32 = !0;
 
-        // `cluster_count` is raw image input, and its all-ones value is
-        // exFAT's "untracked" marker, so the reserved clusters do not
-        // always fit.
+        // `cluster_count` is raw image input with no upper bound of its
+        // own, so the two reserved clusters do not always fit.
         let Some(num_clusters) = sector.cluster_count.checked_add(EXFAT_RESERVED_CLUSTERS) else {
             return_errno_with_message!(Errno::EINVAL, "bogus cluster count");
         };
@@ -143,7 +142,7 @@ mod tests {
     #[ktest]
     fn rejects_cluster_count_that_leaves_no_room_for_reserved_clusters() {
         let mut sector = zeroed_boot_sector();
-        // exFAT's "untracked" marker, and the value that used to wrap.
+        // The largest count, and the value that used to wrap.
         sector.cluster_count = u32::MAX;
 
         assert!(ExfatSuperBlock::try_from(sector).is_err());
