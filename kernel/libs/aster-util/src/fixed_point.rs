@@ -338,9 +338,11 @@ mod proofs {
     /// out of reach for the solver, so one operand stays concrete.
     #[kani::proof]
     fn multiplying_by_one_is_the_identity() {
+        // No bound on `raw`: `saturating_mul` widens to u64 before
+        // shifting back, so scaling by one never reaches the clamp.
+        // Excluding the top values here would blind this harness to a
+        // regression in that clamp.
         let raw: u32 = kani::any();
-        // Above this the true product leaves u32 and the result clamps.
-        kani::assume(raw <= u32::MAX >> LOAD_AVG_FRAC_BITS << LOAD_AVG_FRAC_BITS);
 
         let product = LoadAvg::from_raw(raw).saturating_mul(LoadAvg::ONE);
 

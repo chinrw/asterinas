@@ -67,12 +67,13 @@ impl Coeff {
     /// Here users should make sure the multiplied integer should not be larger than `max_multiplier`.
     ///
     /// The search below gives up once `shift` reaches zero, and keeps
-    /// the oversized `mult` it last computed. A caller pairing a large
-    /// `max_multiplier` with a `numerator / denominator` ratio above
-    /// roughly `2^32 / max_multiplier` therefore gets a `Coeff` whose
-    /// multiplication overflows. Tying the two together — as
-    /// `ClockSource` does, deriving the multiplier from the same
-    /// frequency it passes as the denominator — keeps that out of reach.
+    /// the oversized `mult` it last computed. A caller whose
+    /// `numerator / denominator` ratio is large enough that even
+    /// `shift == 1` leaves `mult` above the multiplier's headroom
+    /// therefore gets a `Coeff` whose multiplication overflows. Tying
+    /// the two together — as `ClockSource` does, deriving the multiplier
+    /// from the same frequency it passes as the denominator — keeps that
+    /// out of reach.
     pub fn new(numerator: u64, denominator: u64, max_multiplier: u64) -> Self {
         let mut shift_acc: u32 = 32;
         // Too large `max_multiplier` will make the generated coeff imprecise
@@ -187,8 +188,11 @@ mod proofs {
         let freq: u64 = kani::any();
         let max_delay_secs: u64 = kani::any();
         kani::assume(freq != 0 && max_delay_secs < MAX_DELAY_SECS_LIMIT);
-        // `checked_mul` keeps the harness itself from overflowing on
-        // frequencies no clock reports.
+        // Skipping the products that leave u64 keeps the harness itself
+        // from overflowing, and leaves one band unproven: frequencies
+        // above `u64::MAX / 600`, where `ClockSource`'s own unchecked
+        // `max_delay_secs * freq` would wrap. No clock reports 3e16 Hz,
+        // so nothing reaches that band.
         let Some(max_multiplier) = max_delay_secs.checked_mul(freq) else {
             return;
         };

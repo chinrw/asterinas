@@ -57,7 +57,10 @@ for target in "${targets[@]}"; do
 
   listing=$(kani list "$file")
   for harness in "${harnesses[@]}"; do
-    if ! grep -qF "proofs::$harness" <<<"$listing"; then
+    # Anchor the end of the name: a plain substring match also accepts a
+    # harness renamed to <name>_disabled, which would drop it from the
+    # verified surface while the count below still adds up.
+    if ! grep -qE "proofs::${harness}([^A-Za-z0-9_]|\$)" <<<"$listing"; then
       echo "error: expected harness 'proofs::$harness' not found in $file" >&2
       exit 1
     fi
