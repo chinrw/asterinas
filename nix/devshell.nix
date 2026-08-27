@@ -14,7 +14,8 @@
 # package set on Darwin (the overlay defines them for Linux alone).
 , asterinas-qemu ? null, asterinas-grub ? null, asterinas-ovmf ? null, gdb
 , mtools, xorriso, cpio, dosfstools, exfatprogs, e2fsprogs, util-linux, parted
-, socat, strace, virtiofsd, iptables, iproute2, nix, wget, cachix }:
+, socat, strace, virtiofsd, iptables, iproute2, nix, wget, cachix
+, extraPackages ? [ ] }:
 
 let
   cargoTools =
@@ -60,7 +61,7 @@ let
   ];
 in mkShell {
   packages = [ asterinas-rust-toolchain ] ++ cargoTools ++ hostCommon
-    ++ lib.optionals stdenv.isLinux linuxOnly;
+    ++ lib.optionals stdenv.isLinux linuxOnly ++ extraPackages;
 
   shellHook = ''
     # Use the vDSO checkout pinned by the overlay unless the caller supplied one.

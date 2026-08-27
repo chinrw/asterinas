@@ -29,6 +29,12 @@ kernel crate requires.
 Build a single dependency (Linux only): `nix build .#qemu` (also `.#grub`,
 `.#ovmf`).
 
+Kani is kept out of the default shell because its compiler is tied to a
+different Rust nightly. Use `nix develop .#kani` for verification or
+`nix build .#kani` to realize and cache it separately. The named shell contains
+the official Kani bundle, its matching Rust toolchain, and the supported
+solvers; it does not require `cargo kani setup` or write to `~/.kani`.
+
 ## Entering the shell automatically
 
 With [direnv](https://direnv.net/) installed, the shell loads on `cd` instead
