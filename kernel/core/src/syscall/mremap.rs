@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use align_ext::AlignExt;
+use aster_uapi::{CheckedAddressRange, checked_page_align};
 
 use super::SyscallReturn;
-use crate::{prelude::*, vm::vmar::RemapOldMappingAction};
+use crate::{
+    prelude::*,
+    vm::vmar::{RemapOldMappingAction, VMAR_CAP_ADDR, VMAR_LOWEST_ADDR},
+};
 
 pub(super) fn sys_mremap(
     old_addr: Vaddr,
@@ -42,9 +45,15 @@ fn do_sys_mremap(
         return_errno_with_message!(Errno::EINVAL, "copying shareable mapping is not supported");
     }
 
-    if old_size.checked_add(PAGE_SIZE).is_none() || new_size.checked_add(PAGE_SIZE).is_none() {
-        return_errno_with_message!(Errno::EINVAL, "the size overflows")
-    }
+    let Some(old_size) = checked_page_align(old_size, PAGE_SIZE) else {
+        return_errno_with_message!(Errno::EINVAL, "the old size overflows");
+    };
+    let Some(new_size) = checked_page_align(new_size, PAGE_SIZE) else {
+        return_errno_with_message!(Errno::EINVAL, "the new size overflows");
+    };
+    let Some(old_range) = CheckedAddressRange::new(old_addr, old_size, VMAR_CAP_ADDR) else {
+        return_errno_with_message!(Errno::EINVAL, "the old address range is not in userspace");
+    };
 
     // `MREMAP_DONTUNMAP` keeps the old VMA in the tree as an anonymous
     // zero-fill-on-demand mapping; we must move pages even when the sizes
@@ -65,9 +74,23 @@ fn do_sys_mremap(
         }
     }
 
-    // Align `old_size` and `new_size` after checking them.
-    let old_size = old_size.align_up(PAGE_SIZE);
-    let new_size = new_size.align_up(PAGE_SIZE);
+    if flags.contains(MremapFlags::MREMAP_FIXED) {
+        if !flags.contains(MremapFlags::MREMAP_MAYMOVE) {
+            return_errno_with_message!(
+                Errno::EINVAL,
+                "MREMAP_FIXED specified without also specifying MREMAP_MAYMOVE"
+            );
+        }
+        if !new_addr.is_multiple_of(PAGE_SIZE) || new_addr < VMAR_LOWEST_ADDR {
+            return_errno_with_message!(Errno::EINVAL, "the new address is not valid");
+        }
+        let Some(new_range) = CheckedAddressRange::new(new_addr, new_size, VMAR_CAP_ADDR) else {
+            return_errno_with_message!(Errno::EINVAL, "the new address range is not in userspace");
+        };
+        if old_range.overlaps(new_range) {
+            return_errno_with_message!(Errno::EINVAL, "the old and new address ranges overlap");
+        }
+    }
 
     let action = if flags.contains(MremapFlags::MREMAP_DONTUNMAP) {
         RemapOldMappingAction::Keep
@@ -97,12 +120,6 @@ fn do_sys_mremap(
             vmar.remap(old_addr, old_size, None, new_size, action)
         }
     } else {
-        if flags.contains(MremapFlags::MREMAP_FIXED) {
-            return_errno_with_message!(
-                Errno::EINVAL,
-                "MREMAP_FIXED specified without also specifying MREMAP_MAYMOVE"
-            );
-        }
         // We can ensure that `new_size > old_size` here. Since we are enlarging
         // the old mapping, it is necessary to check whether the old range lies
         // in a single mapping.

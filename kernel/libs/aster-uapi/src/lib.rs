@@ -12,6 +12,7 @@ mod cmsg;
 mod msghdr;
 mod sigset;
 mod timespec;
+mod vm_range;
 
 pub use cmsg::{
     CONTROL_MESSAGE_ALIGNMENT, CONTROL_MESSAGE_HEADER_LAYOUT, CONTROL_MESSAGE_HEADER_LEN,
@@ -22,6 +23,7 @@ pub use sigset::{
     CUserSigSet, SigsetSizeError, USER_SIGSET_LAYOUT, USER_SIGSET_SIZE, validate_sigset_size,
 };
 pub use timespec::{CUserTimespec, NANOSECONDS_PER_SECOND, TimespecError, USER_TIMESPEC_LAYOUT};
+pub use vm_range::{CheckedAddressRange, checked_page_align};
 
 /// The maximum number of buffers in one Linux I/O vector.
 ///
