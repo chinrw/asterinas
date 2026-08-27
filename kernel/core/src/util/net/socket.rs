@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use aster_uapi::MAX_IO_VECTOR_LENGTH;
+use aster_uapi::CUserMsgHdr as RawCUserMsgHdr;
 
 use super::read_socket_addr_from_user;
 use crate::{
@@ -76,45 +76,28 @@ bitflags! {
     }
 }
 
-#[padding_struct]
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy, Debug, Pod)]
-pub(crate) struct CUserMsgHdr {
-    /// Pointer to socket address structure
-    pub msg_name: Vaddr,
-    /// Size of socket address
-    pub msg_namelen: i32,
-    /// Scatter/Gather iov array
-    pub msg_iov: Vaddr,
-    /// The # of elements in msg_iov
-    pub msg_iovlen: usize,
-    /// Ancillary data
-    pub msg_control: Vaddr,
-    /// Ancillary data buffer length
-    pub msg_controllen: usize,
-    /// Flags on received message
-    pub msg_flags: u32,
-}
+pub(crate) struct CUserMsgHdr(RawCUserMsgHdr);
 
 impl CUserMsgHdr {
     pub(crate) fn read_socket_addr_from_user(&self) -> Result<Option<SocketAddr>> {
-        if self.msg_name == 0 {
+        let Some(name_len) = self.validated_name_len()? else {
             return Ok(None);
-        }
-
-        let socket_addr = read_socket_addr_from_user(self.msg_name, self.msg_namelen as usize)?;
+        };
+        let socket_addr = read_socket_addr_from_user(self.0.name_ptr(), name_len)?;
         Ok(Some(socket_addr))
     }
 
     pub(crate) fn write_socket_addr_to_user(&self, addr: Option<&SocketAddr>) -> Result<i32> {
-        if self.msg_name == 0 {
+        if self.0.name_ptr() == 0 {
             // The length field will not be touched if the name pointer is NULL.
             // See <https://elixir.bootlin.com/linux/v6.15.6/source/net/socket.c#L2792>.
-            return Ok(self.msg_namelen);
+            return Ok(self.0.name_len());
         }
 
         let actual_len = if let Some(addr) = addr {
-            write_socket_addr_with_max_len(addr, self.msg_name, self.msg_namelen)?
+            write_socket_addr_with_max_len(addr, self.0.name_ptr(), self.0.name_len())?
         } else {
             0
         };
@@ -125,11 +108,11 @@ impl CUserMsgHdr {
         &self,
         user_space: &CurrentUserSpace,
     ) -> Result<Vec<ControlMessage>> {
-        if self.msg_control == 0 {
+        if self.0.control_ptr() == 0 {
             return Ok(Vec::new());
         }
 
-        let mut reader = user_space.reader(self.msg_control, self.msg_controllen)?;
+        let mut reader = user_space.reader(self.0.control_ptr(), self.0.control_len())?;
         let control_messages = ControlMessage::read_all_from(&mut reader)?;
         Ok(control_messages)
     }
@@ -139,7 +122,7 @@ impl CUserMsgHdr {
         control_messages: &[ControlMessage],
         user_space: &CurrentUserSpace,
     ) -> Result<(u32, RecvFlags)> {
-        if self.msg_control == 0 {
+        if self.0.control_ptr() == 0 {
             // The length field will be set even if the control message pointer is NULL.
             // See <https://elixir.bootlin.com/linux/v6.15.6/source/net/socket.c#L2807>.
             let output_flags = if control_messages.is_empty() {
@@ -150,7 +133,7 @@ impl CUserMsgHdr {
             return Ok((0, output_flags));
         }
 
-        let mut writer = user_space.writer(self.msg_control, self.msg_controllen)?;
+        let mut writer = user_space.writer(self.0.control_ptr(), self.0.control_len())?;
         let (write_len, output_flags) = ControlMessage::write_all_to(control_messages, &mut writer);
         Ok((write_len as u32, output_flags))
     }
@@ -159,21 +142,43 @@ impl CUserMsgHdr {
         &self,
         user_space: &'a CurrentUserSpace<'a>,
     ) -> Result<VmReaderArray<'a>> {
-        if self.msg_iovlen > MAX_IO_VECTOR_LENGTH {
-            return_errno_with_message!(Errno::EMSGSIZE, "the I/O vector contains too many buffers");
-        }
-
-        VmReaderArray::from_user_io_vecs(user_space, self.msg_iov, self.msg_iovlen)
+        let iov_len = self.validated_iov_len()?;
+        VmReaderArray::from_user_io_vecs(user_space, self.0.iov_ptr(), iov_len)
     }
 
     pub(crate) fn copy_writer_array_from_user<'a>(
         &self,
         user_space: &'a CurrentUserSpace<'a>,
     ) -> Result<VmWriterArray<'a>> {
-        if self.msg_iovlen > MAX_IO_VECTOR_LENGTH {
-            return_errno_with_message!(Errno::EMSGSIZE, "the I/O vector contains too many buffers");
-        }
+        self.validated_name_len()?;
+        let iov_len = self.validated_iov_len()?;
+        VmWriterArray::from_user_io_vecs(user_space, self.0.iov_ptr(), iov_len)
+    }
 
-        VmWriterArray::from_user_io_vecs(user_space, self.msg_iov, self.msg_iovlen)
+    pub(crate) fn set_name_len(&mut self, name_len: i32) {
+        self.0.set_name_len(name_len);
+    }
+
+    pub(crate) fn set_control_len(&mut self, control_len: usize) {
+        self.0.set_control_len(control_len);
+    }
+
+    pub(crate) fn set_flags(&mut self, flags: u32) {
+        self.0.set_flags(flags);
+    }
+
+    fn validated_name_len(&self) -> Result<Option<usize>> {
+        self.0.validated_name_len().map_err(|_| {
+            Error::with_message(
+                Errno::EINVAL,
+                "the socket address length cannot be negative",
+            )
+        })
+    }
+
+    fn validated_iov_len(&self) -> Result<usize> {
+        self.0.validated_iov_len().map_err(|_| {
+            Error::with_message(Errno::EMSGSIZE, "the I/O vector contains too many buffers")
+        })
     }
 }
