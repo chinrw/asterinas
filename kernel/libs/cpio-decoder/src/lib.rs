@@ -115,6 +115,12 @@ where
             let header = Header::new(reader)?;
             let name = {
                 let name_size = read_hex_bytes_to_u32(&header.name_size)? as usize;
+                // Reject the size before allocating: the field is raw
+                // archive input, and in no_std a failed multi-gigabyte
+                // allocation aborts instead of returning an error.
+                if name_size > MAX_NAME_SIZE {
+                    return Err(Error::FileNameError);
+                }
                 let mut name_bytes = vec![0u8; name_size];
                 reader.read_exact(&mut name_bytes)?;
                 let name = core::ffi::CStr::from_bytes_with_nul(&name_bytes)
@@ -304,6 +310,8 @@ pub enum FileType {
 
 const MAGIC: &[u8] = b"070701";
 const TRAILER_NAME: &str = "TRAILER!!!";
+/// The largest accepted `name_size`, matching Linux's PATH_MAX.
+const MAX_NAME_SIZE: usize = 4096;
 
 struct Header {
     magic: [u8; 6],
@@ -359,16 +367,19 @@ impl Header {
 
 fn read_hex_bytes_to_u32(bytes: &[u8]) -> Result<u32> {
     debug_assert!(bytes.len() == 8);
+    // The newc format allows hexadecimal digits only; `from_str_radix`
+    // alone would also accept a leading `+`.
+    if !bytes.iter().all(u8::is_ascii_hexdigit) {
+        return Err(Error::ParseIntError);
+    }
     let string = core::str::from_utf8(bytes).map_err(|_| Error::Utf8Error)?;
     let num = u32::from_str_radix(string, 16).map_err(|_| Error::ParseIntError)?;
     Ok(num)
 }
 
 fn align_up_pad(size: usize, align: usize) -> usize {
-    align_up(size, align) - size
-}
-
-fn align_up(size: usize, align: usize) -> usize {
     debug_assert!(align >= 2 && align.is_power_of_two());
-    (size + align - 1) & !(align - 1)
+    // Equals `align_up(size, align) - size`, but stated as `(-size) mod
+    // align` so that no intermediate result can overflow.
+    size.wrapping_neg() & (align - 1)
 }
