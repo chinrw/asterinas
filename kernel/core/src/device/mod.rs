@@ -68,3 +68,16 @@ pub(crate) fn init_in_first_process() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(ktest)]
+mod tests {
+    use device_id::{DeviceId, encode_device_numbers};
+    use ostd::prelude::ktest;
+
+    #[ktest]
+    fn rejects_encoded_major_outside_range_without_aliasing() {
+        let raw = encode_device_numbers(0x0001_0000, 0);
+
+        assert_eq!(DeviceId::from_encoded_u64(raw), None);
+    }
+}
