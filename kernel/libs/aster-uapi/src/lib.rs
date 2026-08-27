@@ -9,11 +9,13 @@ use core::mem::offset_of;
 use ostd_pod::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 mod cmsg;
+mod msghdr;
 
 pub use cmsg::{
     CONTROL_MESSAGE_ALIGNMENT, CONTROL_MESSAGE_HEADER_LAYOUT, CONTROL_MESSAGE_HEADER_LEN,
     ControlMessageHeader, ControlMessageLayout, ControlMessageReadStep,
 };
+pub use msghdr::{CUserMsgHdr, MessageHeaderError, USER_MSGHDR_LAYOUT};
 
 /// The maximum number of buffers in one Linux I/O vector.
 ///

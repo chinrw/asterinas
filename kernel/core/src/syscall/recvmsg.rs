@@ -45,13 +45,14 @@ pub(super) fn sys_recvmsg(
     drop(file_table);
 
     let addr = message_header.addr();
-    c_user_msghdr.msg_namelen = c_user_msghdr.write_socket_addr_to_user(addr)?;
+    let name_len = c_user_msghdr.write_socket_addr_to_user(addr)?;
+    c_user_msghdr.set_name_len(name_len);
 
     let control_messages = message_header.control_messages();
     let (control_len, control_flags) =
         c_user_msghdr.write_control_messages_to_user(control_messages, &user_space)?;
-    c_user_msghdr.msg_controllen = control_len as _;
-    c_user_msghdr.msg_flags = (output.flags() | control_flags).bits().cast_unsigned();
+    c_user_msghdr.set_control_len(control_len as _);
+    c_user_msghdr.set_flags((output.flags() | control_flags).bits().cast_unsigned());
 
     user_space.write_val(user_msghdr_ptr, &c_user_msghdr)?;
 
