@@ -8,6 +8,13 @@ use core::mem::offset_of;
 
 use ostd_pod::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
+mod cmsg;
+
+pub use cmsg::{
+    CONTROL_MESSAGE_ALIGNMENT, CONTROL_MESSAGE_HEADER_LAYOUT, CONTROL_MESSAGE_HEADER_LEN,
+    ControlMessageHeader, ControlMessageLayout, ControlMessageReadStep,
+};
+
 /// The maximum number of buffers in one Linux I/O vector.
 ///
 /// Reference: <https://elixir.bootlin.com/linux/v6.16/source/include/uapi/linux/uio.h#L46>.
