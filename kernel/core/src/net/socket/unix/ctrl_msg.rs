@@ -4,6 +4,7 @@ use core::{fmt, mem};
 
 use aster_bigtcp::socket::ReceiveBehavior;
 use aster_rights::ReadOp;
+use aster_uapi::ControlMessageLayout;
 use ostd::task::Task;
 
 use super::{CUserCred, UnixStreamSocket, cred::SocketCred};
@@ -31,28 +32,32 @@ enum Message {
 impl UnixControlMessage {
     pub(crate) fn read_from(
         header: &CControlHeader,
+        payload_len: usize,
         reader: &mut VmReader,
     ) -> Result<Option<Self>> {
-        debug_assert_eq!(header.level(), Some(CSocketOptionLevel::SOL_SOCKET));
+        debug_assert_eq!(
+            CSocketOptionLevel::try_from(header.level()).ok(),
+            Some(CSocketOptionLevel::SOL_SOCKET)
+        );
 
         let Ok(type_) = CControlType::try_from(header.type_()) else {
             warn!("unsupported control message type in {:?}", header);
-            reader.skip(header.payload_len());
+            reader.skip(payload_len);
             return Ok(None);
         };
 
         match type_ {
             CControlType::SCM_RIGHTS => {
-                let msg = FileMessage::read_from(header, reader)?;
+                let msg = FileMessage::read_from(payload_len, reader)?;
                 Ok(Some(Self(Message::Files(msg))))
             }
             CControlType::SCM_CREDENTIALS => {
-                let msg = CredMessage::read_from(header, reader)?;
+                let msg = CredMessage::read_from(payload_len, reader)?;
                 Ok(Some(Self(Message::Cred(msg))))
             }
             _ => {
                 warn!("unsupported control message type in {:?}", header);
-                reader.skip(header.payload_len());
+                reader.skip(payload_len);
                 Ok(None)
             }
         }
@@ -84,8 +89,7 @@ impl Debug for FileMessage {
 const MAX_NR_FILES: usize = 253;
 
 impl FileMessage {
-    fn read_from(header: &CControlHeader, reader: &mut VmReader) -> Result<Self> {
-        let payload_len = header.payload_len();
+    fn read_from(payload_len: usize, reader: &mut VmReader) -> Result<Self> {
         if !payload_len.is_multiple_of(size_of::<i32>()) {
             return_errno_with_message!(Errno::EINVAL, "the SCM_RIGHTS message is invalid");
         }
@@ -114,10 +118,11 @@ impl FileMessage {
     }
 
     fn write_to(&self, writer: &mut VmWriter) -> Result<(CControlHeader, RecvFlags)> {
-        let nfiles = self
-            .files
-            .len()
-            .min(CControlHeader::payload_len_from_total(writer.avail())? / size_of::<i32>());
+        let payload_capacity =
+            ControlMessageLayout::payload_capacity(writer.avail()).ok_or_else(|| {
+                Error::with_message(Errno::EINVAL, "the control message buffer is too small")
+            })?;
+        let nfiles = self.files.len().min(payload_capacity / size_of::<i32>());
         if nfiles == 0 {
             return_errno_with_message!(Errno::EINVAL, "the control message buffer is too small");
         }
@@ -128,10 +133,11 @@ impl FileMessage {
         };
 
         let header = CControlHeader::new(
-            CSocketOptionLevel::SOL_SOCKET,
+            CSocketOptionLevel::SOL_SOCKET as i32,
             CControlType::SCM_RIGHTS as i32,
             nfiles * size_of::<i32>(),
-        );
+        )
+        .ok_or_else(|| Error::with_message(Errno::EINVAL, "control message length overflow"))?;
         writer.write_val::<CControlHeader>(&header)?;
 
         let current = Task::current().unwrap();
@@ -158,8 +164,8 @@ struct CredMessage {
 }
 
 impl CredMessage {
-    fn read_from(header: &CControlHeader, reader: &mut VmReader) -> Result<Self> {
-        if header.payload_len() != size_of::<CUserCred>() {
+    fn read_from(payload_len: usize, reader: &mut VmReader) -> Result<Self> {
+        if payload_len != size_of::<CUserCred>() {
             return_errno_with_message!(Errno::EINVAL, "the SCM_CREDENTIALS message is invalid");
         }
 
@@ -169,8 +175,11 @@ impl CredMessage {
     }
 
     fn write_to(&self, writer: &mut VmWriter) -> Result<(CControlHeader, RecvFlags)> {
-        let payload_len =
-            size_of::<CUserCred>().min(CControlHeader::payload_len_from_total(writer.avail())?);
+        let payload_capacity =
+            ControlMessageLayout::payload_capacity(writer.avail()).ok_or_else(|| {
+                Error::with_message(Errno::EINVAL, "the control message buffer is too small")
+            })?;
+        let payload_len = size_of::<CUserCred>().min(payload_capacity);
         let output_flags = if payload_len != size_of::<CUserCred>() {
             RecvFlags::MSG_CTRUNC
         } else {
@@ -178,10 +187,11 @@ impl CredMessage {
         };
 
         let header = CControlHeader::new(
-            CSocketOptionLevel::SOL_SOCKET,
+            CSocketOptionLevel::SOL_SOCKET as i32,
             CControlType::SCM_CREDENTIALS as i32,
             payload_len,
-        );
+        )
+        .ok_or_else(|| Error::with_message(Errno::EINVAL, "control message length overflow"))?;
         writer.write_val(&header)?;
         writer.write_fallible(&mut VmReader::from(self.cred.as_bytes()))?;
 
