@@ -306,3 +306,82 @@ mod tests {
         assert_eq!(result.raw(), one.raw());
     }
 }
+
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// The instantiation the load-average path uses.
+    type LoadAvg = FixedU32<11>;
+    /// The instantiation `sysinfo` reports through.
+    type SysinfoAvg = FixedU64<16>;
+
+    const LOAD_AVG_FRAC_BITS: u32 = 11;
+    const LOAD_AVG_MAX_INT: u32 = u32::MAX >> LOAD_AVG_FRAC_BITS;
+
+    #[kani::proof]
+    fn saturating_from_num_keeps_representable_integers() {
+        let val: u32 = kani::any();
+        let fixed = LoadAvg::saturating_from_num(val);
+
+        if val <= LOAD_AVG_MAX_INT {
+            assert_eq!(fixed.raw() >> LOAD_AVG_FRAC_BITS, val);
+            assert_eq!(fixed.raw() % (1 << LOAD_AVG_FRAC_BITS), 0);
+        } else {
+            assert_eq!(fixed.raw(), u32::MAX);
+        }
+    }
+
+    /// Scaling by one must be the identity: it is the shortest check
+    /// that the `FRAC_BITS` shift in `saturating_mul` matches the one
+    /// baked into the representation. A full product-equality proof is
+    /// out of reach for the solver, so one operand stays concrete.
+    #[kani::proof]
+    fn multiplying_by_one_is_the_identity() {
+        let raw: u32 = kani::any();
+        // Above this the true product leaves u32 and the result clamps.
+        kani::assume(raw <= u32::MAX >> LOAD_AVG_FRAC_BITS << LOAD_AVG_FRAC_BITS);
+
+        let product = LoadAvg::from_raw(raw).saturating_mul(LoadAvg::ONE);
+
+        assert_eq!(product.raw(), raw);
+    }
+
+    #[kani::proof]
+    fn multiplying_by_zero_is_zero() {
+        let raw: u32 = kani::any();
+
+        let product = LoadAvg::from_raw(raw).saturating_mul(LoadAvg::ZERO);
+
+        assert_eq!(product.raw(), 0);
+    }
+
+    #[kani::proof]
+    fn dividing_by_one_is_the_identity() {
+        let raw: u32 = kani::any();
+
+        let quotient = LoadAvg::from_raw(raw).saturating_div(LoadAvg::ONE);
+
+        assert_eq!(quotient.map(|q| q.raw()), Some(raw));
+    }
+
+    #[kani::proof]
+    fn dividing_by_zero_is_rejected() {
+        let raw: u32 = kani::any();
+
+        let quotient = LoadAvg::from_raw(raw).saturating_div(LoadAvg::ZERO);
+
+        assert!(quotient.is_none());
+    }
+
+    /// The widening conversion the `sysinfo` path performs.
+    #[kani::proof]
+    fn widening_a_load_average_preserves_its_value() {
+        let raw: u32 = kani::any();
+        let wide: SysinfoAvg = LoadAvg::from_raw(raw).into();
+
+        // Both types are read as raw / 2^FRAC_BITS, so equal values mean
+        // equal raws once scaled by the frac-bit difference.
+        assert_eq!(wide.raw(), u64::from(raw) << (16 - LOAD_AVG_FRAC_BITS));
+    }
+}

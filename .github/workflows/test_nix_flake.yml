@@ -7,6 +7,7 @@ on:
       - flake.lock
       - nix/**
       - kernel/libs/device-id/**
+      - kernel/libs/aster-util/**
       - rust-toolchain.toml
       - .github/workflows/test_nix_flake.yml
   push:
@@ -17,6 +18,7 @@ on:
       - flake.lock
       - nix/**
       - kernel/libs/device-id/**
+      - kernel/libs/aster-util/**
       - rust-toolchain.toml
       - .github/workflows/test_nix_flake.yml
 
@@ -81,11 +83,11 @@ jobs:
               cargo kani --version &&
               kani nix/tests/kani-smoke.rs --output-format terse
             '
-      - name: Verify device ID encoding
+      - name: Run the Kani proofs
         run: |
           KANI_TEST_HOME="$(mktemp -d)"
           nix develop .#kani --ignore-environment \
             --command env HOME="$KANI_TEST_HOME" bash -c '
-              timeout --signal=TERM --kill-after=10s 300s \
-                bash nix/tests/verify-device-id-encoding.sh
+              timeout --signal=TERM --kill-after=10s 600s \
+                bash nix/tests/verify-kani-proofs.sh
             '
