@@ -62,6 +62,61 @@ fn decoder() {
     }
 }
 
+/// Builds a single-entry archive: a 110-byte header for a regular file
+/// named "a", with the field at byte offset `offset` (if any) overwritten.
+fn single_entry_with_field(offset: usize, field: &str) -> Vec<u8> {
+    let mut buffer = Vec::new();
+    buffer.extend_from_slice(b"070701"); // magic
+    for _ in 0..13 {
+        buffer.extend_from_slice(b"00000000");
+    }
+    buffer[14..22].copy_from_slice(b"00008000"); // mode: regular file
+    buffer[94..102].copy_from_slice(b"00000002"); // name_size: "a\0"
+    if offset > 0 {
+        buffer[offset..offset + 8].copy_from_slice(field.as_bytes());
+    }
+    buffer.extend_from_slice(b"a\0"); // header + name = 112, already 4-aligned
+    buffer
+}
+
+#[test]
+fn accepts_handcrafted_regular_file_entry() {
+    let buffer = single_entry_with_field(0, "");
+    let mut decoder = CpioDecoder::new(buffer.as_slice());
+    let entry = decoder.next().unwrap().unwrap();
+    assert_eq!(entry.name(), "a");
+    assert_eq!(entry.metadata().file_type(), FileType::File);
+}
+
+#[test]
+fn rejects_plus_sign_in_hex_field() {
+    // `u32::from_str_radix` alone would accept "+0000001".
+    let buffer = single_entry_with_field(6, "+0000001"); // ino field
+    let mut decoder = CpioDecoder::new(buffer.as_slice());
+    let entry_result = decoder.next().unwrap();
+    assert_eq!(entry_result.err(), Some(Error::ParseIntError));
+}
+
+#[test]
+fn rejects_oversized_name_size_without_allocating() {
+    let buffer = single_entry_with_field(94, "ffffffff"); // name_size field
+    let mut decoder = CpioDecoder::new(buffer.as_slice());
+    let entry_result = decoder.next().unwrap();
+    assert_eq!(entry_result.err(), Some(Error::FileNameError));
+}
+
+#[test]
+fn align_up_pad_covers_full_input_domain() {
+    use super::align_up_pad;
+
+    assert_eq!(align_up_pad(0, 4), 0);
+    assert_eq!(align_up_pad(1, 4), 3);
+    assert_eq!(align_up_pad(4, 4), 0);
+    assert_eq!(align_up_pad(110 + 2, 4), 0);
+    // The old `align_up(size, 4) - size` overflowed here.
+    assert_eq!(align_up_pad(usize::MAX, 4), 1);
+}
+
 #[test]
 fn short_buffer() {
     let short_buffer: Vec<u8> = Vec::new();
