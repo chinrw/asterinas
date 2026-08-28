@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use core::mem;
-
 use spin::Once;
 
 /// Returns the numerator and denominator of the ratio R:
@@ -12,20 +10,20 @@ fn tsc_factors() -> (u64, u64) {
     *FACTORS.call_once(|| {
         let freq = ostd::arch::tsc_freq();
         assert_ne!(freq, 0);
-        let mut a = 1_000_000_000;
-        let mut b = freq;
-        if a < b {
-            mem::swap(&mut a, &mut b);
-        }
-        while a > 1 && b > 1 {
-            let t = a;
-            a = b;
-            b = t % b;
-        }
-
-        let gcd = if a <= 1 { b } else { a };
+        let gcd = gcd(1_000_000_000, freq);
         (1_000_000_000 / gcd, freq / gcd)
     })
+}
+
+/// Computes the greatest common divisor by the Euclidean algorithm.
+///
+/// `gcd(a, 0)` and `gcd(0, b)` return the other operand, so the result is
+/// non-zero whenever at least one operand is.
+fn gcd(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
 }
 
 /// The base time slice allocated for every thread, measured in nanoseconds.
@@ -50,4 +48,32 @@ pub(crate) fn base_slice_clocks() -> u64 {
 /// Returns the minimum scheduling period, measured in TSC clock units.
 pub(crate) fn min_period_clocks() -> u64 {
     consts().1
+}
+
+#[cfg(ktest)]
+mod tests {
+    use ostd::prelude::ktest;
+
+    use super::gcd;
+
+    #[ktest]
+    fn gcd_of_coprime_values_is_one() {
+        // The previous loop exited once an operand reached 1 and then
+        // returned the other operand (e.g. gcd(7, 3) came out as 3).
+        assert_eq!(gcd(7, 3), 1);
+        assert_eq!(gcd(1_000_000_000, 333_333_331), 1);
+    }
+
+    #[ktest]
+    fn gcd_of_typical_tsc_frequencies() {
+        assert_eq!(gcd(1_000_000_000, 2_400_000_000), 200_000_000);
+        assert_eq!(gcd(1_000_000_000, 1_000_000_000), 1_000_000_000);
+        assert_eq!(gcd(1_000_000_000, 3), 1);
+    }
+
+    #[ktest]
+    fn gcd_handles_zero_operands() {
+        assert_eq!(gcd(5, 0), 5);
+        assert_eq!(gcd(0, 5), 5);
+    }
 }
