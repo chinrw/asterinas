@@ -65,6 +65,15 @@ pub struct Coeff {
 impl Coeff {
     /// Create a new coeff, which is essentially equivalent to （`numerator` / `denominator`) when being multiplied to an integer;
     /// Here users should make sure the multiplied integer should not be larger than `max_multiplier`.
+    ///
+    /// The search below gives up once `shift` reaches zero, and keeps
+    /// the oversized `mult` it last computed. A caller whose
+    /// `numerator / denominator` ratio is large enough that even
+    /// `shift == 1` leaves `mult` above the multiplier's headroom
+    /// therefore gets a `Coeff` whose multiplication overflows. Tying
+    /// the two together — as `ClockSource` does, deriving the multiplier
+    /// from the same frequency it passes as the denominator — keeps that
+    /// out of reach.
     pub fn new(numerator: u64, denominator: u64, max_multiplier: u64) -> Self {
         let mut shift_acc: u32 = 32;
         // Too large `max_multiplier` will make the generated coeff imprecise
@@ -137,5 +146,63 @@ mod test {
         assert!(coeff * 0_u64 == 0);
         assert!(coeff * 100_u64 == 100 * 23456 / 56789);
         assert!(coeff * 1_000_000_000_u64 == 1_000_000_000 * 23456 / 56789);
+    }
+}
+
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// The numerator `ClockSource::new` always passes, restated here so
+    /// the proofs do not read it back from the production caller.
+    const NANOS_PER_SECOND: u64 = 1_000_000_000;
+
+    /// The bound `new` documents for `max_multiplier`.
+    const MAX_MULTIPLIER_LIMIT: u64 = 1 << 40;
+
+    #[kani::proof]
+    #[kani::unwind(34)]
+    fn new_is_panic_free_for_the_clocksource_shape() {
+        let freq: u64 = kani::any();
+        let max_multiplier: u64 = kani::any();
+        kani::assume(freq != 0 && max_multiplier < MAX_MULTIPLIER_LIMIT);
+
+        let _ = Coeff::new(NANOS_PER_SECOND, freq, max_multiplier);
+    }
+
+    /// The largest delay `ClockSource::new` permits.
+    const MAX_DELAY_SECS_LIMIT: u64 = 600;
+
+    /// The guarantee the type exists for, over every clock source the
+    /// kernel can build: `mult * rhs` stays inside u64.
+    ///
+    /// The delay bound is load-bearing, not decoration. `new` picks the
+    /// largest shift whose `mult` fits the multiplier's headroom, and
+    /// gives up once the shift reaches zero — a caller pairing a large
+    /// multiplier with a tiny denominator gets a `Coeff` that overflows
+    /// on use. Tying the multiplier to the denominator, as
+    /// `ClockSource` does, keeps that case out of reach.
+    #[kani::proof]
+    #[kani::unwind(34)]
+    fn multiplying_within_a_clock_source_bound_never_overflows() {
+        let freq: u64 = kani::any();
+        let max_delay_secs: u64 = kani::any();
+        kani::assume(freq != 0 && max_delay_secs < MAX_DELAY_SECS_LIMIT);
+        // Skipping the products that leave u64 keeps the harness itself
+        // from overflowing, and leaves one band unproven: frequencies
+        // above `u64::MAX / 600`, where `ClockSource`'s own unchecked
+        // `max_delay_secs * freq` would wrap. No clock reports 3e16 Hz,
+        // so nothing reaches that band.
+        let Some(max_multiplier) = max_delay_secs.checked_mul(freq) else {
+            return;
+        };
+        kani::assume(max_multiplier < MAX_MULTIPLIER_LIMIT);
+
+        let coeff = Coeff::new(NANOS_PER_SECOND, freq, max_multiplier);
+
+        let rhs: u64 = kani::any();
+        kani::assume(rhs <= max_multiplier);
+
+        let _ = coeff * rhs;
     }
 }
