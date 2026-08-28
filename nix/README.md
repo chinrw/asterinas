@@ -29,6 +29,25 @@ kernel crate requires.
 Build a single dependency (Linux only): `nix build .#qemu` (also `.#grub`,
 `.#ovmf`).
 
+Kani is kept out of the default shell because its compiler is tied to a
+different Rust nightly. Use `nix develop .#kani` for verification or
+`nix build .#kani` to realize and cache it separately. The named shell contains
+the official Kani bundle, its matching Rust toolchain, and the supported
+solvers; it does not require `cargo kani setup` or write to `~/.kani`.
+
+Run the proofs of one file with:
+
+```sh
+nix develop .#kani -c \
+  kani kernel/libs/device-id/src/encoding.rs --output-format terse
+```
+
+CI runs `nix/tests/verify-kani-proofs.sh` in the same shell instead. The
+script carries a table of every proof-carrying file and the harnesses each
+must contain, runs the host-testable ones through `rustc --test` as well,
+and fails if a harness is dropped, renamed, or added without updating that
+table.
+
 ## Entering the shell automatically
 
 With [direnv](https://direnv.net/) installed, the shell loads on `cd` instead

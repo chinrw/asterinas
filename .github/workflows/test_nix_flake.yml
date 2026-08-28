@@ -6,6 +6,8 @@ on:
       - flake.nix
       - flake.lock
       - nix/**
+      - kernel/libs/device-id/**
+      - kernel/libs/aster-util/**
       - rust-toolchain.toml
       - .github/workflows/test_nix_flake.yml
   push:
@@ -15,6 +17,8 @@ on:
       - flake.nix
       - flake.lock
       - nix/**
+      - kernel/libs/device-id/**
+      - kernel/libs/aster-util/**
       - rust-toolchain.toml
       - .github/workflows/test_nix_flake.yml
 
@@ -71,3 +75,19 @@ jobs:
             typos --version &&
             qemu-system-x86_64 --version
           '
+      - name: Smoke-test the Kani shell
+        run: |
+          KANI_TEST_HOME="$(mktemp -d)"
+          nix develop .#kani --ignore-environment \
+            --command env HOME="$KANI_TEST_HOME" bash -c '
+              cargo kani --version &&
+              kani nix/tests/kani-smoke.rs --output-format terse
+            '
+      - name: Run the Kani proofs
+        run: |
+          KANI_TEST_HOME="$(mktemp -d)"
+          nix develop .#kani --ignore-environment \
+            --command env HOME="$KANI_TEST_HOME" bash -c '
+              timeout --signal=TERM --kill-after=10s 600s \
+                bash nix/tests/verify-kani-proofs.sh
+            '

@@ -28,11 +28,17 @@
       overlays.default = nixpkgs.lib.composeExtensions (import rust-overlay)
         (import ./nix/overlay.nix);
 
-      devShells = forAllSystems
-        (pkgs: { default = pkgs.callPackage ./nix/devshell.nix { }; });
+      devShells = forAllSystems (pkgs: {
+        default = pkgs.callPackage ./nix/devshell.nix { };
+        kani = pkgs.callPackage ./nix/devshell.nix {
+          extraPackages = [ pkgs.asterinas-kani ];
+        };
+      });
 
       packages = forAllSystems (pkgs:
-        nixpkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        {
+          kani = pkgs.asterinas-kani;
+        } // nixpkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           qemu = pkgs.asterinas-qemu;
           grub = pkgs.asterinas-grub;
           ovmf = pkgs.asterinas-ovmf;

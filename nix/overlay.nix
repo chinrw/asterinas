@@ -3,7 +3,12 @@
 # Asterinas build and toolchain packages layered on nixpkgs.
 final: prev:
 
-let inherit (prev) lib stdenv;
+let
+  inherit (prev) lib stdenv;
+  kaniRustToolchain = final.rust-bin.fromRustupToolchain {
+    channel = "nightly-2025-11-21";
+    profile = "minimal";
+  };
 in {
   # Rust nightly from rust-toolchain.toml, including components and targets.
   # The shell also carries rust-analyzer from the same nightly; the toml
@@ -22,6 +27,11 @@ in {
     rev = "74898350d406d6cd8988531ad737380a8e2cdbf4";
     hash = "sha256-Zimwr72fbR694fO7sdYrMK4SDp4w03UHW/QtmJyiP+Q=";
   };
+
+  # Kani releases are coupled to their Rust nightly. Keep that toolchain
+  # separate from the newer nightly used to build Asterinas.
+  asterinas-kani =
+    final.callPackage ./packages/kani.nix { inherit kaniRustToolchain; };
 
   # OVMF is built through pkgsCross.gnu64, so the edk2 pin must live at the
   # top level and propagate into that package set.

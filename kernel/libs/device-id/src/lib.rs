@@ -12,7 +12,11 @@
 #![no_std]
 #![deny(unsafe_code)]
 
+mod encoding;
+
 use aster_util::ranged_integer::{RangedU16, RangedU32};
+
+pub use self::encoding::{decode_device_numbers, encode_device_numbers};
 
 /// A device ID, embedding the major ID and minor ID.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -64,8 +68,8 @@ impl DeviceId {
     ///
     /// Returns `None` if the major or minor device number is not falling in the valid range.
     pub fn from_encoded_u64(raw: u64) -> Option<Self> {
-        let (major, minor) = decode_device_numbers(raw);
-        let major = MajorId::try_from(major as u16).ok()?;
+        let (major, minor) = encoding::decode_valid_device_numbers(raw)?;
+        let major = MajorId::try_from(major).ok()?;
         let minor = MinorId::try_from(minor).ok()?;
         Some(Self::new(major, minor))
     }
@@ -76,38 +80,9 @@ impl DeviceId {
     }
 }
 
-/// Decodes the major and minor numbers from the encoded `u64` value.
-///
-/// See [`DeviceId::as_encoded_u64`] for details about how to encode a device ID to a `u64` value.
-pub fn decode_device_numbers(raw: u64) -> (u32, u32) {
-    let major = ((raw >> 32) & 0xffff_f000 | (raw >> 8) & 0x0000_0fff) as u32;
-    let minor = ((raw >> 12) & 0xffff_ff00 | raw & 0x0000_00ff) as u32;
-    (major, minor)
-}
+const MAX_MAJOR_ID: u16 = encoding::MAX_MAJOR_NUMBER;
 
-/// Encodes the major and minor numbers as a `u64` value.
-///
-/// The lower 32 bits use the same encoding strategy as Linux. See the Linux implementation at:
-/// <https://github.com/torvalds/linux/blob/0ff41df1cb268fc69e703a08a57ee14ae967d0ca/include/linux/kdev_t.h#L39-L44>.
-///
-/// If the major or minor device number is too large, the additional bits will be recorded
-/// using the higher 32 bits. Note that as of 2025, the Linux kernel still has no support for
-/// 64-bit device IDs:
-/// <https://github.com/torvalds/linux/blob/0ff41df1cb268fc69e703a08a57ee14ae967d0ca/include/linux/types.h#L18>.
-/// So this encoding follows the implementation in glibc:
-/// <https://github.com/bminor/glibc/blob/632d895f3e5d98162f77b9c3c1da4ec19968b671/bits/sysmacros.h#L26-L34>.
-pub fn encode_device_numbers(major: u32, minor: u32) -> u64 {
-    let major = major as u64;
-    let minor = minor as u64;
-    ((major & 0xffff_f000) << 32)
-        | ((major & 0x0000_0fff) << 8)
-        | ((minor & 0xffff_ff00) << 12)
-        | (minor & 0x0000_00ff)
-}
-
-const MAX_MAJOR_ID: u16 = 0x0fff;
-
-const MAX_MINOR_ID: u32 = 0x000f_ffff;
+const MAX_MINOR_ID: u32 = encoding::MAX_MINOR_NUMBER;
 
 /// The major component of a device ID.
 ///

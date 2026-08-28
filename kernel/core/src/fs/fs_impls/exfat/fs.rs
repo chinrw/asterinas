@@ -269,7 +269,9 @@ impl ExfatFs {
             return_errno_with_message!(Errno::EINVAL, "bogus sector size bits");
         }
 
-        if boot_sector.sector_per_cluster_bits + boot_sector.sector_size_bits > 25 {
+        // Widen before adding: both fields come from the image, and
+        // `sector_per_cluster_bits` alone can reach 255.
+        if boot_sector.sector_per_cluster_bits as u32 + boot_sector.sector_size_bits as u32 > 25 {
             return_errno_with_message!(Errno::EINVAL, "bogus sector size bits per cluster");
         }
 
