@@ -73,6 +73,14 @@ if [[ -z "$DISK" ]]; then
     exit 1
 fi
 
+# Exclusive BSD lock on the whole disk across partitioning, formatting and the
+# initial mounts. Closing the disk node after a write makes the host's udevd
+# re-read the partition table, briefly removing every partition device; udevd
+# takes this same lock first and skips the re-read while we hold it (systemd
+# docs/BLOCK_DEVICE_LOCKING.md). Read-only fd: releasing it emits no close-write.
+exec 9<"${DISK}"
+flock -x 9
+
 # Confirm dangerous operation if --force-format-disk is used
 if [[ "$FORCE_FORMAT_DISK" == true ]]; then
     echo "WARNING: You are about to FORMAT the disk: $DISK"
@@ -89,43 +97,40 @@ else
     BOOT_DEVICE="${DISK}1"
     ROOT_DEVICE="${DISK}2"
 fi
-if [ ! -b "${BOOT_DEVICE}" ] && [ ! -b "${ROOT_DEVICE}" ]; then
+
+# Under the lock a partition device cannot vanish again, so one successful
+# open of each is proof of readiness. The bound only catches a partition that
+# never appears (bad table, unsupported disk).
+wait_for_partitions() {
+    attempt=0
+    while [ "$attempt" -lt 500 ]; do
+        if blockdev --getsize64 "${BOOT_DEVICE}" >/dev/null 2>&1 &&
+            blockdev --getsize64 "${ROOT_DEVICE}" >/dev/null 2>&1; then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 0.01
+    done
+    echo "timed out waiting for ${BOOT_DEVICE} and ${ROOT_DEVICE}" >&2
+    return 1
+}
+
+# Decide from the partition table, not from /dev nodes: a node can be missing
+# for a moment while udevd re-reads a table that is already there.
+if [ -z "$(blkid -p -o value -s PTTYPE "${DISK}" 2>/dev/null)" ]; then
     parted ${DISK} -- mklabel gpt
     parted ${DISK} -- mkpart ESP fat32 1MB 512MB
     parted ${DISK} -- mkpart root ext2 512MB 100%
     parted ${DISK} -- set 1 esp on
     echo "partition finished"
 
-    # parted returning does not prove the partition nodes are usable: the
-    # kernel publishes them asynchronously and udev can replace a node after
-    # it first appears. Wait until both stay openable for a stable window,
-    # or mkfs may hit ENOENT/ENXIO on a node that is about to be replaced.
-    partprobe "${DISK}" >/dev/null 2>&1 || true
-    attempt=0
-    readiness_streak=0
-    while [ "$attempt" -lt 500 ]; do
-        if blockdev --getsize64 "${BOOT_DEVICE}" >/dev/null 2>&1 &&
-            blockdev --getsize64 "${ROOT_DEVICE}" >/dev/null 2>&1; then
-            readiness_streak=$((readiness_streak + 1))
-            if [ "$readiness_streak" -ge 5 ]; then
-                break
-            fi
-        else
-            readiness_streak=0
-        fi
-        attempt=$((attempt + 1))
-        sleep 0.01
-    done
-    if [ "$readiness_streak" -lt 5 ]; then
-        echo "timed out waiting for ${BOOT_DEVICE} and ${ROOT_DEVICE}" >&2
-        exit 1
-    fi
-
+    wait_for_partitions
     mkfs.fat -F 32 -n boot "${BOOT_DEVICE}"
     mkfs.ext2 -L nixos "${ROOT_DEVICE}"
     echo "mkfs finished"
 else
-    echo "Partitions ${BOOT_DEVICE} and ${ROOT_DEVICE} already exist — skipping partitioning and mkfs"
+    echo "${DISK} is already partitioned — skipping partitioning and mkfs"
+    wait_for_partitions
 fi
 
 if findmnt -M ${BUILD_DIR}/boot >/dev/null; then
@@ -143,6 +148,10 @@ mkdir -p ${BUILD_DIR}/tmp
 chmod 1777 ${BUILD_DIR}/tmp
 mkdir -p ${BUILD_DIR}/etc/nixos
 mount -o umask=077,sync,dirsync "${BOOT_DEVICE}" ${BUILD_DIR}/boot
+
+# Mounted partitions cannot be re-read (BLKRRPART returns EBUSY), so the lock
+# has done its job. Release it before the long nixos-install run.
+exec 9<&-
 
 echo "${BUILD_DIR} is mounted successfully!"
 
