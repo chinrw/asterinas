@@ -73,6 +73,14 @@ if [[ -z "$DISK" ]]; then
     exit 1
 fi
 
+# Exclusive BSD lock on the whole disk across partitioning, formatting and the
+# initial mounts. Closing the disk node after a write makes the host's udevd
+# re-read the partition table, briefly removing every partition device; udevd
+# takes this same lock first and skips the re-read while we hold it (systemd
+# docs/BLOCK_DEVICE_LOCKING.md). Read-only fd: releasing it emits no close-write.
+exec 9<"${DISK}"
+flock -x 9
+
 # Confirm dangerous operation if --force-format-disk is used
 if [[ "$FORCE_FORMAT_DISK" == true ]]; then
     echo "WARNING: You are about to FORMAT the disk: $DISK"
@@ -89,19 +97,47 @@ else
     BOOT_DEVICE="${DISK}1"
     ROOT_DEVICE="${DISK}2"
 fi
-if [ ! -b "${BOOT_DEVICE}" ] && [ ! -b "${ROOT_DEVICE}" ]; then
+
+# Under the lock the partition nodes are stable, so the disk can be inspected
+# directly. Only a blank disk is provisioned and only the layout this installer
+# creates is reused; anything else needs --force-format-disk.
+disk_probe=$(blkid -p -o export "${DISK}" 2>/dev/null) && probe_rc=0 || probe_rc=$?
+if [ "$probe_rc" -ne 0 ] && [ "$probe_rc" -ne 2 ]; then
+    echo "cannot probe ${DISK} (blkid exit status ${probe_rc})" >&2
+    exit 1
+fi
+case "$disk_probe" in
+"")
     parted ${DISK} -- mklabel gpt
     parted ${DISK} -- mkpart ESP fat32 1MB 512MB
     parted ${DISK} -- mkpart root ext2 512MB 100%
     parted ${DISK} -- set 1 esp on
     echo "partition finished"
 
+    # parted adds partitions with BLKPG and devtmpfs creates the nodes before
+    # the ioctl returns; a missing node means that premise does not hold here.
+    if [ ! -b "${BOOT_DEVICE}" ] || [ ! -b "${ROOT_DEVICE}" ]; then
+        echo "parted completed but ${BOOT_DEVICE} or ${ROOT_DEVICE} was not created" >&2
+        exit 1
+    fi
+
     mkfs.fat -F 32 -n boot "${BOOT_DEVICE}"
     mkfs.ext2 -L nixos "${ROOT_DEVICE}"
     echo "mkfs finished"
-else
-    echo "Partitions ${BOOT_DEVICE} and ${ROOT_DEVICE} already exist — skipping partitioning and mkfs"
-fi
+    ;;
+*PTTYPE=gpt*)
+    if [ "$(blkid -p -o value -s TYPE "${BOOT_DEVICE}" 2>/dev/null)" != vfat ] ||
+        [ "$(blkid -p -o value -s LABEL "${ROOT_DEVICE}" 2>/dev/null)" != nixos ]; then
+        echo "${DISK} is partitioned but not with the AsterNixOS layout; use --force-format-disk to recreate it" >&2
+        exit 1
+    fi
+    echo "${DISK} is already partitioned with the AsterNixOS layout — skipping partitioning and mkfs"
+    ;;
+*)
+    echo "${DISK} carries data without a GPT; use --force-format-disk to overwrite it" >&2
+    exit 1
+    ;;
+esac
 
 if findmnt -M ${BUILD_DIR}/boot >/dev/null; then
 	umount -d ${BUILD_DIR}/boot
@@ -118,6 +154,10 @@ mkdir -p ${BUILD_DIR}/tmp
 chmod 1777 ${BUILD_DIR}/tmp
 mkdir -p ${BUILD_DIR}/etc/nixos
 mount -o umask=077,sync,dirsync "${BOOT_DEVICE}" ${BUILD_DIR}/boot
+
+# Mounted partitions cannot be re-read (BLKRRPART returns EBUSY), so the lock
+# has done its job. Release it before the long nixos-install run.
+exec 9<&-
 
 echo "${BUILD_DIR} is mounted successfully!"
 

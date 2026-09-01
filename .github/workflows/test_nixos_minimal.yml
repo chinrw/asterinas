@@ -38,6 +38,10 @@ jobs:
         with:
           image: asterinas/kernel-dev:0.18.1-20260805
           options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
+          # docker-run-action joins these lines with ';' and runs them via `sh -c`,
+          # which has no errexit: without `set -e` a failed image build would still
+          # boot QEMU and fail much later with a misleading login timeout.
           run: |
+            set -e
             make nixos NIXOS_TEST_SUITE=hello NIXOS_DISK_SIZE_IN_MB=6144
             make run_nixos NIXOS_TEST_SUITE=hello
