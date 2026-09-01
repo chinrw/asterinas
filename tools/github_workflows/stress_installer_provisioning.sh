@@ -121,7 +121,7 @@ for iteration in $(seq 1 "$STRESS_RUNS"); do
         "$INSTALLER" --config "$CONFIG_PATH" --disk "$stress_disk" 2>&1)
     status=$?
     if [ "$status" -ne "$MOUNT_SHIM_EXIT" ] ||
-        ! printf '%s' "$output" | grep -q "already partitioned" ||
+        ! printf '%s' "$output" | grep -qE "already (exist|partitioned)" ||
         printf '%s' "$output" | grep -q "mkfs finished"; then
         echo "iteration=$iteration disk=$stress_disk status=$status failure=reuse"
         printf '%s\n' "$output"
