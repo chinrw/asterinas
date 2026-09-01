@@ -115,6 +115,20 @@ for iteration in $(seq 1 "$STRESS_RUNS"); do
         break
     fi
 
+    # Reuse pass: the disk now carries a partition table, so the installer must
+    # take the "already partitioned" path under the lock and still reach mount.
+    output=$(PATH="$stress_tmp/shim:$PATH" \
+        "$INSTALLER" --config "$CONFIG_PATH" --disk "$stress_disk" 2>&1)
+    status=$?
+    if [ "$status" -ne "$MOUNT_SHIM_EXIT" ] ||
+        ! printf '%s' "$output" | grep -q "already partitioned" ||
+        printf '%s' "$output" | grep -q "mkfs finished"; then
+        echo "iteration=$iteration disk=$stress_disk status=$status failure=reuse"
+        printf '%s\n' "$output"
+        provisioning_failure=1
+        break
+    fi
+
     completed=$((completed + 1))
     if [ $((iteration % 50)) -eq 0 ]; then
         echo "progress completed=$completed"
