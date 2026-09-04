@@ -7,6 +7,8 @@ name: Test self-host build
 # as a pull-request gate.
 
 on:
+  push:
+    branches: [ci/selfhost-fork-run]
   workflow_dispatch:
   schedule:
     - cron: "0 2 * * 6"
@@ -19,11 +21,8 @@ env:
 
 jobs:
   selfhost-x86:
-    runs-on: self-hosted
+    runs-on: [self-hosted, asterinas-selfhost]
     timeout-minutes: 180
-    container:
-      image: asterinas/kernel-dev:0.18.1-20260901
-      options: -v /dev:/dev --privileged
     steps:
       - uses: actions/checkout@v4
       # The checkout is owned by another uid, which Nix's fetcher rejects.
