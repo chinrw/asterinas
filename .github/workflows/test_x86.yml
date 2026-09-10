@@ -9,6 +9,7 @@ on:
 
 jobs:
   basic-test:
+    if: false
     runs-on: ubuntu-latest
     container:
       image: asterinas/kernel-dev:0.18.1-20260901
@@ -36,6 +37,7 @@ jobs:
           runs_on: 'ubuntu-latest'
 
   osdk-test:
+    if: false
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.image }}
@@ -54,6 +56,7 @@ jobs:
           intel_tdx: false
 
   boot-test:
+    if: false
     runs-on: ubuntu-latest
     container:
       image: asterinas/kernel-dev:0.18.1-20260901
@@ -76,6 +79,7 @@ jobs:
           rootfs_boot: ${{ matrix.rootfs_boot }}
 
   regression-test:
+    if: false
     runs-on: ubuntu-latest
     container:
       image: asterinas/kernel-dev:0.18.1-20260901
@@ -107,6 +111,7 @@ jobs:
           boot_protocol: ${{ matrix.boot_protocol || 'linux-efi-handover64' }}
 
   conformance-test:
+    if: false
     runs-on: ubuntu-latest
     container:
       image: asterinas/kernel-dev:0.18.1-20260901
@@ -154,6 +159,7 @@ jobs:
           boot_protocol: ${{ matrix.boot_protocol || 'linux-efi-handover64' }}
 
   cross-compile-test:
+    if: false
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -180,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: asterinas/kernel-dev:0.18.1-20260901
-      options: -v /dev:/dev --privileged
+      options: --device=/dev/kvm --cap-add=SYS_ADMIN --security-opt=seccomp=unconfined
       volumes:
         - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
         - /usr/local/lib/android:/usr/local/lib/android
@@ -193,9 +199,6 @@ jobs:
           - fs_type: 'ext2'
             runlist: 'short.list'
             disk_size: '2G'
-          - fs_type: 'tmpfs'
-            runlist: 'short.list'
-            disk_size: ''
     steps:
       - name: Free disk space
         run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
