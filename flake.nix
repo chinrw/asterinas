@@ -2,6 +2,20 @@
 {
   description = "Asterinas development environment";
 
+  # Keep this list in sync with the Cachix settings in Makefile, which use the
+  # same two caches for the AsterNixOS builds. Only the development cache holds
+  # the packages this flake builds.
+  nixConfig = {
+    extra-substituters = [
+      "https://aster-nixos-release.cachix.org"
+      "https://aster-nixos-dev.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "aster-nixos-release.cachix.org-1:xB6U/f5ck5vGDJZ04kPp3zGpZ4Nro9X4+TSSMAETVFE="
+      "aster-nixos-dev.cachix.org-1:xrCbE2flfliFTQCY/2HeJoT2tCO+5kMTZeLIUH9lnIA="
+    ];
+  };
+
   inputs = {
     # Keep Nix-based builds on the nixpkgs revision the rest of the repository
     # pins: tools/dev_env/docker/prebuilt-nix-packages/Dockerfile and

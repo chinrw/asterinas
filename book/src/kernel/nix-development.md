@@ -35,10 +35,17 @@ then enter the development shell from the root of the checkout:
 nix develop
 ```
 
-The first run downloads the dependencies
-and builds the packages that no public binary cache provides,
-such as QEMU and the firmware.
-This can take a long time.
+The flake declares the project's binary cache on Cachix,
+which serves the packages that no public cache provides,
+such as the patched QEMU, the firmware, and the Rust toolchain.
+The first run asks whether to accept that cache and whether to remember the answer.
+Pass `--accept-flake-config` to skip the questions.
+On a multi-user Nix installation,
+only a user listed in `trusted-users` in the system `nix.conf` can add a cache from a flake.
+For other users Nix prints a warning and builds the packages locally, which can take a long time.
+In that case, copy the `nixConfig` values from `flake.nix`
+into `substituters` and `trusted-public-keys` in the system `nix.conf`,
+or add your user to `trusted-users`.
 
 Inside the shell, the Make targets work as they do in the Docker container.
 Build and run Asterinas with the same commands as in [Getting Started](../kernel/#getting-started),

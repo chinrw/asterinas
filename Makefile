@@ -116,6 +116,7 @@ AUTO_INSTALL ?= true
 # End of ISO installer settings
 
 # Cachix binary cache settings
+# Keep the substituters and keys in sync with nixConfig in flake.nix.
 CACHIX_AUTH_TOKEN ?=
 RELEASE_CACHIX_NAME ?= "aster-nixos-release"
 RELEASE_SUBSTITUTER ?= https://aster-nixos-release.cachix.org

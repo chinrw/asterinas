@@ -77,11 +77,15 @@ When you change a package definition, build the boot-stack packages:
 nix build .#qemu .#grub .#ovmf
 ```
 
-Then reproduce the CI checks, which run the shell with a stripped-down host environment:
+Then reproduce the CI checks, which run the shell with a stripped-down host environment.
+CI passes `--accept-flake-config` because a non-interactive `nix develop`
+otherwise ignores the Cachix settings in `flake.nix` with a warning:
 
 ```bash
-nix develop --ignore-environment --keep HOME --command make check
-nix develop --ignore-environment --keep HOME --command make run_kernel AUTO_TEST=boot
+nix develop --accept-flake-config --ignore-environment --keep HOME \
+  --command make check
+nix develop --accept-flake-config --ignore-environment --keep HOME \
+  --command make run_kernel AUTO_TEST=boot
 ```
 
 CI runs the two commands above on an ARM64 runner as well,
