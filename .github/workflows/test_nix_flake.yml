@@ -64,4 +64,5 @@ jobs:
       - name: Build and boot Asterinas
         run: |
           nix develop --ignore-environment --keep HOME \
+            --keep NIX_USER_CONF_FILES \
             --command make run_kernel AUTO_TEST=boot
