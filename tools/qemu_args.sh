@@ -24,10 +24,15 @@
 #  - XFSTESTS_NEEDS_BLOCK_DEVICES: "true" or "false", whether to attach
 #    xfstests images (xfstests_test.img and xfstests_scratch.img) to the VM.
 
+# Quote a value for consumers that split the emitted string into shell words
+# (OSDK's shlex crate, tools/nixos/run.sh). shlex.quote leaves safe values
+# untouched and never emits $'...', which those parsers do not understand.
+shell_quote() { python3 -c 'import shlex, sys; print(shlex.quote(sys.argv[1]))' "$1"; }
+
 OVMF=${OVMF:-"on"}
 # Directory holding OVMF.fd, OVMF_VARS.fd and microvm/MICROVM.fd. Defaults to the
 # Docker image's path; the Nix dev shell exports this to the Nix store instead.
-OVMF_DIR=${OVMF_DIR:-/root/ovmf/release}
+OVMF_DIR=$(shell_quote "${OVMF_DIR:-/root/ovmf/release}")
 VHOST=${VHOST:-"off"}
 VSOCK=${VSOCK:-"off"}
 VIRTIOFS=${VIRTIOFS:-"off"}
@@ -40,8 +45,8 @@ if [ "$XFSTESTS_NEEDS_BLOCK_DEVICES" != "true" ] && \
     echo "Invalid XFSTESTS_NEEDS_BLOCK_DEVICES=${XFSTESTS_NEEDS_BLOCK_DEVICES}" 1>&2
     exit 1
 fi
-VIRTIOFS_TAG=${VIRTIOFS_TAG:-"aster-virtiofs"}
-VIRTIOFS_SOCKET=${VIRTIOFS_SOCKET:-"/tmp/vhostqemu/vfs.sock"}
+VIRTIOFS_TAG=$(shell_quote "${VIRTIOFS_TAG:-aster-virtiofs}")
+VIRTIOFS_SOCKET=$(shell_quote "${VIRTIOFS_SOCKET:-/tmp/vhostqemu/vfs.sock}")
 
 # Draw all host ports from a single `shuf` invocation,
 # so that none of them will conflict with others.
@@ -61,7 +66,7 @@ if [ "$NETDEV" = "user" ]; then
     echo "[$1] Forwarded QEMU guest port: $SSH_RAND_PORT->22; $NGINX_RAND_PORT->8080 $REDIS_RAND_PORT->6379 $IPERF_RAND_PORT->5201 $LMBENCH_TCP_LAT_RAND_PORT->31234 $LMBENCH_TCP_BW_RAND_PORT->31236 $MEMCACHED_RAND_PORT->11211" 1>&2
     NETDEV_ARGS="-netdev user,id=net01,hostfwd=tcp::$SSH_RAND_PORT-:22,hostfwd=tcp::$NGINX_RAND_PORT-:8080,hostfwd=tcp::$REDIS_RAND_PORT-:6379,hostfwd=tcp::$IPERF_RAND_PORT-:5201,hostfwd=tcp::$LMBENCH_TCP_LAT_RAND_PORT-:31234,hostfwd=tcp::$LMBENCH_TCP_BW_RAND_PORT-:31236,hostfwd=tcp::$MEMCACHED_RAND_PORT-:11211"
 elif [ "$NETDEV" = "tap" ]; then
-    THIS_SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+    THIS_SCRIPT_DIR=$(shell_quote "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )")
     QEMU_IFUP_SCRIPT_PATH=$THIS_SCRIPT_DIR/net/qemu-ifup.sh
     QEMU_IFDOWN_SCRIPT_PATH=$THIS_SCRIPT_DIR/net/qemu-ifdown.sh
     NETDEV_ARGS="-netdev tap,id=net01,script=$QEMU_IFUP_SCRIPT_PATH,downscript=$QEMU_IFDOWN_SCRIPT_PATH,vhost=$VHOST"
@@ -117,7 +122,7 @@ if [ "$1" = "riscv" ]; then
         -device virtio-serial-device \
         $CONSOLE_ARGS \
     "
-    echo $QEMU_ARGS
+    printf '%s\n' "$QEMU_ARGS"
     exit 0
 fi
 
@@ -142,7 +147,7 @@ if [ "$1" = "aarch64" ]; then
         -device virtio-serial-device \
         $CONSOLE_ARGS \
     "
-    echo $QEMU_ARGS
+    printf '%s\n' "$QEMU_ARGS"
     exit 0
 fi
 
@@ -182,7 +187,7 @@ if [ "$1" = "tdx" ]; then
         -monitor chardev:mux \
         -d guest_errors \
     "
-    echo $QEMU_ARGS
+    printf '%s\n' "$QEMU_ARGS"
     exit 0
 fi
 
@@ -335,4 +340,4 @@ if [ "$OVMF" = "on" ]; then
     fi
 fi
 
-echo $QEMU_ARGS
+printf '%s\n' "$QEMU_ARGS"

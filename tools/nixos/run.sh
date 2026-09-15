@@ -30,24 +30,25 @@ if [ "${TARGET_ARCH}" != "x86_64" ]; then
 fi
 
 # Change to Asterinas root directory to ensure all scripts run from the correct location.
+# Image paths below are relative to it, so they need no shell quoting.
 cd "${ASTERINAS_DIR}"
 
 # Get base QEMU arguments from qemu_args.sh script
-QEMU_ARGS=$(${ASTERINAS_DIR}/tools/qemu_args.sh common 2>/dev/null)
+QEMU_ARGS=$("${ASTERINAS_DIR}/tools/qemu_args.sh" common 2>/dev/null)
 
 # Add mode-specific disk and device arguments
 case "$MODE" in
     nixos)
-        NIXOS_DIR="${ASTERINAS_DIR}/target/nixos"
+        NIXOS_DIR=target/nixos
         QEMU_ARGS="${QEMU_ARGS} \
             -drive if=none,format=raw,id=u0,file=${NIXOS_DIR}/asterinas.img \
             -device virtio-blk-pci,drive=u0,disable-legacy=on,disable-modern=off \
         "
         ;;
     iso)
-        ASTER_IMAGE_PATH=${ASTERINAS_DIR}/target/nixos/asterinas.img
+        ASTER_IMAGE_PATH=target/nixos/asterinas.img
         NIXOS_DISK_SIZE_IN_MB=${NIXOS_DISK_SIZE_IN_MB:-16384}
-        ISO_IMAGE_PATH=$(find "${ASTERINAS_DIR}/target/nixos/iso_image/iso" -name "*.iso" | head -n 1)
+        ISO_IMAGE_PATH=$(find target/nixos/iso_image/iso -name "*.iso" | head -n 1)
 
         if [ ! -f "$ISO_IMAGE_PATH" ]; then
             echo "Error: ISO_IMAGE not found!"
@@ -83,9 +84,10 @@ KERNEL_SUCCESS_EXIT_CODE=16 # 0x10 in hexadecimal
 # process exit code using following formula.
 QEMU_SUCCESS_EXIT_CODE=$(((KERNEL_SUCCESS_EXIT_CODE << 1) | 1))
 
-# Execute QEMU
-# shellcheck disable=SC2086
-${QEMU_BIN} ${QEMU_ARGS} || exit_code=$?
+# Execute QEMU. qemu_args.sh may emit shell-quoted words, so split them the
+# way OSDK does (shlex) instead of expanding $QEMU_ARGS, which keeps the quotes.
+python3 -c 'import os, shlex, sys; os.execvp(sys.argv[1], sys.argv[1:2] + shlex.split(sys.argv[2]))' \
+    "$QEMU_BIN" "$QEMU_ARGS" || exit_code=$?
 exit_code=${exit_code:-0}
 
 # Check if the execution was successful:
