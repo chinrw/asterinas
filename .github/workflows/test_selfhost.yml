@@ -1,0 +1,48 @@
+name: Test self-host build
+
+on:
+  push:
+    branches: [ci/selfhost-rebase-e0f972c7d]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NIX_CONFIG: "experimental-features = nix-command flakes"
+  SELFHOST_REF: e0f972c7de70f2345773d87715bb18cc18643cef
+  QEMU_DISPLAY: none
+  SSH_PORT: "20022"
+  NGINX_PORT: "20023"
+  REDIS_PORT: "20024"
+  IPERF_PORT: "20025"
+  LMBENCH_TCP_LAT_PORT: "20026"
+  LMBENCH_TCP_BW_PORT: "20027"
+  MEMCACHED_PORT: "20028"
+
+jobs:
+  selfhost-x86:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: [self-hosted, asterinas-selfhost]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify the tested revision
+        run: |
+          test "$(git rev-parse HEAD^)" = "$SELFHOST_REF"
+          git diff --exit-code "$SELFHOST_REF" HEAD -- . ':!.github/workflows/test_selfhost.yml' ':!tools/nixos/selfhost_chain.sh'
+      - name: Build the installer ISO
+        run: nix develop --command make iso TARGET_ARCH=x86_64
+      - name: Install the AsterNixOS disk
+        run: nix develop --command make run_iso TARGET_ARCH=x86_64 NIXOS_DISK_SIZE_IN_MB=65536
+      - name: Build Asterinas inside Asterinas and boot it (L1 -> L2)
+        run: nix develop --command bash ./tools/nixos/selfhost_chain.sh
+      - name: Upload the L1 console log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: l1-console-log
+          path: target/selfhost-chain/l1-console.log
+          if-no-files-found: ignore
