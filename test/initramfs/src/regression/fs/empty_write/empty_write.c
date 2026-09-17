@@ -11,6 +11,7 @@
 
 static char path[PATH_MAX];
 static int fd;
+static int io_fd;
 
 static int same_time(struct timespec a, struct timespec b)
 {
@@ -26,6 +27,15 @@ FN_SETUP(create_file)
 	CHECK_WITH(snprintf(path, sizeof(path), "%s/empty-write-XXXXXX", dir),
 		   _ret > 0 && (size_t)_ret < sizeof(path));
 	fd = CHECK(mkstemp(path));
+	/*
+	 * A second descriptor on the same file: the descriptor under test may
+	 * carry `O_DIRECT`, which would reject the unaligned 2-byte setup write
+	 * below, so `fd` stays buffered for the setup and the metadata calls.
+	 */
+	int direct = getenv("TEST_DIRECT") != NULL;
+	io_fd = CHECK(open(path, O_RDWR | (direct ? O_DIRECT : 0)));
+	fprintf(stderr, "fixture=%s mode=%s\n", dir,
+		direct ? "direct" : "buffered");
 }
 END_SETUP()
 
@@ -47,21 +57,24 @@ FN_TEST(empty_writes_preserve_metadata_and_position)
 			struct stat before, after;
 			CHECK(fstat(fd, &before));
 			off_t position = positional ? 1 : offsets[i];
-			CHECK_WITH(lseek(fd, position, SEEK_SET),
+			CHECK_WITH(lseek(io_fd, position, SEEK_SET),
 				   _ret == position);
 
 			errno = 0;
 			ssize_t written =
-				positional ? pwrite(fd, "", 0, offsets[i]) :
-					     write(fd, "", 0);
+				positional ? pwrite(io_fd, "", 0, offsets[i]) :
+					     write(io_fd, "", 0);
 			int write_errno = errno;
 			CHECK(fstat(fd, &after));
-			off_t after_position = CHECK(lseek(fd, 0, SEEK_CUR));
+			off_t after_position = CHECK(lseek(io_fd, 0, SEEK_CUR));
 			fprintf(stderr,
 				"result=%zd expected=0; errno=%d expected=0; size=%lld expected=%lld; position=%lld expected=%lld\n",
 				written, write_errno, (long long)after.st_size,
 				(long long)before.st_size,
 				(long long)after_position, (long long)position);
+			fprintf(stderr, "blocks=%lld expected=%lld\n",
+				(long long)after.st_blocks,
+				(long long)before.st_blocks);
 			fprintf(stderr,
 				"mtime=%lld.%09ld expected=%lld.%09ld; ctime=%lld.%09ld expected=%lld.%09ld\n",
 				(long long)after.st_mtim.tv_sec,
@@ -75,6 +88,7 @@ FN_TEST(empty_writes_preserve_metadata_and_position)
 			TEST_RES(written, _ret == 0);
 			TEST_RES(write_errno, _ret == 0);
 			TEST_RES(after.st_size, _ret == before.st_size);
+			TEST_RES(after.st_blocks, _ret == before.st_blocks);
 			TEST_RES(same_time(before.st_mtim, after.st_mtim),
 				 _ret);
 			TEST_RES(same_time(before.st_ctim, after.st_ctim),
@@ -87,6 +101,7 @@ END_TEST()
 
 FN_SETUP(cleanup)
 {
+	CHECK(close(io_fd));
 	CHECK(close(fd));
 	CHECK(unlink(path));
 }

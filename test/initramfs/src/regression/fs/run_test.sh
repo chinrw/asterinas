@@ -114,6 +114,10 @@ test_mount_bind_file
 echo "All mount bind file test passed."
 
 ./empty_write/empty_write
+TEST_TMPDIR=/exfat ./empty_write/empty_write
+TEST_TMPDIR=/exfat TEST_DIRECT=1 ./empty_write/empty_write
+TEST_TMPDIR=/ext2 ./empty_write/empty_write
+TEST_TMPDIR=/ext2 TEST_DIRECT=1 ./empty_write/empty_write
 
 ./getcwd/getcwd
 
