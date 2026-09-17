@@ -1033,8 +1033,13 @@ impl FileOps for RamInode {
                 let mut page_cache = self.inner.as_file().unwrap().lock();
 
                 let mut inode_meta = self.metadata.lock();
-                let file_size = inode_meta.size;
                 let write_len = reader.remain();
+                // A zero-length write must return before the size, block
+                // and timestamp updates below, none of which it may do.
+                if write_len == 0 {
+                    return Ok(0);
+                }
+                let file_size = inode_meta.size;
                 let new_size = offset + write_len;
                 let should_expand_size = new_size > file_size;
                 let new_size_aligned = new_size.align_up(BLOCK_SIZE);
