@@ -347,6 +347,9 @@ pub(crate) trait FileOps {
     ) -> Result<usize>;
 
     /// Writes data from the given `VmReader` into the file.
+    ///
+    /// Implementations must return `Ok(0)` for a zero-length write, without
+    /// updating the file size, the timestamps, or the allocated blocks.
     fn write_at(
         &self,
         offset: usize,
