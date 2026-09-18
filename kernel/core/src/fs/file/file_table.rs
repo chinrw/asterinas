@@ -5,6 +5,7 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
+use aster_fd_protocol::FdSlot;
 use aster_util::{ranged_integer::RangedU32, slot_vec::SlotVec};
 use ostd::sync::RwArc;
 
@@ -36,6 +37,15 @@ pub(crate) struct FileDesc(RangedU32<0, { i32::MAX as _ }>);
 /// It may hold negative sentinel values like `AT_FDCWD` (-100).
 /// Convert to [`FileDesc`] via `TryFrom` before use.
 pub(crate) type RawFileDesc = i32;
+
+/// An allocated descriptor number whose file is not visible yet.
+pub(crate) struct ReservedFileDesc(FileDesc);
+
+impl ReservedFileDesc {
+    pub(crate) fn file_desc(&self) -> FileDesc {
+        self.0
+    }
+}
 
 impl FileDesc {
     /// File descriptor 0.
@@ -103,7 +113,7 @@ impl TryFrom<RawFileDesc> for FileDesc {
 /// [`Self::fork_from`]). The file table's address is used as a [`RangeLockOwner`], so users should
 /// not try to move the file table to a different address.
 pub(crate) struct FileTable {
-    table: SlotVec<FileTableEntry>,
+    table: SlotVec<FdSlot<FileTableEntry>>,
 }
 
 impl FileTable {
@@ -116,9 +126,13 @@ impl FileTable {
 
     /// Creates a new file table containing clones of all entries in `parent`.
     pub(crate) fn fork_from(parent: &Self) -> RwArc<Self> {
-        RwArc::new(Self {
-            table: parent.table.clone(),
-        })
+        let mut table = SlotVec::with_capacity(parent.table.slots_len());
+        for (index, slot) in parent.table.idxes_and_items() {
+            if let Some(entry) = slot.installed() {
+                table.put_at(index, FdSlot::Installed(entry.clone()));
+            }
+        }
+        RwArc::new(Self { table })
     }
 
     /// Returns the range-lock owner of `file_table`.
@@ -160,7 +174,7 @@ impl FileTable {
         };
 
         let min_free_fd = get_min_free_fd();
-        self.table.put_at(min_free_fd, entry);
+        self.table.put_at(min_free_fd, FdSlot::Installed(entry));
         // Resource limits guarantee the table never exceeds `i32::MAX` entries.
         Ok((min_free_fd as RawFileDesc).try_into().unwrap())
     }
@@ -174,7 +188,7 @@ impl FileTable {
     ) -> Result<Option<ClosedFile>> {
         let entry = self.duplicate_entry(fd, flags)?;
         let closed_file = self.close_file(new_fd);
-        self.table.put_at(new_fd.into(), entry);
+        self.table.put_at(new_fd.into(), FdSlot::Installed(entry));
         Ok(closed_file)
     }
 
@@ -182,6 +196,7 @@ impl FileTable {
         let file = self
             .table
             .get(fd.into())
+            .and_then(FdSlot::installed)
             .map(|entry| entry.file.clone())
             .ok_or_else(|| Error::with_message(Errno::EBADF, "the FD does not exist"))?;
         Ok(FileTableEntry::new(file, flags))
@@ -190,11 +205,86 @@ impl FileTable {
     pub(crate) fn insert(&mut self, item: Arc<dyn FileLike>, flags: FdFlags) -> FileDesc {
         let entry = FileTableEntry::new(item, flags);
         // Resource limits guarantee the table never exceeds `i32::MAX` entries.
-        (self.table.put(entry) as RawFileDesc).try_into().unwrap()
+        (self.table.put(FdSlot::Installed(entry)) as RawFileDesc)
+            .try_into()
+            .unwrap()
+    }
+
+    /// Allocates a descriptor number that remains invisible until installed.
+    pub(crate) fn reserve(&mut self) -> ReservedFileDesc {
+        // Resource limits guarantee the table never exceeds `i32::MAX` entries.
+        let fd = (self.table.put(FdSlot::reserved()) as RawFileDesc)
+            .try_into()
+            .unwrap();
+        ReservedFileDesc(fd)
+    }
+
+    /// Installs a file into a reservation after all preceding fallible work succeeds.
+    pub(crate) fn install_reserved(
+        &mut self,
+        reservation: ReservedFileDesc,
+        item: Arc<dyn FileLike>,
+        flags: FdFlags,
+    ) -> Result<FileDesc> {
+        let fd = reservation.0;
+        let slot = self
+            .table
+            .get_mut(fd.into())
+            .filter(|slot| slot.is_reserved())
+            .ok_or_else(|| {
+                Error::with_message(Errno::EIO, "the FD reservation is no longer valid")
+            })?;
+        let entry = FileTableEntry::new(item, flags);
+        if slot.install(entry).is_err() {
+            return_errno_with_message!(Errno::EIO, "the FD reservation changed during install");
+        }
+        Ok(fd)
+    }
+
+    /// Installs two reservations as one file-table transition.
+    pub(crate) fn install_reserved_pair(
+        &mut self,
+        reservations: [ReservedFileDesc; 2],
+        items: [Arc<dyn FileLike>; 2],
+        flags: [FdFlags; 2],
+    ) -> Result<[FileDesc; 2]> {
+        let [first_reservation, second_reservation] = reservations;
+        let fds = [first_reservation.0, second_reservation.0];
+        if fds[0] == fds[1]
+            || fds.iter().any(|fd| {
+                !self
+                    .table
+                    .get((*fd).into())
+                    .is_some_and(FdSlot::is_reserved)
+            })
+        {
+            return_errno_with_message!(Errno::EIO, "the FD reservations are no longer valid");
+        }
+
+        let [first_item, second_item] = items;
+        let [first_flags, second_flags] = flags;
+        let Some(first_slot) = self.table.get_mut(fds[0].into()) else {
+            return_errno_with_message!(Errno::EIO, "the first FD reservation disappeared");
+        };
+        *first_slot = FdSlot::Installed(FileTableEntry::new(first_item, first_flags));
+        let Some(second_slot) = self.table.get_mut(fds[1].into()) else {
+            return_errno_with_message!(Errno::EIO, "the second FD reservation disappeared");
+        };
+        *second_slot = FdSlot::Installed(FileTableEntry::new(second_item, second_flags));
+        Ok(fds)
+    }
+
+    /// Releases an unpublished descriptor reservation.
+    pub(crate) fn cancel_reserved(&mut self, reservation: ReservedFileDesc) {
+        let fd = reservation.0;
+        if self.table.get(fd.into()).is_some_and(FdSlot::is_reserved) {
+            self.table.remove(fd.into());
+        }
     }
 
     pub(crate) fn close_file(&mut self, fd: FileDesc) -> Option<ClosedFile> {
-        let removed_entry = self.table.remove(fd.into())?;
+        self.table.get(fd.into()).and_then(FdSlot::installed)?;
+        let removed_entry = self.table.remove(fd.into())?.into_installed().ok()?;
         // POSIX record locks are process-associated and Linux drops them when any fd for the inode is
         // closed by that process, even if duplicated descriptors still exist.
         //
@@ -217,7 +307,8 @@ impl FileTable {
         let closed_fds: Vec<FileDesc> = self
             .table
             .idxes_and_items()
-            .filter_map(|(idx, entry)| {
+            .filter_map(|(idx, slot)| {
+                let entry = slot.installed()?;
                 if should_close(entry) {
                     // Resource limits guarantee the table never exceeds `i32::MAX` entries.
                     Some((idx as RawFileDesc).try_into().unwrap())
@@ -237,6 +328,7 @@ impl FileTable {
     pub(crate) fn get_file(&self, fd: FileDesc) -> Result<&Arc<dyn FileLike>> {
         self.table
             .get(fd.into())
+            .and_then(FdSlot::installed)
             .map(|entry| entry.file())
             .ok_or_else(|| Error::with_message(Errno::EBADF, "the FD does not exist"))
     }
@@ -244,20 +336,23 @@ impl FileTable {
     pub(crate) fn get_entry(&self, fd: FileDesc) -> Result<&FileTableEntry> {
         self.table
             .get(fd.into())
+            .and_then(FdSlot::installed)
             .ok_or_else(|| Error::with_message(Errno::EBADF, "the FD does not exist"))
     }
 
     pub(crate) fn get_entry_mut(&mut self, fd: FileDesc) -> Result<&mut FileTableEntry> {
         self.table
             .get_mut(fd.into())
+            .and_then(FdSlot::installed_mut)
             .ok_or_else(|| Error::with_message(Errno::EBADF, "the FD does not exist"))
     }
 
     pub(crate) fn fds_and_files(&self) -> impl Iterator<Item = (FileDesc, &'_ Arc<dyn FileLike>)> {
         // Resource limits guarantee the table never exceeds `i32::MAX` entries.
-        self.table
-            .idxes_and_items()
-            .map(|(idx, entry)| ((idx as RawFileDesc).try_into().unwrap(), entry.file()))
+        self.table.idxes_and_items().filter_map(|(idx, slot)| {
+            let entry = slot.installed()?;
+            Some(((idx as RawFileDesc).try_into().unwrap(), entry.file()))
+        })
     }
 }
 

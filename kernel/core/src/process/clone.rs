@@ -779,28 +779,30 @@ fn clone_pidfd(
 
     let pidfd_addr = pidfd_addr.unwrap();
 
-    let fd = {
-        let pid_file = PidFile::new(child.clone(), false);
+    let reservation = {
         let file_table = ctx.thread_local.borrow_file_table();
         let mut file_table_locked = file_table.unwrap().write();
-        file_table_locked.insert(Arc::new(pid_file), FdFlags::CLOEXEC)
+        file_table_locked.reserve()
     };
+    let raw_fd = RawFileDesc::from(reservation.file_desc());
 
     // Since `write_val` may sleep, we cannot hold the file table lock during its execution.
-    match ctx
-        .user_space()
-        .write_val(pidfd_addr, &RawFileDesc::from(fd))
-    {
-        Ok(()) => Ok(()),
+    match ctx.user_space().write_val(pidfd_addr, &raw_fd) {
+        Ok(()) => {
+            let pid_file = PidFile::new(child.clone(), false);
+            let file_table = ctx.thread_local.borrow_file_table();
+            let mut file_table_locked = file_table.unwrap().write();
+            file_table_locked.install_reserved(
+                reservation,
+                Arc::new(pid_file),
+                FdFlags::CLOEXEC,
+            )?;
+            Ok(())
+        }
         Err(err) => {
-            // FIXME: Introduce reserved FDs to ensure that the file is never visible to user space
-            // before `write_val` succeeds and cleanup closes the exact reserved FD below.
-            let closed_file = {
-                let file_table = ctx.thread_local.borrow_file_table();
-                let mut file_table_locked = file_table.unwrap().write();
-                file_table_locked.close_file(fd)
-            };
-            drop(closed_file);
+            let file_table = ctx.thread_local.borrow_file_table();
+            let mut file_table_locked = file_table.unwrap().write();
+            file_table_locked.cancel_reserved(reservation);
             Err(err.into())
         }
     }

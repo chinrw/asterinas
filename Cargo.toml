@@ -45,6 +45,7 @@ members = [
     "kernel/core/comps/time",
     "kernel/core/comps/virtio",
     "kernel/libs/aster-bigtcp",
+    "kernel/libs/aster-fd-protocol",
     "kernel/libs/aster-fuse",
     "kernel/libs/aster-rights",
     "kernel/libs/aster-rights-proc",
@@ -97,6 +98,7 @@ default-members = [
     "kernel/core/comps/time",
     "kernel/core/comps/virtio",
     "kernel/libs/aster-bigtcp",
+    "kernel/libs/aster-fd-protocol",
     "kernel/libs/aster-fuse",
     "kernel/libs/aster-util",
     "kernel/libs/device-id",
@@ -182,6 +184,7 @@ aster-virtio = { path = "kernel/core/comps/virtio" }
 
 # Crates under kernel/libs
 aster-bigtcp = { path = "kernel/libs/aster-bigtcp" }
+aster-fd-protocol = { path = "kernel/libs/aster-fd-protocol" }
 aster-fuse = { path = "kernel/libs/aster-fuse" }
 aster-rights = { path = "kernel/libs/aster-rights" }
 aster-rights-proc = { path = "kernel/libs/aster-rights-proc" }
