@@ -186,6 +186,9 @@ impl VirtioFsInode {
         flags: u32,
     ) -> Result<usize> {
         let write_len = reader.remain();
+        if write_len == 0 {
+            return Ok(0);
+        }
 
         let mut inner = self.inner.write();
         let offset = self.resolve_write_offset(write_offset);
