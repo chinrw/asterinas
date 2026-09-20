@@ -63,6 +63,9 @@ Tier definitions:
 
 ## Getting started
 
+To use a Nix development shell instead of a Docker container,
+see [Using Nix for Development](nix-development.md).
+
 Get yourself an x86-64 (or ARM64) Linux machine with Docker installed.
 Follow the three simple steps below to get Asterinas up and running.
 

@@ -3,7 +3,8 @@
 This directory contains the Docker and Nix configurations for Asterinas development.
 
 - [Docker](docker/README.md) documents the development images and how to build them.
-- [Nix](nix/README.md) documents the optional Linux development shell.
+- [Using Nix for Development](../../book/src/kernel/nix-development.md) explains how to use the optional Linux development shell.
+- [Maintaining the Nix Development Environment](nix/README.md) describes its implementation and dependency updates.
 
 The Docker images build on `asterinas/osdk-dev`,
 whose configuration remains in [osdk/tools/docker](../../osdk/tools/docker/README.md)

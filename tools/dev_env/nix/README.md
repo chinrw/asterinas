@@ -1,52 +1,82 @@
-# Nix Development Environment
+# Maintaining the Nix Development Environment
 
-The flake at the repository root provides a development shell
-as an alternative to the [Docker-based environment](../docker),
-whose images layer as `osdk-dev` -> `prebuilt-nix-packages` -> `kernel-dev` -> `dev`.
-The Rust toolchain comes from `rust-toolchain.toml`,
-the boot stack (QEMU, GRUB, OVMF) is pinned to what `osdk-dev` builds,
-and the nixpkgs commit to the one `prebuilt-nix-packages` pins.
-Lint and doc tools come from nixpkgs
-and may differ from the versions `osdk-dev` installs with `cargo install`.
-The `typos` version matches Docker through a separate nixpkgs input.
-CI runs `make check` in both the Nix dev shell and the `kernel-dev` image.
-klint is left to `osdk-dev`, since no build or check target invokes it.
+For setup and everyday commands, see [Using Nix for Development](../../../book/src/kernel/nix-development.md).
+This directory contains the package definitions and shell configuration maintained alongside the Docker development environments.
 
-On NixOS, enable envfs in the host configuration and rebuild the system before using the development shell.
-The build scripts use `/bin/bash`,
-which envfs resolves through the calling process's `PATH`.
+## File organization
 
-```nix
-services.envfs.enable = true;
+- The root [`flake.nix`](../../../flake.nix) declares inputs and exports Linux development shells and boot-stack packages.
+- [`overlay.nix`](overlay.nix) assembles the Rust toolchain, vDSO source, and project-specific packages.
+- [`devshell.nix`](devshell.nix) selects host tools and sets the shell environment.
+- [`packages/`](packages/) contains the QEMU, GRUB, and firmware definitions.
+
+The flake exports `x86_64-linux` and `aarch64-linux` shells.
+The vendored edk2 expression retains upstream platform conditionals;
+those conditionals do not add a supported Darwin shell.
+
+## Maintaining dependency versions
+
+The Rust toolchain is read from [`rust-toolchain.toml`](../../../rust-toolchain.toml).
+The shell adds `rust-analyzer` from that same nightly.
+Do not maintain a second Rust version in the Nix expressions.
+
+The QEMU, GRUB, and edk2 versions follow the [OSDK Dockerfile](../../../osdk/tools/docker/Dockerfile).
+The vDSO revision follows the [kernel development Dockerfile](../docker/kernel-dev/Dockerfile).
+Each package records its source revision or version and content hash.
+When updating a Docker dependency, update its Nix counterpart and verify the resulting package as well.
+
+The main nixpkgs revision is shared with [`distro/nixpkgs.nix`](../../../distro/nixpkgs.nix)
+and the [prebuilt Nix packages Dockerfile](../docker/prebuilt-nix-packages/Dockerfile).
+The flake workflow checks these pins for consistency.
+A separate nixpkgs input supplies the Docker-pinned `typos` version.
+Other Cargo-installed tools are taken from the main nixpkgs input and may differ from the Docker versions.
+The shell omits klint because no current build or check target invokes it.
+
+When changing flake inputs, update and commit `flake.lock` with the corresponding expressions.
+New local source files must be added to Git before a Git-backed `nix develop` can see them.
+See the [Nix flake reference](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-flake.html#types) for how local Git inputs are selected.
+
+## Shell environment
+
+The shell sets `VDSO_LIBRARY_DIR` and `OVMF_DIR` to Nix store paths unless the caller has already supplied values.
+It appends the Cargo binary directory to `PATH` so that Nix-provided tools precede rustup proxies,
+while locally installed commands such as `cargo-osdk` remain available.
+
+The root `.envrc` watches `rust-toolchain.toml` and this directory in addition to the flake inputs.
+Keep those watches aligned with the imported shell sources so that direnv reloads the environment after an edit.
+
+Test packages are defined under [`test/initramfs/nix`](../../../test/initramfs/nix).
+The shell provides Nix for the existing Make targets rather than duplicating those packages here.
+Binary-cache publication must include the test outputs that should be reusable;
+publishing only the development shell does not prebuild every test suite.
+
+## Validation
+
+From the repository root, check all exported systems without changing the lock file:
+
+```bash
+nix flake check --no-build --all-systems --no-update-lock-file
 ```
 
-With a flakes-enabled Nix, enter the dev shell from the repository root:
+Build the boot-stack packages when changing their definitions:
 
-- Linux (x86_64 and aarch64): `nix develop`: toolchain, QEMU, GRUB, OVMF;
-  covers `make kernel` / `make run_kernel`.
-  Projects scaffolded with `cargo osdk new` (and the OSDK test suite's TDX scheme) still expect the images' firmware paths,
-  and the gvisor conformance tests need the `kernel-dev` image's prebuilt test binaries
-  (point `GVISOR_PREBUILT_DIR` at a copy to run them elsewhere).
-
-The shell carries `rust-analyzer` from the same nightly as the toolchain.
-Start your editor from within the shell (`nix develop`, then e.g. `code .`)
-so it inherits the toolchain and `VDSO_LIBRARY_DIR`,
-which checking the kernel crate requires.
-
-Build a single dependency (Linux only): `nix build .#qemu` (also `.#grub`, `.#ovmf`).
-
-## Entering the shell automatically
-
-With [direnv](https://direnv.net/) installed,
-the shell loads on `cd` instead of an explicit `nix develop`.
-Approve the `.envrc` that ships with the repository once:
-
-```sh
-direnv allow
+```bash
+nix build .#qemu .#grub .#ovmf
 ```
 
-direnv binds that approval to the contents of `.envrc`,
-so a `git pull` that changes the file blocks it until you approve it again.
-`.envrc` also declares the dev shell sources as watched inputs:
-neither direnv's `use flake` nor nix-direnv's replacement looks beyond `flake.nix` and `flake.lock`,
-so without those declarations an edit under `tools/dev_env/nix/` leaves you in the previously cached shell.
+Check the shell and the x86-64 boot workflow with a reduced host environment:
+
+```bash
+nix develop --ignore-environment --keep HOME --command make check
+nix develop --ignore-environment --keep HOME --command make run_kernel AUTO_TEST=boot
+```
+
+Evaluation checks the aarch64 output but does not establish that it builds or boots on an ARM64 host.
+Record the architecture and commands used when reporting runtime validation.
+
+Use `make format` and `make check` for repository formatting.
+For a focused Nix check, pass explicit paths to the shared formatter:
+
+```bash
+./tools/nixfmt.sh --check -- flake.nix tools/dev_env/nix
+```
