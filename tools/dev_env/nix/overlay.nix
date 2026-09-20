@@ -3,36 +3,31 @@
 # Asterinas build and toolchain packages layered on nixpkgs.
 final: prev:
 
-let
-  inherit (prev) lib stdenv;
-in
 {
   # Rust nightly from rust-toolchain.toml, including components and targets.
   # The shell also carries rust-analyzer from the same nightly; the toml
   # stays the single source of truth and the rustup contract is unchanged.
   asterinas-rust-toolchain =
     let
-      toolchain = (builtins.fromTOML (builtins.readFile ../rust-toolchain.toml)).toolchain;
+      toolchain = (builtins.fromTOML (builtins.readFile ../../../rust-toolchain.toml)).toolchain;
     in
     final.rust-bin.fromRustupToolchain (
       toolchain // { components = toolchain.components ++ [ "rust-analyzer" ]; }
     );
 
   # Prebuilt Linux vDSO binaries embedded by the kernel build, pinned to the
-  # commit tools/docker/kernel-dev/Dockerfile clones.
+  # commit tools/dev_env/docker/kernel-dev/Dockerfile clones.
   asterinas-vdso = final.fetchFromGitHub {
     owner = "asterinas";
     repo = "linux_vdso";
-    rev = "74898350d406d6cd8988531ad737380a8e2cdbf4";
-    hash = "sha256-Zimwr72fbR694fO7sdYrMK4SDp4w03UHW/QtmJyiP+Q=";
+    rev = "8af571775a3d3a1df3e84fc9709b9d6b160c771a";
+    hash = "sha256-5WDgLjbzBNc27f/QRkHCE6Z5gUdhKw1VY1wzhWDp6HI=";
   };
 
   # OVMF is built through pkgsCross.gnu64, so the edk2 pin must live at the
   # top level and propagate into that package set.
   edk2 = final.callPackage ./packages/edk2.nix { };
-}
-# Boot-time tools are Linux-only; Darwin gets the build/lint shell.
-// lib.optionalAttrs stdenv.isLinux {
+
   asterinas-qemu = final.callPackage ./packages/qemu.nix { };
   asterinas-grub = final.callPackage ./packages/grub.nix {
     # Match the Docker image's x86_64-efi GRUB build. On non-x86_64 hosts

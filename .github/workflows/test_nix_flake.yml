@@ -6,9 +6,9 @@ on:
       - flake.nix
       - flake.lock
       - distro/nixpkgs.nix
-      - nix/**
+      - tools/dev_env/nix/**
       - rust-toolchain.toml
-      - tools/docker/prebuilt-nix-packages/Dockerfile
+      - tools/dev_env/docker/prebuilt-nix-packages/Dockerfile
       - .github/workflows/test_nix_flake.yml
   push:
     branches:
@@ -17,9 +17,9 @@ on:
       - flake.nix
       - flake.lock
       - distro/nixpkgs.nix
-      - nix/**
+      - tools/dev_env/nix/**
       - rust-toolchain.toml
-      - tools/docker/prebuilt-nix-packages/Dockerfile
+      - tools/dev_env/docker/prebuilt-nix-packages/Dockerfile
       - .github/workflows/test_nix_flake.yml
 
 jobs:
@@ -35,7 +35,7 @@ jobs:
           revision="$(jq -r '.nodes.nixpkgs.locked.rev' flake.lock)"
 
           for file in \
-            tools/docker/prebuilt-nix-packages/Dockerfile \
+            tools/dev_env/docker/prebuilt-nix-packages/Dockerfile \
             distro/nixpkgs.nix
           do
             pinned="$(sed -nE 's#.*NixOS/nixpkgs/archive/([0-9a-f]{40})\.tar\.gz.*#\1#p' "$file" | sort -u | paste -sd ' ')"

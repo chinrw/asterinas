@@ -4,7 +4,7 @@
 
   inputs = {
     # Keep Nix-based builds on the nixpkgs revision the rest of the repository
-    # pins: tools/docker/prebuilt-nix-packages/Dockerfile and
+    # pins: tools/dev_env/docker/prebuilt-nix-packages/Dockerfile and
     # test/initramfs/nix/default.nix.
     nixpkgs.url = "github:NixOS/nixpkgs/fd1462031fdee08f65fd0b4c6b64e22239a77870";
     # Match typos 1.39.0 from osdk/tools/docker/Dockerfile.
@@ -26,7 +26,6 @@
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "aarch64-darwin"
       ];
       forAllSystems =
         f:
@@ -42,21 +41,20 @@
     in
     {
       # rust-overlay is composed in so the overlay is usable on its own.
-      overlays.default = nixpkgs.lib.composeExtensions (import rust-overlay) (import ./nix/overlay.nix);
+      overlays.default = nixpkgs.lib.composeExtensions (import rust-overlay) (
+        import ./tools/dev_env/nix/overlay.nix
+      );
 
       devShells = forAllSystems (pkgs: {
-        default = pkgs.callPackage ./nix/devshell.nix {
+        default = pkgs.callPackage ./tools/dev_env/nix/devshell.nix {
           typos = nixpkgs-typos.legacyPackages.${pkgs.stdenv.hostPlatform.system}.typos;
         };
       });
 
-      packages = forAllSystems (
-        pkgs:
-        nixpkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-          qemu = pkgs.asterinas-qemu;
-          grub = pkgs.asterinas-grub;
-          ovmf = pkgs.asterinas-ovmf;
-        }
-      );
+      packages = forAllSystems (pkgs: {
+        qemu = pkgs.asterinas-qemu;
+        grub = pkgs.asterinas-grub;
+        ovmf = pkgs.asterinas-ovmf;
+      });
     };
 }

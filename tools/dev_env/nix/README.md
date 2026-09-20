@@ -1,7 +1,7 @@
 # Nix Development Environment
 
 The flake at the repository root provides a development shell
-as an alternative to the [Docker-based environment](../tools/docker),
+as an alternative to the [Docker-based environment](../docker),
 whose images layer as `osdk-dev` -> `prebuilt-nix-packages` -> `kernel-dev` -> `dev`.
 The Rust toolchain comes from `rust-toolchain.toml`,
 the boot stack (QEMU, GRUB, OVMF) is pinned to what `osdk-dev` builds,
@@ -22,14 +22,11 @@ services.envfs.enable = true;
 
 With a flakes-enabled Nix, enter the dev shell from the repository root:
 
-- Linux: `nix develop`: toolchain, QEMU, GRUB, OVMF;
+- Linux (x86_64 and aarch64): `nix develop`: toolchain, QEMU, GRUB, OVMF;
   covers `make kernel` / `make run_kernel`.
   Projects scaffolded with `cargo osdk new` (and the OSDK test suite's TDX scheme) still expect the images' firmware paths,
   and the gvisor conformance tests need the `kernel-dev` image's prebuilt test binaries
   (point `GVISOR_PREBUILT_DIR` at a copy to run them elsewhere).
-- macOS (Apple silicon): `nix develop`: build/lint subset
-  (rustc, clippy, rustfmt, typos, mdbook, cross-building the no_std crates).
-  Booting the kernel requires Linux.
 
 The shell carries `rust-analyzer` from the same nightly as the toolchain.
 Start your editor from within the shell (`nix develop`, then e.g. `code .`)
@@ -52,4 +49,4 @@ direnv binds that approval to the contents of `.envrc`,
 so a `git pull` that changes the file blocks it until you approve it again.
 `.envrc` also declares the dev shell sources as watched inputs:
 neither direnv's `use flake` nor nix-direnv's replacement looks beyond `flake.nix` and `flake.lock`,
-so without those declarations an edit under `nix/` leaves you in the previously cached shell.
+so without those declarations an edit under `tools/dev_env/nix/` leaves you in the previously cached shell.
