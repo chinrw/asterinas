@@ -5,6 +5,11 @@ on:
     paths:
       - flake.nix
       - flake.lock
+      - Makefile
+      - test/initramfs/Makefile
+      - test/nixos/Makefile
+      - tools/nixfmt.sh
+      - tools/test_nixfmt.py
       - distro/nixpkgs.nix
       - tools/dev_env/nix/**
       - rust-toolchain.toml
@@ -16,6 +21,11 @@ on:
     paths:
       - flake.nix
       - flake.lock
+      - Makefile
+      - test/initramfs/Makefile
+      - test/nixos/Makefile
+      - tools/nixfmt.sh
+      - tools/test_nixfmt.py
       - distro/nixpkgs.nix
       - tools/dev_env/nix/**
       - rust-toolchain.toml

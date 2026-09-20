@@ -464,7 +464,7 @@ format:
 	@
 	@# Format the code using various tools
 	@./tools/format_all.sh
-	@find flake.nix distro tools/dev_env/nix -type f -name '*.nix' -print0 | xargs -0 -r -n 1 nixfmt
+	@./tools/nixfmt.sh -- flake.nix distro tools/dev_env/nix
 	@$(MAKE) --no-print-directory -C test/initramfs format
 	@$(MAKE) --no-print-directory -C test/nixos format
 
@@ -494,7 +494,8 @@ check: $(CARGO_OSDK)
 	@./tools/clippy_check.sh workspace
 	@
 	@# Check Nix formatting
-	@find flake.nix distro tools/dev_env/nix -type f -name '*.nix' -print0 | xargs -0 -r -n 1 nixfmt --check
+	@python3 ./tools/test_nixfmt.py
+	@./tools/nixfmt.sh --check -- flake.nix distro tools/dev_env/nix
 	@
 	@# Check formatting issues of the C code and Nix files (regression tests)
 	@$(MAKE) --no-print-directory -C test/initramfs check
