@@ -145,6 +145,9 @@ Asterinas NixOS is _not_ an official NixOS project and has _no_ affiliation with
 
 ### For Kernel Developers
 
+You can also use the [Nix development shell](book/src/kernel/nix-development.md)
+as an alternative to the Docker environment described below.
+
 Follow the steps below to get Asterinas up and running.
 
 1. Download the latest source code on an x86-64 (or ARM64) Linux machine:
