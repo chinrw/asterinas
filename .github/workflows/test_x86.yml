@@ -1,213 +1,63 @@
-name: "Test x86-64  "
+name: Validate Nix development environment (fork)
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches:
-      - main
+
+permissions:
+  contents: read
 
 jobs:
-  basic-test:
+  evaluate:
     runs-on: ubuntu-latest
-    container:
-      image: asterinas/kernel-dev:0.18.1-20260918
-      options: -v /dev:/dev --privileged
-      volumes:
-        # Map the following directories on the host into the container so that
-        # the container can remove them to save some precious disk space (~16GB),
-        # which is quite limited on free-tier Github runners.
-        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
-    strategy:
-      fail-fast: false
-      matrix:
-        id: ['lint', 'compile', 'usermode_test', 'ktest']
-    steps:
-      - name: Free disk space
-        # Remove unused packages from the host to save disk space.
-        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
-      - uses: actions/checkout@v4
-      - name: Run basic tests
-        uses: ./.github/actions/test
-        with:
-          auto_test: 'general'
-          runs_on: 'ubuntu-latest'
-
-  osdk-test:
-    runs-on: ubuntu-latest
-    container:
-      image: ${{ matrix.image }}
-      options: -v /dev:/dev --privileged
-    strategy:
-      fail-fast: false
-      matrix:
-        image: ['asterinas/kernel-dev:0.18.1-20260918', 'asterinas/osdk-dev:0.18.1-20260918']
     steps:
       - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Check nixpkgs revisions
+        # These files cannot read flake.lock, so they repeat the locked rev.
+        run: |
+          revision="$(jq -r '.nodes.nixpkgs.locked.rev' flake.lock)"
 
-      - name: Run OSDK tests
-        uses: ./.github/actions/test
-        with:
-          auto_test: 'osdk'
-          intel_tdx: false
+          for file in \
+            tools/dev_env/docker/prebuilt-nix-packages/Dockerfile \
+            distro/nixpkgs.nix
+          do
+            pinned="$(sed -nE 's#.*NixOS/nixpkgs/archive/([0-9a-f]{40})\.tar\.gz.*#\1#p' "$file" | sort -u | paste -sd ' ')"
+            if [ "$pinned" != "$revision" ]; then
+              echo "$file: expected only nixpkgs $revision, found: ${pinned:-none}" >&2
+              exit 1
+            fi
+          done
+          echo "nixpkgs revision: $revision"
+      - name: Check flake
+        run: nix flake check --no-build --all-systems --no-update-lock-file
 
-  boot-test:
+  dev-shell-smoke:
     runs-on: ubuntu-latest
-    container:
-      image: asterinas/kernel-dev:0.18.1-20260918
-      options: -v /dev:/dev --privileged
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { variant: 'legacy32', boot_protocol: 'linux-legacy32', smp: 4 }
-          - { variant: 'multiboot2-smp4', boot_protocol: 'multiboot', smp: 4 }
-          - { variant: 'multiboot2-smp4-rootfs', boot_protocol: 'multiboot', smp: 4, rootfs_boot: true }
-          - { variant: 'pvh-smp4-rootfs', boot_protocol: 'pvh', smp: 4, rootfs_boot: true}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: Run boot test (${{ matrix.variant }})
-        uses: ./.github/actions/test
-        with:
-          auto_test: 'boot'
-          smp: ${{ matrix.smp }}
-          boot_protocol: ${{ matrix.boot_protocol }}
-          rootfs_boot: ${{ matrix.rootfs_boot }}
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Check in Nix dev shell
+        run: |
+          nix develop --ignore-environment --keep HOME \
+            --command make check
+      - name: Build and boot Asterinas
+        run: |
+          nix develop --ignore-environment --keep HOME \
+            --command make run_kernel AUTO_TEST=boot
 
-  regression-test:
+  docker-lint:
     runs-on: ubuntu-latest
-    container:
-      image: asterinas/kernel-dev:0.18.1-20260918
-      options: -v /dev:/dev --privileged
-      volumes:
-        # Map the following directories on the host into the container so that
-        # the container can remove them to save some precious disk space (~16GB),
-        # which is quite limited on free-tier Github runners.
-        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { variant: 'handover64-debug', release: false, boot_protocol: 'linux-efi-handover64' }
-          - { variant: 'multiboot2-smp4',  boot_protocol: 'multiboot2', smp: 4 }
-    steps:
-      - name: Free disk space
-        # Remove unused packages from the host to save disk space.
-        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
-      - uses: actions/checkout@v4
-      - name: Run regression test (${{ matrix.variant }})
-        uses: ./.github/actions/test
-        with:
-          auto_test: 'regression'
-          release: ${{ !contains(matrix.release, 'false') }}
-          smp: ${{ matrix.smp }}
-          boot_protocol: ${{ matrix.boot_protocol || 'linux-efi-handover64' }}
-
-  conformance-test:
-    runs-on: ubuntu-latest
-    container:
-      image: asterinas/kernel-dev:0.18.1-20260918
-      options: -v /dev:/dev --privileged
-      volumes:
-        # Map the following directories on the host into the container so that
-        # the container can remove them to save some precious disk space (~16GB),
-        # which is quite limited on free-tier Github runners.
-        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: ['ltp', 'gvisor', 'kselftest']
-        variant:
-          - 'debug'
-          - 'ext2-microvm'
-          - 'ext2-iommu-debug'
-          - 'exfat-multiboot2-nokvm'
-          - 'multiboot2-smp4'
-        include:
-          - { variant: 'debug', release: false, boot_protocol: 'linux-efi-pe64' }
-          - { variant: 'ext2-microvm', scheme: 'microvm', conformance_test_workdir: '/ext2', conformance_test_extra_blocklists: 'blocklists.ext2' }
-          - { variant: 'ext2-iommu-debug', scheme: 'iommu', conformance_test_workdir: '/ext2', conformance_test_extra_blocklists: 'blocklists.ext2', release: false }
-          - { variant: 'exfat-multiboot2-nokvm', boot_protocol: 'multiboot2', enable_kvm: false, conformance_test_workdir: '/exfat', conformance_test_extra_blocklists: 'blocklists.exfat' }
-          - { variant: 'multiboot2-smp4', boot_protocol: 'multiboot2', smp: 4 }
-    steps:
-      - name: Free disk space
-        # Remove unused packages from the host to save disk space.
-        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
-      - uses: actions/checkout@v4
-      - name: Run conformance test (${{ matrix.variant }}, ${{ matrix.suite }})
-        uses: ./.github/actions/test
-        with:
-          auto_test: 'conformance'
-          release: ${{ !contains(matrix.release, 'false') }}
-          enable_kvm: ${{ !contains(matrix.enable_kvm, 'false') }}
-          smp: ${{ matrix.smp }}
-          netdev: ${{ matrix.netdev || 'tap' }}
-          scheme: ${{ matrix.scheme }}
-          conformance_test_suite: ${{ matrix.suite }}
-          conformance_test_workdir: ${{ matrix.conformance_test_workdir }}
-          conformance_test_extra_blocklists: ${{ matrix.conformance_test_extra_blocklists }}
-          boot_protocol: ${{ matrix.boot_protocol || 'linux-efi-handover64' }}
-
-  cross-compile-test:
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: arm-cross-boot
-            runs_on: ubuntu-24.04-arm
-            image: asterinas/kernel-dev:0.18.1-20260918
-            auto_test: boot
-            enable_kvm: false
-    runs-on: ${{ matrix.runs_on }}
-    container:
-      image: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
-      - name: Run cross-compile tests (${{ matrix.name }})
-        uses: ./.github/actions/test
-        with:
-          auto_test: ${{ matrix.auto_test }}
-          enable_kvm: ${{ matrix.enable_kvm }}
-
-  xfstests:
-    name: xfstests (${{ matrix.fs_type }})
-    runs-on: ubuntu-latest
-    container:
-      image: asterinas/kernel-dev:0.18.1-20260918
-      options: -v /dev:/dev --privileged
-      volumes:
-        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - fs_type: 'ext2'
-            runlist: 'short.list'
-            disk_size: '2G'
-          - fs_type: 'tmpfs'
-            runlist: 'short.list'
-            disk_size: ''
-    steps:
-      - name: Free disk space
-        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
-      - uses: actions/checkout@v4
-      - name: Run xfstests (${{ matrix.fs_type }})
-        uses: ./.github/actions/test
-        with:
-          auto_test: 'conformance'
-          conformance_test_suite: 'xfstests'
-          release: true
-          mem: '12G'
-          xfstests_fs_type: ${{ matrix.fs_type }}
-          xfstests_runlist: ${{ matrix.runlist }}
-          xfstests_disk_size: ${{ matrix.disk_size }}
+      - name: Make space for the development image
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+      - name: Check in the development image
+        run: |
+          docker run --rm --network=host \
+            -v "$PWD:/root/asterinas" -w /root/asterinas \
+            "asterinas/kernel-dev:$(cat DOCKER_IMAGE_VERSION)" \
+            bash -c 'make check'
