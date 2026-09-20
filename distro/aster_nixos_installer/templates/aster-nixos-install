@@ -73,12 +73,13 @@ if [[ -z "$DISK" ]]; then
     exit 1
 fi
 
-# Hold an exclusive BSD lock on the whole disk from before parted until both
-# partitions are mounted (https://systemd.io/BLOCK_DEVICE_LOCKING/). Without
-# it, udevd re-reads the partition table as soon as parted cli closes the disk,
-# the kernel drops and re-creates the partition devices, and mkfs races that
-# window with ENOENT/ENXIO.
+# When parted closes the disk after writing, udevd may re-read its partition
+# table. This removes and re-creates partition devices, so mkfs can fail with
+# ENOENT or ENXIO even after parted succeeds.
 exec 9<"${DISK}"
+# udevd skips the re-read while we hold an exclusive flock on the whole disk.
+# Keep the lock through formatting and mounting to protect the partition devices.
+# See https://systemd.io/BLOCK_DEVICE_LOCKING/.
 flock -x 9
 
 # Confirm dangerous operation if --force-format-disk is used
