@@ -8,11 +8,11 @@
   nixConfig = {
     extra-substituters = [
       "https://aster-nixos-release.cachix.org"
-      "https://aster-nixos-dev.cachix.org"
+      "https://asterina-test.cachix.org"
     ];
     extra-trusted-public-keys = [
       "aster-nixos-release.cachix.org-1:xB6U/f5ck5vGDJZ04kPp3zGpZ4Nro9X4+TSSMAETVFE="
-      "aster-nixos-dev.cachix.org-1:xrCbE2flfliFTQCY/2HeJoT2tCO+5kMTZeLIUH9lnIA="
+      "asterina-test.cachix.org-1:LUjQ7OX2Ur+VC605+JQbI1wGyYTHN90RdmICRwc4K8M="
     ];
   };
 

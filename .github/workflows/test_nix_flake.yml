@@ -17,20 +17,7 @@ on:
       - .github/workflows/test_nix_flake.yml
   push:
     branches:
-      - main
-    paths:
-      - flake.nix
-      - flake.lock
-      - Makefile
-      - test/initramfs/Makefile
-      - test/initramfs/nix/**
-      - test/nixos/Makefile
-      - tools/nixfmt.sh
-      - distro/nixpkgs.nix
-      - tools/dev_env/nix/**
-      - rust-toolchain.toml
-      - tools/dev_env/docker/prebuilt-nix-packages/Dockerfile
-      - .github/workflows/test_nix_flake.yml
+      - test/nix-flake-cachix
 
 jobs:
   evaluate:
@@ -78,8 +65,8 @@ jobs:
       - name: Configure the development cache
         uses: cachix/cachix-action@v17
         with:
-          name: aster-nixos-dev
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN_FOR_DEV_CACHE }}
+          name: asterina-test
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN_FOR_TEST_CACHE }}
           skipPush: ${{ github.event_name != 'push' }}
       - name: Check in Nix dev shell
         run: |
