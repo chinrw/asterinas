@@ -2,6 +2,11 @@ name: Test Nix flake
 
 on:
   workflow_dispatch:
+    inputs:
+      docker_only:
+        type: boolean
+        default: false
+        description: Run only the Docker migration checks.
   pull_request:
     paths:
       - flake.nix
@@ -33,6 +38,7 @@ on:
 
 jobs:
   evaluate:
+    if: ${{ !inputs.docker_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +48,7 @@ jobs:
         run: nix flake check --no-build --all-systems --no-update-lock-file
 
   dev-shell-smoke:
+    if: ${{ !inputs.docker_only }}
     name: dev-shell-smoke (${{ matrix.runs_on }})
     strategy:
       fail-fast: false
