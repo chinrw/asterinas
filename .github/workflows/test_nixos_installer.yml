@@ -1,0 +1,47 @@
+# Tests of the AsterNixOS installer that run on the Linux host,
+# without building or booting AsterNixOS.
+name: Test AsterNixOS installer
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: &installer_paths
+      - distro/aster_nixos_installer/**
+      - .github/workflows/test_nixos_installer.yml
+  push:
+    branches: [main]
+    paths: *installer_paths
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Regression test for the partition re-read race in #3700.
+  stress-partitioning:
+    name: Stress partitioning and formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: endersonmenezes/free-disk-space@v3
+        with:
+          rm_cmd: "rmz"
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+      - uses: actions/checkout@v4
+      - name: Partition and format fresh loop disks repeatedly
+        uses: maus007/docker-run-action-fork@v1
+        with:
+          image: asterinas/kernel-dev:0.18.1-20260918
+          options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
+          # `docker-run-action-fork` joins these lines with ';' and runs them via
+          # `sh -c` without fail-fast settings, unlike a normal `run:` step.
+          # So we have to do `set -e` explicitly here.
+          run: |
+            set -e
+            bash distro/aster_nixos_installer/tests/stress_partitioning.sh
