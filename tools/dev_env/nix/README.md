@@ -71,6 +71,10 @@ Use the existing Make targets to build test images, the distribution, and the IS
 They check that `flake.nix` agrees with `flake.lock` before evaluating a dynamic build.
 A mismatch fails without updating the lock file.
 The commands enable `nix-command` and `flakes` explicitly, including in published Docker images.
+For a checkout mounted from a different host user, run
+`git config --system --add safe.directory "$PWD"` from the repository root inside the container.
+This trusts only that checkout in the container's Git configuration.
+CI uses the system configuration because Nix may reset `HOME` before consulting Git.
 
 The root flake exports `lib.mkInitramfs sourceRoot options` and
 `lib.mkDistro sourceRoot options` for these parameterized builds.

@@ -28,6 +28,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Trust the mounted checkout for Nix
+        run: git config --system --add safe.directory "$PWD"
       - name: Build Asterinas NixOS ISO installer image
         run: |
           make iso NIXOS_TEST_SUITE=hello

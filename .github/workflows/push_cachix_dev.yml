@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Trust the mounted checkout for Nix
+        run: git config --system --add safe.directory "$PWD"
 
       - name: Modify configuration.nix to include xfce and podman
         run: |

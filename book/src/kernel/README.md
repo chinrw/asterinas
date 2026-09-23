@@ -93,8 +93,12 @@ since `distro/README.md` references them -->
 3. Inside the container, go to the project folder to build and run Asterinas.
 
     ```bash
+    git config --system --add safe.directory "$PWD"
     make kernel
     make run_kernel
     ```
+
+    The Git setting trusts this mounted checkout inside the container.
+    Nix needs it when the checkout is owned by a different host user.
 
 If everything goes well, Asterinas is now up and running inside a VM.
