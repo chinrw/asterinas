@@ -12,7 +12,7 @@ on:
       - distro/aster_nixos_installer/**
       - .github/workflows/test_nixos_installer.yml
   push:
-    branches: [main]
+    branches: [main, diagnostics/installer-final-20260923]
     paths: *installer_paths
 
 concurrency:
