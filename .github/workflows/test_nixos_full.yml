@@ -213,6 +213,8 @@ jobs:
           image: asterinas/kernel-dev:0.18.1-20260918
           options: --privileged -v /dev:/dev:ro -v ${{ github.workspace }}:/root/asterinas
           run: |
+            set -e
+            mount -t devpts devpts /dev/pts -o newinstance,ptmxmode=0666
             git config --system --add safe.directory "$PWD"
             make nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }}
             make nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }}
