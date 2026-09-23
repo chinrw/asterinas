@@ -21,23 +21,26 @@ on:
 
 jobs:
   iso-test:
-    runs-on: ubuntu-4-cores-150GB-ssd
-    container:
-      image: asterinas/kernel-dev:0.18.1-20260918
-      options: -v /dev:/dev --privileged
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
+      - uses: endersonmenezes/free-disk-space@v3
+        with:
+          rm_cmd: "rmz"
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
       - uses: actions/checkout@v4
-      - name: Trust the mounted checkout for Nix
-        run: git config --system --add safe.directory "$PWD"
-      - name: Build Asterinas NixOS ISO installer image
-        run: |
-          make iso NIXOS_TEST_SUITE=hello
-      - name: Run ISO image and install Asterinas NixOS
-        run: |
-          make run_iso || true
-          tail --lines 10 qemu.log | grep -q "^Congratulations!" || (echo "Test ISO failed" && exit 1)
-          echo "Test ISO succeeds!"
-      - name : Run Asterinas NixOS
-        run: |
-          make run_nixos NIXOS_TEST_SUITE=hello
+      - name: Build, install, and boot the ISO
+        uses: maus007/docker-run-action-fork@v1
+        with:
+          image: asterinas/kernel-dev:0.18.1-20260918
+          options: --device /dev/kvm -v ${{ github.workspace }}:/root/asterinas
+          run: |
+            git config --system --add safe.directory "$PWD"
+            make iso NIXOS_TEST_SUITE=hello NETDEV=user
+            make run_iso NETDEV=user || true
+            grep -q "^Congratulations!" qemu.log
+            cp qemu.log target/nixos/iso-install.log
+            make run_nixos NIXOS_TEST_SUITE=hello NETDEV=user

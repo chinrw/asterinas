@@ -1,6 +1,7 @@
 name: Test Nix flake
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - flake.nix
@@ -65,3 +66,37 @@ jobs:
         run: |
           nix develop --no-update-lock-file --ignore-environment --keep HOME \
             --command make run_kernel AUTO_TEST=boot ENABLE_KVM=${{ matrix.enable_kvm }}
+
+  docker-migration:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      - uses: endersonmenezes/free-disk-space@v3
+        with:
+          rm_cmd: "rmz"
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+      - uses: actions/checkout@v4
+      - name: Build the prebuilt image without publishing
+        run: |
+          docker build --build-arg BASE_VERSION=0.18.1-20260918 \
+            -f tools/dev_env/docker/prebuilt-nix-packages/Dockerfile \
+            -t nix-migration-check .
+      - name: Verify tools and roots after source cleanup and GC
+        run: |
+          docker run --rm nix-migration-check bash -lc '
+            set -e
+            test ! -e /tmp/asterinas
+            nix-store -qR /nix/var/nix/gcroots/auto/*pkgs* > /tmp/closure
+            nix-collect-garbage -d
+            while read -r path; do test -e "$path"; done < /tmp/closure
+            nixfmt --version
+            nixos-install --help >/dev/null
+            cachix --version
+          '
