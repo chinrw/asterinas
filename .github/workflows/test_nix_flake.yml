@@ -92,7 +92,9 @@ jobs:
         run: |
           docker run --rm nix-migration-check bash -lc '
             set -e
-            test ! -e /tmp/asterinas
+            test ! -e /tmp/asterinas/flake.nix
+            test ! -e /tmp/asterinas/test/initramfs/Makefile
+            test ! -e /tmp/asterinas/result
             nix-store -qR /nix/var/nix/gcroots/auto/*pkgs* > /tmp/closure
             nix-collect-garbage -d
             while read -r path; do test -e "$path"; done < /tmp/closure
