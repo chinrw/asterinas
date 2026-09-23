@@ -25,7 +25,7 @@ runs:
 
         if [[ "${{ inputs.task }}" == "benchmark" ]]; then
           echo "Setting up environment for benchmarking..."
-          git config --global --add safe.directory /__w/asterinas/asterinas
+          git config --system --add safe.directory "$PWD"
           git config --global http.sslVerify false
           git config --global http.version HTTP/1.1
         elif [[ "${{ inputs.task }}" == "result" ]]; then

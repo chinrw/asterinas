@@ -72,6 +72,9 @@ runs:
     - name: Setup environment
       shell: bash
       run: |
+        # Nix may reset HOME in containers, so use the container-wide Git config.
+        git config --system --add safe.directory "$PWD"
+
         # Set common environment variables using GitHub's environment files
         if [[ "${{ inputs.intel_tdx }}" == "true" ]]; then
           echo "RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static" >> $GITHUB_ENV

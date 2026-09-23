@@ -24,4 +24,6 @@ jobs:
             grep -Eq '^(Y|1)$' /sys/module/kvm_intel/parameters/nested
 
         - name: Run kernel tests
-          run: make ktest ENABLE_KVM=1 NETDEV=tap
+          run: |
+            git config --system --add safe.directory "$PWD"
+            make ktest ENABLE_KVM=1 NETDEV=tap
