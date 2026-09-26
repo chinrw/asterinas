@@ -1,0 +1,55 @@
+name: Test self-host build
+
+# Build Asterinas inside Asterinas: install Asterinas NixOS, boot it as L1,
+# build the kernel there, and boot that kernel as a nested L2 guest.
+# One run takes hours, so it runs weekly and on demand instead of on PRs.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every Saturday at 02:00 UTC.
+    - cron: '0 2 * * 6'
+
+jobs:
+  selfhost-x86:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      # The L1 disk grows to about 20 GiB on top of the Nix store.
+      - uses: endersonmenezes/free-disk-space@v3
+        with:
+          rm_cmd: "rmz"
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Configure the Asterinas caches
+        # `make iso` and `make run_iso` run nested Nix builds, which do not
+        # read the flake's nixConfig.
+        uses: cachix/cachix-action@v17
+        with:
+          name: aster-nixos-dev
+          extraPullNames: aster-nixos-release
+          skipPush: true
+      - name: Build the installer ISO
+        run: nix develop --accept-flake-config --command make iso
+      - name: Install Asterinas NixOS on a new disk
+        run: |
+          nix develop --accept-flake-config --command \
+            make run_iso NIXOS_DISK_SIZE_IN_MB=65536
+      - name: Build Asterinas inside Asterinas and boot it
+        env:
+          SELFHOST_REF: ${{ github.sha }}
+          SELFHOST_MEM: 12G
+          SELFHOST_SMP: 4
+        run: nix develop --accept-flake-config --command tools/nixos/selfhost_chain.sh
+      - name: Upload the L1 console log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selfhost-l1-console
+          path: target/selfhost-chain/l1-console.log
+          if-no-files-found: ignore
