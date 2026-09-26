@@ -5,6 +5,8 @@ name: Test self-host build
 # One run takes hours, so it runs weekly and on demand instead of on PRs.
 
 on:
+  push:
+    branches: [ci/selfhost-hosted]
   workflow_dispatch:
   schedule:
     # Every Saturday at 02:00 UTC.
@@ -12,8 +14,15 @@ on:
 
 jobs:
   selfhost-x86:
+    name: selfhost-x86 (MEM=${{ matrix.mem }}, swap=${{ matrix.swap_gb }}G)
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mem: 12G, swap_gb: 0 }
+          - { mem: 32G, swap_gb: 24 }
     steps:
       # The L1 disk grows to about 20 GiB on top of the Nix store.
       - uses: endersonmenezes/free-disk-space@v3
@@ -24,6 +33,20 @@ jobs:
           remove_haskell: true
           remove_tool_cache: true
       - uses: actions/checkout@v4
+      - name: Add host swap and sample host memory
+        env:
+          SWAP_GB: ${{ matrix.swap_gb }}
+        run: |
+          df -h / /mnt || true
+          if [ "$SWAP_GB" -gt 0 ]; then
+            sudo swapoff -a
+            sudo fallocate -l "${SWAP_GB}G" /mnt/selfhost.swap
+            sudo chmod 600 /mnt/selfhost.swap
+            sudo mkswap /mnt/selfhost.swap
+            sudo swapon /mnt/selfhost.swap
+          fi
+          free -m; nproc; ls -l /dev/kvm
+          nohup bash -c 'while :; do echo "$(date -u +%T) $(free -m | awk "/Mem:/{print \"mem_used=\"\$3\" avail=\"\$7} /Swap:/{print \"swap_used=\"\$3}" | tr "\n" " ")"; sleep 30; done' >"$RUNNER_TEMP/host-mem.log" 2>&1 &
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Configure the Asterinas caches
@@ -43,13 +66,15 @@ jobs:
       - name: Build Asterinas inside Asterinas and boot it
         env:
           SELFHOST_REF: ${{ github.sha }}
-          SELFHOST_MEM: 12G
+          SELFHOST_MEM: ${{ matrix.mem }}
           SELFHOST_SMP: 4
         run: nix develop --accept-flake-config --command tools/nixos/selfhost_chain.sh
       - name: Upload the L1 console log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: selfhost-l1-console
-          path: target/selfhost-chain/l1-console.log
+          name: selfhost-l1-console-${{ matrix.mem }}
+          path: |
+            target/selfhost-chain/l1-console.log
+            ${{ runner.temp }}/host-mem.log
           if-no-files-found: ignore
