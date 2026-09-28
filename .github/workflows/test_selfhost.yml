@@ -6,6 +6,8 @@ name: Test self-host build
 # on PRs.
 
 on:
+  push:
+    branches: [ci/selfhost-pr3749]
   workflow_dispatch:
   schedule:
     # Every Saturday at 02:00 UTC.
@@ -15,6 +17,10 @@ jobs:
   selfhost-x86:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3, 4]
     steps:
       # The L1 disk (32 GiB, allocated up front) and the swap file below need
       # more space than the runner has free by default.
@@ -37,6 +43,19 @@ jobs:
           sudo chmod 600 /mnt/l1.swap
           sudo mkswap /mnt/l1.swap
           sudo swapon /mnt/l1.swap
+      - name: Sample host memory, swap, and disk
+        run: |
+          cat >"$RUNNER_TEMP/sample.sh" <<'EOF'
+          while :; do
+            mem=$(free -m | awk '/Mem:/{printf "mem_used=%s ", $3} /Swap:/{printf "swap_used=%s ", $3}')
+            swp=$(awk '/^pswp(in|out) /{printf "%s=%s ", $1, $2}' /proc/vmstat)
+            psi=$(awk '{sub("total=", "", $5); printf "psi_mem_%s_us=%s ", $1, $5}' /proc/pressure/memory 2>/dev/null)
+            console=$(stat -c %s "$GITHUB_WORKSPACE/target/selfhost-chain/l1-console.log" 2>/dev/null || echo 0)
+            echo "$(date -u +%T) ${mem}${swp}${psi}disk_avail=$(df -BG --output=avail / | tail -1 | tr -d ' ') console_bytes=${console}"
+            sleep 30
+          done
+          EOF
+          nohup bash "$RUNNER_TEMP/sample.sh" >"$RUNNER_TEMP/host-mem.log" 2>&1 &
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Configure the Asterinas caches
@@ -62,6 +81,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: selfhost-l1-console
-          path: target/selfhost-chain/l1-console.log
+          name: selfhost-l1-console-${{ matrix.attempt }}
+          path: |
+            target/selfhost-chain/l1-console.log
+            ${{ runner.temp }}/host-mem.log
           if-no-files-found: ignore
