@@ -27,7 +27,8 @@ RUN sh <(curl -L https://nixos.org/nix/install) --daemon --yes \
 #= Build Nix packages ======================================================
 
 COPY test/initramfs /tmp/asterinas/test/initramfs
-COPY distro/nixpkgs.nix /tmp/asterinas/distro/nixpkgs.nix
+COPY flake.lock /tmp/asterinas/flake.lock
+COPY tools/nix /tmp/asterinas/tools/nix
 WORKDIR /tmp/asterinas/test/initramfs
 ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
 

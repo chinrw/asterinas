@@ -1,5 +1,5 @@
 {
-  pkgs ? import ../nixpkgs.nix { },
+  pkgs ? import ../../tools/nix/pkgs.nix { },
   extra-substituters ? "",
   extra-trusted-public-keys ? "",
   ...

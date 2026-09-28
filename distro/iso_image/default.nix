@@ -1,5 +1,5 @@
 {
-  pkgs ? import ../nixpkgs.nix { },
+  pkgs ? import ../../tools/nix/pkgs.nix { },
   autoInstall ? false,
   extra-substituters ? "",
   config-file-name ? "configuration.nix",
