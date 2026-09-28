@@ -18,6 +18,7 @@ DNS_SERVER ?= none
 NIXPKGS_CACHE_TTL := 2592000 # In seconds
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CUR_DIR := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
+include $(CUR_DIR)/../../tools/nix/nix.mk
 BUILD_DIR := $(CUR_DIR)/build
 INITRAMFS_DIR := $(BUILD_DIR)/initramfs
 ROOTFS_IMAGE := $(BUILD_DIR)/rootfs.img
