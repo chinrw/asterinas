@@ -50,12 +50,25 @@ That first run is expected to fail with a hash mismatch.
 The error prints the real hash after `got:`, so copy that value into the file.
 The workflow then rebuilds the packages and boots the kernel from them.
 
-The main nixpkgs revision must match the one pinned in
-[`distro/nixpkgs.nix`](../../../distro/nixpkgs.nix) and in the
-[prebuilt Nix packages Dockerfile](../docker/prebuilt-nix-packages/Dockerfile).
+The main nixpkgs revision is recorded only in the root `flake.lock`.
+The test images and AsterNixOS are built with `nix-build`,
+which reads the same revision through [`tools/nix/sources.nix`](../../nix/sources.nix).
+To move to the latest commit of the `nixos-26.05` branch, run the following command
+and review the lock diff:
+
+```bash
+nix flake update nixpkgs
+```
+
+Inside the Docker development image, Nix does not enable flakes,
+so run `nix --extra-experimental-features 'nix-command flakes' flake update nixpkgs` instead.
+
+The [prebuilt Nix packages Dockerfile](../docker/prebuilt-nix-packages/Dockerfile)
+still repeats the revision, because it adds nixpkgs channels before copying repository files.
+Update it in the same change.
 The "Check nixpkgs revisions" step of the
 [Test Nix flake workflow](../../../.github/workflows/test_nix_flake.yml)
-fails when the three pins diverge.
+fails when the two diverge.
 
 The `typos` version is pinned to the one in the OSDK Dockerfile
 through a separate nixpkgs input, because that Dockerfile checks the spelling with a fixed release.

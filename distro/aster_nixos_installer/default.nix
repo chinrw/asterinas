@@ -7,7 +7,7 @@
   extra-trusted-public-keys ? "",
   config-file-name ? "configuration.nix",
   target_platform ? "x86_64-linux",
-  pkgs ? import ../nixpkgs.nix { },
+  pkgs ? import ../../tools/nix/pkgs.nix { },
 }:
 let
   asterinas = builtins.path {
