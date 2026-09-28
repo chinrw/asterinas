@@ -6,6 +6,9 @@ on:
     paths:
       - .github/workflows/push_cachix_pkgs.yml
       - distro/**
+      - flake.nix
+      - flake.lock
+      - tools/nix/**
       - test/nixos/common/merge_nixos_config.sh
   push:
     branches:
@@ -13,6 +16,9 @@ on:
     paths:
       - .github/workflows/push_cachix_pkgs.yml
       - distro/**
+      - flake.nix
+      - flake.lock
+      - tools/nix/**
       - test/nixos/common/merge_nixos_config.sh
 
 jobs:
