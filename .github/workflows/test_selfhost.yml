@@ -7,7 +7,7 @@ name: Test self-host build
 
 on:
   push:
-    branches: [ci/selfhost-pr3749]
+    branches: [ci/tcp-logger-e2]
   workflow_dispatch:
   schedule:
     # Every Saturday at 02:00 UTC.
@@ -16,11 +16,15 @@ on:
 jobs:
   selfhost-x86:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    # E2 logger experiment (temporary): three Nix log formats, three jobs
+    # each, all started at once so that the arms share the same network
+    # conditions.
+    timeout-minutes: 160
     strategy:
       fail-fast: false
       matrix:
-        attempt: [1, 2, 3, 4]
+        fmt: [raw, bar, barpipe]
+        attempt: [1, 2, 3]
     steps:
       # The L1 disk (32 GiB, allocated up front) and the swap file below need
       # more space than the runner has free by default.
@@ -72,16 +76,21 @@ jobs:
         run: |
           nix develop --accept-flake-config --command \
             make run_iso NIXOS_DISK_SIZE_IN_MB=32768
-      - name: Build Asterinas inside Asterinas and boot it
+      - name: Repeat the flake-input fetch window inside L1
+        # The chain stops the loop after SELFHOST_LOOP_BUDGET seconds. The
+        # step timeout is a backstop that still leaves time for the upload.
+        timeout-minutes: 130
         env:
           SELFHOST_REPO: ${{ github.repository }}
           SELFHOST_BRANCH: ${{ github.ref_name }}
+          SELFHOST_LOG_FMT: ${{ matrix.fmt }}
+          SELFHOST_LOOP_BUDGET: 7200
         run: nix develop --accept-flake-config --command tools/nixos/selfhost_chain.sh
       - name: Upload the L1 console log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: selfhost-l1-console-${{ matrix.attempt }}
+          name: selfhost-l1-console-${{ matrix.fmt }}-${{ matrix.attempt }}
           path: |
             target/selfhost-chain/l1-console.log
             ${{ runner.temp }}/host-mem.log

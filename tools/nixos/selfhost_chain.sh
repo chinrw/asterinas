@@ -36,6 +36,24 @@ SELFHOST_SMP=${SELFHOST_SMP:-4}
 [[ ${SELFHOST_BRANCH} =~ ^[A-Za-z0-9._/-]*$ ]] \
     || { echo "unsupported SELFHOST_BRANCH: ${SELFHOST_BRANCH}" >&2; exit 1; }
 
+# E2 logger experiment (temporary). Each window re-fetches the flake inputs
+# and re-queries the narinfos in a fresh store, which is where the TCP
+# atomic-mode panics happened. The arms differ only in Nix's logger:
+#   raw      SimpleLogger, no progress lock
+#   bar      ProgressBar on the tty, so the draw thread writes to the console
+#   barpipe  ProgressBar with stderr piped through cat, so isTTY is false and
+#            the draw thread exits while the progress lock is still taken
+SELFHOST_LOG_FMT=${SELFHOST_LOG_FMT:-bar}
+SELFHOST_LOOP_BUDGET=${SELFHOST_LOOP_BUDGET:-7200}
+case ${SELFHOST_LOG_FMT} in
+raw) NIX_LOG='--log-format raw' NIX_REDIR='>/dev/null' ;;
+bar) NIX_LOG='--log-format bar' NIX_REDIR='>/dev/null' ;;
+barpipe) NIX_LOG='--log-format bar' NIX_REDIR='2>&1 >/dev/null | cat' ;;
+*) echo "unsupported SELFHOST_LOG_FMT: ${SELFHOST_LOG_FMT}" >&2; exit 1 ;;
+esac
+[[ ${SELFHOST_LOOP_BUDGET} =~ ^[0-9]+$ ]] \
+    || { echo "unsupported SELFHOST_LOOP_BUDGET: ${SELFHOST_LOOP_BUDGET}" >&2; exit 1; }
+
 mkdir -p "${RUN_DIR}"
 rm -f "${LOG}" "${FIFO}"
 mkfifo "${FIFO}"
@@ -132,18 +150,59 @@ log "L1 logged in"
 # `nix develop --command`, so that every step reports its own exit status.
 run_step CLONE 1200 "cloning ${SELFHOST_REPO} ${SELFHOST_BRANCH}" \
     "git clone --depth 1 ${SELFHOST_BRANCH:+--branch ${SELFHOST_BRANCH} }https://github.com/${SELFHOST_REPO} /work/asterinas && git -C /work/asterinas log -1 --format=%H"
-# The first `nix develop` downloads the development shell, so this step
-# covers both the download and the build.
-run_step KBUILD 14400 "building the kernel in L1" \
-    'cd /work/asterinas && nix develop --accept-flake-config --command make kernel && sync'
+# The barpipe arm pipes nix into cat, and `|| break` must see nix's status.
+send 'set -o pipefail'
 
-# With AUTO_TEST=boot, `make run_kernel` should exit once L2 has booted, but
-# on current Asterinas it does not return: signal-hook in cargo-osdk drains a
-# socket with recv(MSG_DONTWAIT), and Asterinas ignores that flag and blocks.
-# Until that is fixed, the boot marker from L2 is the success signal.
-log "start: booting the L1-built kernel in L2"
+# Removing ~/.cache/nix drops the fetcher and eval caches, and /tmp/s is a new
+# store, so every window downloads the flake inputs and queries the narinfos
+# again. The loop stops at the first failing window, and `test` reports
+# whether all ten windows passed.
+WINDOW_CMD="rm -rf ~/.cache/nix /tmp/s; nix build --store /tmp/s --accept-flake-config ${NIX_LOG} --dry-run .#devShells.x86_64-linux.default ${NIX_REDIR} || break"
+LOOP_CMD="cd /work/asterinas && n=0 && for i in \$(seq 10); do ${WINDOW_CMD}; n=\$i; echo WIN=\$i; done; test \$n = 10"
+
+# One window takes several minutes inside L1, so poll every 2 s and log the
+# host time of each window boundary. With the kernel timestamp of a panic,
+# these times place the panic within its window.
+log "start: E2 loop, log format ${SELFHOST_LOG_FMT}, budget ${SELFHOST_LOOP_BUDGET} s"
 mark
-send "nix develop --accept-flake-config --command make run_kernel ENABLE_KVM=0 NETDEV=none QEMU_DISPLAY=none MEM=2G AUTO_TEST=boot; echo L2RUN-rc=\$?"
-wait_for 'Successfully booted|L2RUN-rc=[0-9]' 2400 "the nested L2 boot"
-since_mark | grep -aq 'Successfully booted' || fail "L2 exited without printing the boot marker"
-log "done: L2 booted successfully from a kernel built inside L1"
+SNAP="${RUN_DIR}/loop-snapshot.log"
+send "${LOOP_CMD}; echo LOOP-rc=\$?"
+# send sleeps 2 s after the newline that starts the loop.
+LOOP_START=$((SECONDS - 2))
+WIN_START=${LOOP_START}
+SEEN=0
+PREV_OFF=0
+log "window 1 started"
+while :; do
+    since_mark >"${SNAP}"
+    mapfile -t WINS < <(grep -aboE 'WIN=[0-9]+' "${SNAP}" | cut -d: -f1)
+    while [ "${SEEN}" -lt "${#WINS[@]}" ]; do
+        off=${WINS[SEEN]}
+        seg=$(tail -c "+$((PREV_OFF + 1))" "${SNAP}" | head -c "$((off - PREV_OFF))" | tr -d '\0')
+        overlay=$(grep -ao 'oxalica/rust-overlay' <<<"${seg}" | wc -l)
+        sources=$(grep -aoE "fetching source from|-source' from" <<<"${seg}" | wc -l)
+        summary=$(tr '\r' '\n' <<<"${seg}" | grep -aoE 'these [0-9]+ paths will be fetched' | tail -1)
+        SEEN=$((SEEN + 1))
+        log "window ${SEEN} done after $((SECONDS - WIN_START)) s: rust-overlay mentions=${overlay}, source fetches=${sources}, ${summary:-no fetch summary}"
+        # The progress bar shows each input download, so a bar window without
+        # one means the loop is not re-fetching the inputs.
+        [ "${SELFHOST_LOG_FMT}" = bar ] && [ "$((overlay + sources))" -eq 0 ] \
+            && fail "window ${SEEN} showed no flake-input download"
+        PREV_OFF=${off}
+        WIN_START=${SECONDS}
+        [ "${SEEN}" -lt 10 ] && log "window $((SEEN + 1)) started"
+    done
+    # Count finished windows before checking for a panic, so that a panic
+    # printed in the same poll as WIN=k is charged to window k+1.
+    grep -aq 'Uncaught panic' "${LOG}" \
+        && fail "kernel panic in window $((SEEN + 1)), $((SECONDS - WIN_START)) s after it started, after ${SEEN} complete windows"
+    l1_alive || fail "L1 exited in window $((SEEN + 1)) after ${SEEN} complete windows"
+    grep -aqE 'LOOP-rc=[0-9]' "${SNAP}" && break
+    if [ "$((SECONDS - LOOP_START))" -ge "${SELFHOST_LOOP_BUDGET}" ]; then
+        log "done: time budget reached in window $((SEEN + 1)) after ${SEEN} complete windows, no panic"
+        exit 0
+    fi
+    sleep 2
+done
+grep -aq 'LOOP-rc=0' "${SNAP}" || fail "the loop stopped after ${SEEN} complete windows"
+log "done: ${SEEN} windows without a panic"
