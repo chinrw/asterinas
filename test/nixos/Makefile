@@ -10,6 +10,7 @@ TEST_CONFIG_FILE_NAME := _configuration_for_test.nix
 # Paths
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ASTERINAS_ROOT := $(MAKEFILE_DIR)/../..
+include $(ASTERINAS_ROOT)/tools/nix/nix.mk
 NIXOS_CONFIG_DIR := $(ASTERINAS_ROOT)/distro/etc_nixos
 BASE_CONFIG := $(NIXOS_CONFIG_DIR)/configuration.nix
 TEST_CONFIG := $(NIXOS_CONFIG_DIR)/$(TEST_CONFIG_FILE_NAME)

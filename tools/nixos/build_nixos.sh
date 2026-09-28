@@ -23,9 +23,7 @@ nix-build aster_nixos_installer/default.nix \
     --argstr disable-systemd "${NIXOS_DISABLE_SYSTEMD}" \
     --argstr stage-2-hook "${NIXOS_STAGE_2_INIT}" \
     --argstr log-level "${LOG_LEVEL}" \
-    --argstr console "${CONSOLE}" \
-    --argstr extra-substituters "${RELEASE_SUBSTITUTER} ${DEV_SUBSTITUTER}" \
-    --argstr extra-trusted-public-keys "${RELEASE_TRUSTED_PUBLIC_KEY} ${DEV_TRUSTED_PUBLIC_KEY}"
+    --argstr console "${CONSOLE}"
 popd
 
 mkdir -p ${ASTERINAS_DIR}/target/nixos
