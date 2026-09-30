@@ -7,9 +7,6 @@
   ...
 }:
 {
-  # Keep NixOS host platform aligned with the selected target architecture.
-  config.nixpkgs.hostPlatform = lib.mkDefault "@aster-target-platform@";
-
   # Imports all Nix files located under the 'modules' directory.
   #
   # Each Nix file within the 'modules' directory contributes a specific part to the overall 'configuration.nix'.
@@ -31,7 +28,10 @@
     ./modules/xfce/default.nix
     ./modules/container.nix
     ./modules/systemd.nix
-  ];
+  ]
+  # The installer writes the settings chosen at installation time to
+  # aster_defaults.nix. Evaluations inside the repository pass them as a module.
+  ++ (if builtins.pathExists ./aster_defaults.nix then [ ./aster_defaults.nix ] else [ ]);
 
   # Overlays provide patches to 'nixpkgs' that enable these packages to run effectively on AsterNixOS.
   # For details on the overlay file definition format,
@@ -52,7 +52,6 @@
     aster_nixos = {
       kernel = lib.mkOption {
         type = lib.types.path;
-        default = "@asterinas@";
         description = "The path to the kernel image.";
       };
       disable-systemd = lib.mkOption {
@@ -60,12 +59,10 @@
           "true"
           "false"
         ];
-        default = "@aster-disable-systemd@";
         description = "Whether to disable systemd in stage 2 init.";
       };
       stage-2-hook = lib.mkOption {
         type = lib.types.str;
-        default = "@aster-stage-2-hook@";
         description = "Stage 2 init command (fallback when systemd disabled).";
       };
       log-level = lib.mkOption {
@@ -76,7 +73,6 @@
           "debug"
           "trace"
         ];
-        default = "@aster-log-level@";
         description = "The log level of Asterinas NixOS.";
       };
       console = lib.mkOption {
@@ -84,7 +80,6 @@
           "tty0"
           "hvc0"
         ];
-        default = "@aster-console@";
         description = "The console device.";
       };
       break-into-stage-1-shell = lib.mkOption {
@@ -94,12 +89,10 @@
       };
       substituters = lib.mkOption {
         type = lib.types.str;
-        default = "@aster-substituters@";
         description = "The substituters fo Asterinas NixOS.";
       };
       trusted-public-keys = lib.mkOption {
         type = lib.types.str;
-        default = "@aster-trusted-public-keys@";
         description = "The trusted public keys of Asterinas NixOS.";
       };
     };
