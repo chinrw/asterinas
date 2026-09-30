@@ -4,7 +4,14 @@
 }:
 let
   installer = pkgs.callPackage ../aster_nixos_installer { };
-  nixos = pkgs.nixos (import "${installer}/etc_nixos/configuration.nix");
+  # Evaluate the configuration from the repository. Only the installer's
+  # defaults file is taken, and that one exists without building the installer.
+  nixos = pkgs.nixos {
+    imports = [
+      ../etc_nixos/configuration.nix
+      installer.defaults
+    ];
+  };
   cachixPkgs =
     with nixos.pkgs;
     [
