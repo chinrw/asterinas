@@ -9,18 +9,23 @@ SHELL ["/bin/bash", "-c"]
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install Nix package manager and other Nix tools
+# Install Nix package manager
 #
-# The nixpkgs and nixos channels are pinned to a particular commit (NixOS 26.05, 2026-07-19) for reproducibility.
 # FIXME: Installing Nix as root is not supported in single-user mode.
-RUN sh <(curl -L https://nixos.org/nix/install) --daemon --yes \
-    && . /etc/profile.d/nix.sh \
-    && nix-channel --add https://github.com/NixOS/nixpkgs/archive/fd1462031fdee08f65fd0b4c6b64e22239a77870.tar.gz nixpkgs \
-    && nix-channel --add https://github.com/NixOS/nixpkgs/archive/fd1462031fdee08f65fd0b4c6b64e22239a77870.tar.gz nixos \
+RUN sh <(curl -L https://nixos.org/nix/install) --daemon --yes
+
+# Pin the nixpkgs and nixos channels to the revision in flake.lock and install
+# the other Nix tools from them. The lock stays in the image, so a published
+# image can be traced back to the revisions it was built from.
+COPY flake.lock /usr/local/share/asterinas/flake.lock
+RUN . /etc/profile.d/nix.sh \
+    && rev="$(nix-instantiate --eval --raw --expr \
+        '(builtins.fromJSON (builtins.readFile /usr/local/share/asterinas/flake.lock)).nodes.nixpkgs.locked.rev')" \
+    && test -n "$rev" \
+    && nix-channel --add "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz" nixpkgs \
+    && nix-channel --add "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz" nixos \
     && nix-channel --update \
-    && nix-env -iA nixpkgs.nixfmt \
-    && nix-env -iA nixpkgs.nixos-install-tools \
-    && nix-env -iA cachix -f https://cachix.org/api/v1/install \
+    && nix-env -iA nixpkgs.nixfmt nixpkgs.nixos-install-tools nixpkgs.cachix \
     && rm /nix/var/nix/gcroots/auto/* \
     && nix-collect-garbage -d
 

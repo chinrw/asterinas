@@ -13,7 +13,6 @@ on:
       - tools/nix/**
       - tools/dev_env/nix/**
       - rust-toolchain.toml
-      - tools/dev_env/docker/prebuilt-nix-packages/Dockerfile
       - .github/workflows/test_nix_flake.yml
   push:
     branches:
@@ -29,7 +28,6 @@ on:
       - tools/nix/**
       - tools/dev_env/nix/**
       - rust-toolchain.toml
-      - tools/dev_env/docker/prebuilt-nix-packages/Dockerfile
       - .github/workflows/test_nix_flake.yml
 
 jobs:
@@ -37,18 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check nixpkgs revisions
-        # The Dockerfile adds nixpkgs channels before any repository file is
-        # available, so it repeats the locked rev.
-        run: |
-          revision="$(jq -r '.nodes.nixpkgs.locked.rev' flake.lock)"
-          file=tools/dev_env/docker/prebuilt-nix-packages/Dockerfile
-          pinned="$(sed -nE 's#.*NixOS/nixpkgs/archive/([0-9a-f]{40})\.tar\.gz.*#\1#p' "$file" | sort -u | paste -sd ' ')"
-          if [ "$pinned" != "$revision" ]; then
-            echo "$file: expected only nixpkgs $revision, found: ${pinned:-none}" >&2
-            exit 1
-          fi
-          echo "nixpkgs revision: $revision"
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Check flake
