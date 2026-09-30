@@ -117,62 +117,18 @@ $(ROOTFS_IMAGE):
 		--out-link $@ \
 		nix -A rootfs-image
 
-# Prebuild x86_64 packages
-x86_64_pkgs:
-	@nix-build \
-		nix/default.nix \
-		--tarball-ttl $(NIXPKGS_CACHE_TTL) \
-		$(NIX_QUIET) \
-		--argstr target x86_64 \
-		--arg enableBenchmarkTest true \
-		--arg enableConformanceTest true \
-		--out-link /nix/var/nix/gcroots/auto/x86_64-pkgs \
-		-A busybox \
-		-A benchmark.fio \
-		-A benchmark.hackbench \
-		-A benchmark.iperf3 \
-		-A benchmark.lmbench \
-		-A benchmark.memcached \
-		-A benchmark.nginx \
-		-A benchmark.redis \
-		-A benchmark.schbench \
-		-A benchmark.sqlite-speedtest1 \
-		-A benchmark.sysbench \
-		-A conformance.ltp \
-		-A conformance.kselftest \
-		-A regression.package
-
-# Prebuild riscv64 packages
+# Prebuild packages for the Docker image. The package lists live in nix/default.nix.
 # Note: This may cause GitHub Runner ResourceExhausted errors when publish nix docker image.
 # If such errors occur, try building each package individually and clear the build cache.
-riscv64_pkgs:
+.PHONY: x86_64_pkgs riscv64_pkgs aarch64_pkgs
+x86_64_pkgs riscv64_pkgs aarch64_pkgs: %_pkgs:
 	@nix-build \
 		nix/default.nix \
 		--tarball-ttl $(NIXPKGS_CACHE_TTL) \
 		$(NIX_QUIET) \
-		--argstr target riscv64 \
-		--arg enableBenchmarkTest false \
-		--arg enableConformanceTest true \
-		--out-link /nix/var/nix/gcroots/auto/riscv64-pkgs \
-		-A busybox \
-		-A conformance.ltp \
-		-A regression.package
-
-# Prebuild aarch64 packages
-# Note: This may cause GitHub Runner ResourceExhausted errors when publish nix docker image.
-# If such errors occur, try building each package individually and clear the build cache.
-aarch64_pkgs:
-	@nix-build \
-		nix/default.nix \
-		--tarball-ttl $(NIXPKGS_CACHE_TTL) \
-		$(NIX_QUIET) \
-		--argstr target aarch64 \
-		--arg enableBenchmarkTest false \
-		--arg enableConformanceTest true \
-		--out-link /nix/var/nix/gcroots/auto/aarch64-pkgs \
-		-A busybox \
-		-A conformance.ltp \
-		-A regression.package
+		--argstr target $* \
+		--out-link /nix/var/nix/gcroots/auto/$*-pkgs \
+		-A prebuilt
 
 install_host_pkgs:
 	@nix-env \

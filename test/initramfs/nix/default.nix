@@ -54,6 +54,27 @@ rec {
   };
   rootfs-image = pkgs.callPackage ./rootfs-image.nix { inherit initramfs; };
 
+  # Packages that the prebuilt Docker image builds ahead of time,
+  # so that CI workflows do not build them again.
+  prebuilt = [
+    busybox
+    conformance.ltp
+    regression.package
+  ]
+  ++ pkgs.lib.optionals (target == "x86_64") [
+    benchmark.fio
+    benchmark.hackbench
+    benchmark.iperf3
+    benchmark.lmbench
+    benchmark.memcached
+    benchmark.nginx
+    benchmark.redis
+    benchmark.schbench
+    benchmark.sqlite-speedtest1
+    benchmark.sysbench
+    conformance.kselftest
+  ];
+
   # Packages needed by host
   inherit (hostTools)
     apacheHttpd
