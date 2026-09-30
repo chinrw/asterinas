@@ -24,11 +24,7 @@
   };
 
   outputs =
-    {
-      self,
-      nixpkgs,
-      rust-overlay,
-    }:
+    { nixpkgs, ... }@inputs:
     let
       systems = [
         "x86_64-linux"
@@ -39,27 +35,21 @@
         nixpkgs.lib.genAttrs systems (
           system:
           f (
-            import nixpkgs {
+            import ./. {
               inherit system;
-              overlays = [ self.overlays.default ];
+              sources = inputs;
             }
           )
         );
     in
     {
       # rust-overlay is composed in so the overlay is usable on its own.
-      overlays.default = nixpkgs.lib.composeExtensions (import rust-overlay) (
-        import ./tools/dev_env/nix/overlay.nix
-      );
+      overlays.default = nixpkgs.lib.composeManyExtensions (import ./. { sources = inputs; }).overlays;
 
-      devShells = forAllSystems (pkgs: {
-        default = pkgs.callPackage ./tools/dev_env/nix/devshell.nix { };
+      devShells = forAllSystems (repo: {
+        default = repo.devShell;
       });
 
-      packages = forAllSystems (pkgs: {
-        qemu = pkgs.asterinas-qemu;
-        grub = pkgs.asterinas-grub;
-        ovmf = pkgs.asterinas-ovmf;
-      });
+      packages = forAllSystems (repo: repo.packages);
     };
 }

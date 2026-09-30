@@ -9,7 +9,7 @@ final: prev:
   # stays the single source of truth and the rustup contract is unchanged.
   asterinas-rust-toolchain =
     let
-      toolchain = (builtins.fromTOML (builtins.readFile ../../../rust-toolchain.toml)).toolchain;
+      toolchain = (builtins.fromTOML (builtins.readFile ../../rust-toolchain.toml)).toolchain;
     in
     final.rust-bin.fromRustupToolchain (
       toolchain // { components = toolchain.components ++ [ "rust-analyzer" ]; }

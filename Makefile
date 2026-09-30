@@ -479,7 +479,7 @@ format:
 	@
 	@# Format the code using various tools
 	@./tools/format_all.sh
-	@./tools/nixfmt.sh flake.nix distro tools/nix tools/dev_env/nix
+	@./tools/nixfmt.sh flake.nix default.nix distro tools/nix tools/dev_env/nix
 	@$(MAKE) --no-print-directory -C test/initramfs format
 	@$(MAKE) --no-print-directory -C test/nixos format
 
@@ -509,7 +509,7 @@ check: $(CARGO_OSDK)
 	@./tools/clippy_check.sh workspace
 	@
 	@# Check Nix formatting
-	@./tools/nixfmt.sh --check flake.nix distro tools/nix tools/dev_env/nix
+	@./tools/nixfmt.sh --check flake.nix default.nix distro tools/nix tools/dev_env/nix
 	@
 	@# Check formatting issues of the C code and Nix files (regression tests)
 	@$(MAKE) --no-print-directory -C test/initramfs check

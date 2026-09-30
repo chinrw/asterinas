@@ -9,11 +9,13 @@ If you only want to use the shell, read
 - The root [`flake.nix`](../../../flake.nix) declares the inputs
   and exports the development shells and the boot-stack packages
   for `x86_64-linux` and `aarch64-linux`.
-- [`overlay.nix`](overlay.nix) assembles the Rust toolchain, the vDSO source,
+  It passes its inputs to the root [`default.nix`](../../../default.nix), which defines those outputs,
+  so `nix-build` without flakes gets the same packages at the revisions in `flake.lock`.
+- [`tools/nix/overlay.nix`](../../nix/overlay.nix) assembles the Rust toolchain, the vDSO source,
   and the project-specific packages into a nixpkgs overlay.
 - [`devshell.nix`](devshell.nix) selects the host tools
   and sets the environment variables of the shell.
-- [`packages/`](packages/) contains the definitions of QEMU, GRUB, and the OVMF firmware.
+- [`tools/nix/packages/`](../../nix/packages/) contains the definitions of QEMU, GRUB, and the OVMF firmware.
 - The test suites are packaged under [`test/initramfs/nix`](../../../test/initramfs/nix), not here.
   The shell only provides the `nix` command that the existing Make targets use to build them.
 
@@ -103,5 +105,5 @@ with `ENABLE_KVM=0` because the x86-64 kernel runs under TCG there.
 To check the formatting of the Nix files alone, pass their paths to the shared formatter script:
 
 ```bash
-./tools/nixfmt.sh --check flake.nix tools/dev_env/nix
+./tools/nixfmt.sh --check flake.nix default.nix tools/nix tools/dev_env/nix
 ```
