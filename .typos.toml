@@ -30,6 +30,14 @@ THRE = "THRE"
 TestNG = "TestNG"
 ECT = "ECT"
 
+# Identifiers listed below are names defined elsewhere, such as POSIX fields,
+# RISC-V extension terms, and upstream test names.
+[default.extend-identifiers]
+msg_controllen = "msg_controllen"
+CMO_MANAGEMENT_BLOCK_SIZE = "CMO_MANAGEMENT_BLOCK_SIZE"
+cmo_management_block_size = "cmo_management_block_size"
+TruncateNonWriteable = "TruncateNonWriteable"
+
 # Files with svg suffix are ignored to check.
 [type.svg]
 extend-glob = ["*.svg"]

@@ -70,10 +70,11 @@ The "Check nixpkgs revisions" step of the
 [Test Nix flake workflow](../../../.github/workflows/test_nix_flake.yml)
 fails when the two diverge.
 
-The `typos` version is pinned to the one in the OSDK Dockerfile
-through a separate nixpkgs input, because that Dockerfile checks the spelling with a fixed release.
+The OSDK Dockerfile installs `typos-cli` at the version that the locked nixpkgs provides,
+so `make check` flags the same words in both environments.
+When a nixpkgs update changes that version, update the Dockerfile in the same change.
 The other tools that the Dockerfile installs with `cargo install`
-come from the main nixpkgs input and may be older or newer than the Docker versions.
+come from nixpkgs and may be older or newer than the Docker versions.
 The shell omits klint, because no build or check target invokes it.
 
 ## Validation
