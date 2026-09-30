@@ -25,6 +25,9 @@ let
       throw "Target arch ${target} not yet supported.";
 
   pkgs = import ../../../tools/nix/pkgs.nix { inherit system crossSystem; };
+  # The benchmark clients run on the host that drives the guest, so they are
+  # built natively instead of for the target.
+  hostTools = import ./host-tools.nix (import ../../../tools/nix/pkgs.nix { inherit system; });
 in
 rec {
   # Packages needed by initramfs
@@ -52,21 +55,11 @@ rec {
   rootfs-image = pkgs.callPackage ./rootfs-image.nix { inherit initramfs; };
 
   # Packages needed by host
-  apacheHttpd = pkgs.apacheHttpd;
-  iperf3 = pkgs.iperf3;
-  libmemcached = pkgs.libmemcached.overrideAttrs (_: {
-    configureFlags = [ "--enable-memaslap" ];
-    LDFLAGS = "-lpthread";
-    CPPFLAGS = "-fcommon -fpermissive";
-  });
-  lmbench = pkgs.callPackage ./benchmark/lmbench.nix { };
-  redis =
-    (pkgs.redis.overrideAttrs (old: {
-      doCheck = false;
-      makeFlags = (old.makeFlags or [ ]) ++ [
-        "CC=${pkgs.stdenv.cc.targetPrefix}cc"
-        "LD=${pkgs.stdenv.cc.targetPrefix}cc"
-      ];
-    })).override
-      { withSystemd = false; };
+  inherit (hostTools)
+    apacheHttpd
+    iperf3
+    libmemcached
+    lmbench
+    redis
+    ;
 }
