@@ -223,7 +223,7 @@ RUN cargo install --locked \
     lychee@0.24.2 \
     mdbook-mermaid@0.17.0 \
     mdbook@0.5.2 \
-    typos-cli@1.39.0
+    typos-cli@1.46.3
 
 # Install klint. Pin the Klint commit compatible with the Asterinas toolchain.
 RUN cargo install klint --git https://github.com/Rust-for-Linux/klint --rev d2a4d60

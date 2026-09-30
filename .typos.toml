@@ -29,6 +29,9 @@ sems = "sems"
 THRE = "THRE"
 TestNG = "TestNG"
 ECT = "ECT"
+controllen = "controllen"
+cmo = "cmo"
+writeable = "writeable"
 
 # Files with svg suffix are ignored to check.
 [type.svg]
