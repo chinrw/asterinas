@@ -14,12 +14,9 @@
   };
 
   inputs = {
-    # Keep Nix-based builds on the nixpkgs revision the rest of the repository
-    # pins: tools/dev_env/docker/prebuilt-nix-packages/Dockerfile and
-    # test/initramfs/nix/default.nix.
-    nixpkgs.url = "github:NixOS/nixpkgs/fd1462031fdee08f65fd0b4c6b64e22239a77870";
-    # Match typos 1.39.0 from osdk/tools/docker/Dockerfile.
-    nixpkgs-typos.url = "github:NixOS/nixpkgs/c5ae371f1a6a7fd27823bc500d9390b38c05fa55";
+    # flake.lock records the revision. Non-flake builds read it through
+    # tools/nix/sources.nix.
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -30,7 +27,6 @@
     {
       self,
       nixpkgs,
-      nixpkgs-typos,
       rust-overlay,
     }:
     let
@@ -57,9 +53,7 @@
       );
 
       devShells = forAllSystems (pkgs: {
-        default = pkgs.callPackage ./tools/dev_env/nix/devshell.nix {
-          typos = nixpkgs-typos.legacyPackages.${pkgs.stdenv.hostPlatform.system}.typos;
-        };
+        default = pkgs.callPackage ./tools/dev_env/nix/devshell.nix { };
       });
 
       packages = forAllSystems (pkgs: {

@@ -1,13 +1,9 @@
 {
-  pkgs ? import ../nixpkgs.nix { },
-  extra-substituters ? "",
-  extra-trusted-public-keys ? "",
+  pkgs ? import ../../tools/nix/pkgs.nix { },
   ...
 }:
 let
-  installer = pkgs.callPackage ../aster_nixos_installer {
-    inherit extra-substituters extra-trusted-public-keys;
-  };
+  installer = pkgs.callPackage ../aster_nixos_installer { };
   nixos = pkgs.nixos (import "${installer}/etc_nixos/configuration.nix");
   cachixPkgs =
     with nixos.pkgs;

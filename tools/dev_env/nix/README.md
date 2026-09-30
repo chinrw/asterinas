@@ -50,17 +50,30 @@ That first run is expected to fail with a hash mismatch.
 The error prints the real hash after `got:`, so copy that value into the file.
 The workflow then rebuilds the packages and boots the kernel from them.
 
-The main nixpkgs revision must match the one pinned in
-[`distro/nixpkgs.nix`](../../../distro/nixpkgs.nix) and in the
-[prebuilt Nix packages Dockerfile](../docker/prebuilt-nix-packages/Dockerfile).
-The "Check nixpkgs revisions" step of the
-[Test Nix flake workflow](../../../.github/workflows/test_nix_flake.yml)
-fails when the three pins diverge.
+The main nixpkgs revision is recorded only in the root `flake.lock`.
+The test images and AsterNixOS are built with `nix-build`,
+which reads the same revision through [`tools/nix/sources.nix`](../../nix/sources.nix).
+To move to the latest commit of the `nixos-26.05` branch, run the following command
+and review the lock diff:
 
-The `typos` version is pinned to the one in the OSDK Dockerfile
-through a separate nixpkgs input, because that Dockerfile checks the spelling with a fixed release.
+```bash
+nix flake update nixpkgs
+```
+
+Inside the Docker development image, Nix does not enable flakes,
+so run `nix --extra-experimental-features 'nix-command flakes' flake update nixpkgs` instead.
+
+The [prebuilt Nix packages Dockerfile](../docker/prebuilt-nix-packages/Dockerfile)
+reads the same revision from `flake.lock` for its `nixpkgs` and `nixos` channels,
+so a lock update needs no change there.
+The image keeps the lock at `/usr/local/share/asterinas/flake.lock`,
+which shows the revisions that a published image was built from.
+
+The OSDK Dockerfile installs `typos-cli` at the version that the locked nixpkgs provides,
+so `make check` flags the same words in both environments.
+When a nixpkgs update changes that version, update the Dockerfile in the same change.
 The other tools that the Dockerfile installs with `cargo install`
-come from the main nixpkgs input and may be older or newer than the Docker versions.
+come from nixpkgs and may be older or newer than the Docker versions.
 The shell omits klint, because no build or check target invokes it.
 
 ## Validation

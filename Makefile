@@ -113,14 +113,12 @@ AUTO_INSTALL ?= true
 # Cachix binary cache settings
 CACHIX_AUTH_TOKEN ?=
 RELEASE_CACHIX_NAME ?= "aster-nixos-release"
-RELEASE_SUBSTITUTER ?= https://aster-nixos-release.cachix.org
-RELEASE_TRUSTED_PUBLIC_KEY ?= aster-nixos-release.cachix.org-1:xB6U/f5ck5vGDJZ04kPp3zGpZ4Nro9X4+TSSMAETVFE=
 DEV_CACHIX_NAME ?= "aster-nixos-dev"
-DEV_SUBSTITUTER ?= https://aster-nixos-dev.cachix.org
-DEV_TRUSTED_PUBLIC_KEY ?= aster-nixos-dev.cachix.org-1:xrCbE2flfliFTQCY/2HeJoT2tCO+5kMTZeLIUH9lnIA=
 # End of Cachix binary cache settings
 
 # ========================= End of Makefile options. ==========================
+
+include tools/nix/nix.mk
 
 export OSDK_TARGET_ARCH=$(TARGET_ARCH)
 
@@ -399,10 +397,7 @@ run_nixos:
 
 # Build the Asterinas NixOS patched packages
 cachix:
-	@nix-build distro/cachix \
-		--option extra-substituters "${RELEASE_SUBSTITUTER} ${DEV_SUBSTITUTER}" \
-		--option extra-trusted-public-keys "${RELEASE_TRUSTED_PUBLIC_KEY} ${DEV_TRUSTED_PUBLIC_KEY}" \
-		--out-link cachix.list
+	@nix-build distro/cachix --out-link cachix.list
 
 # Push the Asterinas NixOS patched packages to Cachix
 .PHONY: push_cachix
@@ -484,7 +479,7 @@ format:
 	@
 	@# Format the code using various tools
 	@./tools/format_all.sh
-	@./tools/nixfmt.sh flake.nix distro tools/dev_env/nix
+	@./tools/nixfmt.sh flake.nix distro tools/nix tools/dev_env/nix
 	@$(MAKE) --no-print-directory -C test/initramfs format
 	@$(MAKE) --no-print-directory -C test/nixos format
 
@@ -514,7 +509,7 @@ check: $(CARGO_OSDK)
 	@./tools/clippy_check.sh workspace
 	@
 	@# Check Nix formatting
-	@./tools/nixfmt.sh --check flake.nix distro tools/dev_env/nix
+	@./tools/nixfmt.sh --check flake.nix distro tools/nix tools/dev_env/nix
 	@
 	@# Check formatting issues of the C code and Nix files (regression tests)
 	@$(MAKE) --no-print-directory -C test/initramfs check

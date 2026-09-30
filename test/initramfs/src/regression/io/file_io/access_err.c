@@ -137,7 +137,7 @@ FN_TEST(readable)
 }
 END_TEST()
 
-FN_TEST(writeable)
+FN_TEST(writable)
 {
 	int fd;
 	char buf[1];

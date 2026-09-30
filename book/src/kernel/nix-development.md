@@ -45,6 +45,11 @@ Inside the shell, the Make targets work as they do in the Docker container.
 Build and run Asterinas with the same commands as in [Getting Started](../kernel/#getting-started),
 and see [Advanced Build and Test Instructions](advanced-instructions.md) for the test targets.
 
+The Make targets that run Nix, such as `make initramfs` and `make nixos`,
+use the same caches whether or not you accepted them for `nix develop`.
+If you are not a trusted Nix user, Nix ignores them with a warning.
+Run Make with `ASTER_NIX_CACHES=0` to leave them out.
+
 ## Editors and direnv
 
 The shell includes `rust-analyzer` from the same nightly as the Rust toolchain.

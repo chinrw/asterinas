@@ -24,11 +24,7 @@ let
     else
       throw "Target arch ${target} not yet supported.";
 
-  pkgs = import ../../../distro/nixpkgs.nix {
-    config = { };
-    overlays = [ ];
-    inherit system crossSystem;
-  };
+  pkgs = import ../../../tools/nix/pkgs.nix { inherit system crossSystem; };
 in
 rec {
   # Packages needed by initramfs

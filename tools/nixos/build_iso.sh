@@ -22,7 +22,5 @@ nix-build ${DISTRO_DIR}/iso_image \
     --argstr target_platform "${NIX_SYSTEM}" \
     --arg autoInstall ${AUTO_INSTALL} \
     --argstr config-file-name "${CONFIG_FILE_NAME}" \
-    --argstr extra-substituters "${RELEASE_SUBSTITUTER} ${DEV_SUBSTITUTER}" \
-    --argstr extra-trusted-public-keys "${RELEASE_TRUSTED_PUBLIC_KEY} ${DEV_TRUSTED_PUBLIC_KEY}" \
     --argstr version ${VERSION} \
     --out-link ${TARGET_DIR}/iso_image

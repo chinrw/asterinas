@@ -3,11 +3,11 @@
   stage-2-hook ? "/bin/sh -l",
   log-level ? "error",
   console ? "hvc0",
-  extra-substituters ? "",
-  extra-trusted-public-keys ? "",
+  extra-substituters ? toString (import ../../flake.nix).nixConfig.extra-substituters,
+  extra-trusted-public-keys ? toString (import ../../flake.nix).nixConfig.extra-trusted-public-keys,
   config-file-name ? "configuration.nix",
   target_platform ? "x86_64-linux",
-  pkgs ? import ../nixpkgs.nix { },
+  pkgs ? import ../../tools/nix/pkgs.nix { },
 }:
 let
   asterinas = builtins.path {
