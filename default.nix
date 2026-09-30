@@ -16,7 +16,9 @@ in
 {
   inherit overlays;
 
-  devShell = pkgs.callPackage ./tools/dev_env/nix/devshell.nix { };
+  devShell = pkgs.callPackage ./tools/dev_env/nix/devshell.nix {
+    benchmarkHostClients = builtins.attrValues (import ./test/initramfs/nix/host-tools.nix pkgs);
+  };
 
   packages = {
     qemu = pkgs.asterinas-qemu;
