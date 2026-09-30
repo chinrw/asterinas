@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - flake.nix
+      - default.nix
       - flake.lock
       - Makefile
       - test/initramfs/Makefile
@@ -19,6 +20,7 @@ on:
       - main
     paths:
       - flake.nix
+      - default.nix
       - flake.lock
       - Makefile
       - test/initramfs/Makefile
