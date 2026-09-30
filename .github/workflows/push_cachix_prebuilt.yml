@@ -1,0 +1,48 @@
+name: Push prebuilt test packages to the development cache
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/push_cachix_prebuilt.yml
+      - flake.lock
+      - test/initramfs/nix/**
+      - test/initramfs/src/**
+      - tools/nix/**
+
+jobs:
+  push-prebuilt:
+    name: push-prebuilt (${{ matrix.runs_on }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # The prebuilt-nix-packages image is published for both host
+        # architectures, and each builds all targets from its own host.
+        runs_on:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs_on }}
+    # A cold cache has to build the cross toolchains, LTP, and kselftest.
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Configure the development cache
+        uses: cachix/cachix-action@v17
+        with:
+          name: aster-nixos-dev
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN_FOR_DEV_CACHE }}
+      # Build what `make *_pkgs initramfs_pkgs` in the prebuilt-nix-packages
+      # Dockerfile builds. Those targets link GC roots under /nix/var, which
+      # the runner user cannot write, so call nix-build directly.
+      - name: Build the prebuilt packages
+        run: |
+          for target in x86_64 riscv64 aarch64; do
+            nix-build test/initramfs/nix --no-out-link \
+              --argstr target "$target" -A prebuilt
+          done
+          nix-build test/initramfs/nix --no-out-link \
+            --argstr target x86_64 --arg enableBenchmarkTest true -A initramfs-image
