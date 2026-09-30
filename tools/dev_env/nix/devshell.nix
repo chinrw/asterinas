@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 {
-  stdenv,
   mkShell,
   asterinas-rust-toolchain,
   asterinas-vdso,
@@ -44,6 +43,8 @@
   nixos-install-tools,
   wget,
   cachix,
+  # Host-side clients of the network benchmarks from test/initramfs/nix.
+  benchmarkHostClients,
 }:
 
 let
@@ -97,22 +98,6 @@ let
     nixos-install-tools
     cachix
   ];
-  # Host-side clients of the network benchmarks, from the definitions the
-  # prebuilt-nix-packages image installs with `make install_host_pkgs`.
-  benchmarkHostClients =
-    let
-      initramfsPkgs = import ../../../test/initramfs/nix {
-        target = stdenv.hostPlatform.parsed.cpu.name;
-        system = stdenv.hostPlatform.system;
-      };
-    in
-    [
-      initramfsPkgs.apacheHttpd
-      initramfsPkgs.iperf3
-      initramfsPkgs.libmemcached
-      initramfsPkgs.lmbench
-      initramfsPkgs.redis
-    ];
 in
 mkShell {
   packages = [
