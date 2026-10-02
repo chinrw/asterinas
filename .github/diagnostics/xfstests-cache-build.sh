@@ -65,6 +65,7 @@ for package_output in "$raw_output" "$wrapper_output" "$coreutils_output"; do
         exit 1
     fi
 done
+test "$(nix-instantiate test/initramfs/nix -A conformance.xfstests)" = "$wrapper_drv"
 nix-store --query --references "$wrapper_drv" > "$evidence_dir/wrapper-inputs.txt"
 grep -Fx "$raw_drv" "$evidence_dir/wrapper-inputs.txt"
 grep -Fx "$coreutils_drv" "$evidence_dir/wrapper-inputs.txt"
