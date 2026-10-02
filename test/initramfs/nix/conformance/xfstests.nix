@@ -52,6 +52,10 @@ in
 stdenvNoCC.mkDerivation {
   name = "xfstests";
 
+  # The wrapper copies the suite instead of referencing its output. Expose the
+  # original package so the Docker prebuild can keep it alive after GC.
+  passthru.unwrapped = xfstests;
+
   buildCommand = ''
     mkdir -p $out/xfstests
     cp -r ${xfstests}/lib/xfstests/* $out/xfstests/
