@@ -1,0 +1,93 @@
+name: Diagnose xfstests cache
+
+on:
+  push:
+    branches: [investigate/pr3928-xfstests-cache]
+
+permissions:
+  contents: read
+
+jobs:
+  cache:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: asterinas/kernel-dev:0.18.1-20260926
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record the image cache and build plan
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD | tee evidence/commit.txt
+          nix --version | tee evidence/nix-version.txt
+          nproc | tee evidence/cpus.txt
+          nix --extra-experimental-features nix-command config show --json \
+            | jq '{substituters, "trusted-public-keys": ."trusted-public-keys", sandbox, "max-jobs": ."max-jobs", cores}' \
+            | tee evidence/nix-config.json
+          args=(test/initramfs/nix --tarball-ttl 2592000 -A initramfs --arg enableConformanceTest true --argstr conformanceTestSuite xfstests)
+          nix-instantiate "${args[@]}" | tee evidence/initramfs.drv
+          nix-build "${args[@]}" --dry-run --no-out-link 2>&1 | tee evidence/before.log
+          nix-store -qR "$(cat evidence/initramfs.drv)" > evidence/requisites.txt
+          : > evidence/cache-probes.tsv
+          while IFS= read -r drv; do
+            case "$drv" in
+              *-xfstests-2026.06.21.drv|*-coreutils-9.11.drv|*-xfstests-check.drv|*-xfstests.drv) ;;
+              *) continue ;;
+            esac
+            printf 'Derivation: %s\n' "$drv"
+            nix-store --query --binding allowSubstitutes "$drv" || true
+            nix-store --query --binding preferLocalBuild "$drv" || true
+            nix-store --query --binding configureFlags "$drv" || true
+            while IFS= read -r output; do
+              valid=no
+              if nix-store --check-validity "$output" 2>/dev/null; then valid=yes; fi
+              printf '%s\t%s\tlocal\t%s\n' "$drv" "$output" "$valid" | tee -a evidence/cache-probes.tsv
+              hash="${output#/nix/store/}"
+              hash="${hash%%-*}"
+              for cache in https://cache.nixos.org https://aster-nixos-dev.cachix.org https://aster-nixos-release.cachix.org; do
+                code=$(curl --silent --show-error --location --max-time 30 --retry 2 \
+                  --output "evidence/${hash}-${cache##*/}.narinfo" --write-out '%{http_code}' "$cache/$hash.narinfo")
+                printf '%s\t%s\t%s\t%s\n' "$drv" "$output" "$cache" "$code" | tee -a evidence/cache-probes.tsv
+                case "$code" in 200|404) ;; *) exit 1 ;; esac
+              done
+            done < <(nix-store --query --outputs "$drv")
+          done < evidence/requisites.txt
+      - name: Check whether enabling both project caches changes the plan
+        run: |
+          set -euo pipefail
+          nix-build test/initramfs/nix --tarball-ttl 2592000 -A initramfs \
+            --arg enableConformanceTest true --argstr conformanceTestSuite xfstests \
+            --option extra-substituters 'https://aster-nixos-dev.cachix.org https://aster-nixos-release.cachix.org' \
+            --option extra-trusted-public-keys 'aster-nixos-dev.cachix.org-1:xrCbE2flfliFTQCY/2HeJoT2tCO+5kMTZeLIUH9lnIA= aster-nixos-release.cachix.org-1:xB6U/f5ck5vGDJZ04kPp3zGpZ4Nro9X4+TSSMAETVFE=' \
+            --dry-run --no-out-link 2>&1 | tee evidence/project-caches.log
+      - name: Measure the missing prebuild and repeat the plan
+        run: |
+          set -euo pipefail
+          # This build-only container has no host devices or namespace privileges.
+          # Disable the Nix build sandbox explicitly for this diagnostic.
+          TIMEFORMAT='xfstests prebuild elapsed seconds: %R'
+          { time nix-build test/initramfs/nix --tarball-ttl 2592000 -A conformance.xfstests \
+              --option sandbox false --out-link /tmp/xfstests-prebuilt; } 2>&1 | tee evidence/prebuild.log
+          nix-store -qR "$(readlink -f /tmp/xfstests-prebuilt)" | tee evidence/prebuilt-closure.txt
+          { time nix-build test/initramfs/nix --tarball-ttl 2592000 -A conformance.xfstests \
+              --option sandbox false --no-out-link; } 2>&1 | tee evidence/warm-prebuild.log
+          nix-build test/initramfs/nix --tarball-ttl 2592000 -A initramfs \
+            --arg enableConformanceTest true --argstr conformanceTestSuite xfstests \
+            --dry-run --no-out-link 2>&1 | tee evidence/after.log
+          if grep -E '/nix/store/[^ ]+-(xfstests-2026\.06\.21|coreutils-9\.11|xfstests-check|xfstests)\.drv' evidence/after.log; then
+            echo 'The expensive xfstests dependencies still require building.' >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xfstests-cache-evidence
+          path: evidence/
+          retention-days: 14
