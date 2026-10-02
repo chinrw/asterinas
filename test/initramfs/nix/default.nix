@@ -73,6 +73,10 @@ rec {
     benchmark.sqlite-speedtest1
     benchmark.sysbench
     conformance.kselftest
+    conformance.xfstests
+    # The wrapper copies the suite instead of referencing its output. Keep the
+    # original package so changing the wrapper sources does not rebuild it.
+    conformance.xfstests.unwrapped
   ];
 
   # Packages needed by host

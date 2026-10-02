@@ -52,6 +52,8 @@ in
 stdenvNoCC.mkDerivation {
   name = "xfstests";
 
+  passthru.unwrapped = xfstests;
+
   buildCommand = ''
     mkdir -p $out/xfstests
     cp -r ${xfstests}/lib/xfstests/* $out/xfstests/
