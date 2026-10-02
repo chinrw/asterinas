@@ -47,7 +47,8 @@ jobs:
           set -euo pipefail
           mkdir -p evidence
           cp "$RUNNER_TEMP"/xfstests-cleanup-*.txt evidence/
-          test "$(git rev-parse HEAD)" = "$VALIDATION_REVISION"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$VALIDATION_REVISION"
           test -c /dev/kvm
           if [ "$SAMPLE_VARIANT" = candidate ]; then
             test "$(cat /opt/xfstests-validation/evidence/source-revision.txt)" = "$GITHUB_SHA"
