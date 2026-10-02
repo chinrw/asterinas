@@ -1,0 +1,104 @@
+name: Validate cached xfstests runtime samples
+
+on:
+  push:
+    branches: [fix/xfstests-prebuilt-cache-samples]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  candidates:
+    if: github.repository == 'chinrw/asterinas'
+    name: ext2 candidate sample ${{ matrix.sample }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5]
+    container:
+      image: ghcr.io/chinrw/asterinas-xfstests-validation@sha256:80c58f71e2d9da1088e540322b4f60dd622c1cbd8b27a06abb120da03049d4c6
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --device=/dev/kvm
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    defaults:
+      run:
+        shell: bash
+    env:
+      NIX_CONFIG: sandbox = false
+      VALIDATION_REVISION: 9a5b18ff567bc7651a14456ca22e063215d88dbd
+      SAMPLE_IMAGE: ghcr.io/chinrw/asterinas-xfstests-validation@sha256:80c58f71e2d9da1088e540322b4f60dd622c1cbd8b27a06abb120da03049d4c6
+      SAMPLE_VARIANT: candidate
+      SAMPLE_NUMBER: ${{ matrix.sample }}
+    steps:
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          date -u +%Y-%m-%dT%H:%M:%S.%NZ | tee "$RUNNER_TEMP/xfstests-cleanup-start.txt"
+          df -B1 /
+          rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+          df -B1 /
+          date -u +%Y-%m-%dT%H:%M:%S.%NZ | tee "$RUNNER_TEMP/xfstests-cleanup-finish.txt"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.VALIDATION_REVISION }}
+          persist-credentials: false
+      - name: Record sample identity
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          cp "$RUNNER_TEMP"/xfstests-cleanup-*.txt evidence/
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$VALIDATION_REVISION"
+          test -c /dev/kvm
+          if [ "$SAMPLE_VARIANT" = candidate ]; then
+            test "$(cat /opt/xfstests-validation/evidence/source-revision.txt)" = "$VALIDATION_REVISION"
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          names = ("GITHUB_SHA", "VALIDATION_REVISION", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "SAMPLE_IMAGE", "SAMPLE_VARIANT", "SAMPLE_NUMBER", "RUNNER_OS", "RUNNER_ARCH")
+          Path("evidence/identity.json").write_text(json.dumps({name: os.environ.get(name) for name in names}, indent=2) + "\n")
+          PY
+          uname -a | tee evidence/uname.txt
+          lscpu > evidence/lscpu.txt
+          nix --version | tee evidence/nix-version.txt
+          sha256sum test/initramfs/src/conformance/xfstests/ext2/run_list/short.list > evidence/runlist-sha256.txt
+      - name: Run the complete ext2 short suite
+        run: |
+          set -euo pipefail
+          date -u +%Y-%m-%dT%H:%M:%S.%NZ | tee evidence/run-start.txt
+          set +e
+          make run_kernel AUTO_TEST=conformance RELEASE=1 CONFORMANCE_TEST_SUITE=xfstests \
+            MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=short.list XFSTESTS_DISK_SIZE=2G \
+            2>&1 | tee evidence/run.log
+          pipeline_status=("${PIPESTATUS[@]}")
+          set -e
+          printf '%s\n' "${pipeline_status[0]}" > evidence/make-exit-code.txt
+          date -u +%Y-%m-%dT%H:%M:%S.%NZ | tee evidence/run-finish.txt
+          test "${pipeline_status[1]}" -eq 0
+          exit "${pipeline_status[0]}"
+      - name: Verify all 78 tests completed without skips
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 .github/diagnostics/xfstests-cache-verify.py qemu.log \
+            test/initramfs/src/conformance/xfstests/ext2/run_list/short.list evidence/suite-summary.json
+      - name: Save every sample result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ext2-candidate-${{ matrix.sample }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            evidence/
+            qemu.log
+            qemu-serial.log
+          retention-days: 14
