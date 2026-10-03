@@ -1,0 +1,186 @@
+name: Validate standalone xfstests prebuild
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [validate/xfstests-standalone-20261003]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_REVISION: 6f421ed7d42545322b7c44aef8fc7197992635ea
+  BASE_IMAGE: asterinas/kernel-dev@sha256:3d9970e695db7f769ef3eb135c7cd561c3f4b86605785854374c807380480d26
+
+jobs:
+  build:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+    steps:
+      - name: Free build disk space
+        run: sudo rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
+          path: source
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: harness
+          persist-credentials: false
+      - name: Build and verify standalone prebuild retention
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_REVISION"
+          mkdir -p evidence context
+          printf '%s\n' "$GITHUB_SHA" > evidence/workflow-revision.txt
+          printf '%s\n' "$SOURCE_REVISION" > evidence/source-revision.txt
+          printf '%s\n' "$BASE_IMAGE" > evidence/base-image.txt
+          git -C source archive HEAD | tar -x -C context
+          mkdir -p context/.github/diagnostics
+          cp harness/.github/diagnostics/* context/.github/diagnostics/
+          docker pull "$BASE_IMAGE" 2>&1 | tee evidence/base-pull.log
+          docker image inspect "$BASE_IMAGE" > evidence/base-image-inspect.json
+          image_tag="ghcr.io/chinrw/asterinas-xfstests-validation:standalone-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf '%s\n' "$image_tag" > evidence/candidate-tag.txt
+          docker build --progress=plain --build-arg SOURCE_REVISION="$SOURCE_REVISION" \
+            --tag "$image_tag" --file harness/.github/diagnostics/xfstests-cache.Dockerfile context \
+            2>&1 | tee evidence/build.log
+          docker image inspect "$image_tag" > evidence/candidate-image-inspect.json
+          container_id=$(docker create "$image_tag")
+          trap 'docker rm "$container_id" >/dev/null' EXIT
+          docker cp "$container_id:/opt/xfstests-validation/evidence/." evidence/
+      - name: Publish the fork-only validation image
+        id: publish
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io >/dev/null' EXIT
+          image_tag=$(cat evidence/candidate-tag.txt)
+          docker push "$image_tag" 2>&1 | tee evidence/push.log
+          image_ref=$(docker image inspect "$image_tag" --format '{{index .RepoDigests 0}}')
+          case "$image_ref" in
+            ghcr.io/chinrw/asterinas-xfstests-validation@sha256:*) ;;
+            *) echo "Unexpected image reference: $image_ref" >&2; exit 1 ;;
+          esac
+          printf '%s\n' "$image_ref" > evidence/candidate-image.txt
+          printf 'image=%s\n' "$image_ref" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: standalone-prebuild-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          retention-days: 14
+
+  ext2:
+    if: github.repository == 'chinrw/asterinas'
+    needs: build
+    name: ext2 standalone 78 tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.build.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --device=/dev/kvm
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    defaults:
+      run:
+        shell: bash
+    env:
+      NIX_CONFIG: sandbox = false
+      SAMPLE_IMAGE: ${{ needs.build.outputs.image }}
+    steps:
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          date -u +%Y-%m-%dT%H:%M:%S.%NZ | tee "$RUNNER_TEMP/xfstests-cleanup-start.txt"
+          df -B1 /
+          rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+          df -B1 /
+          date -u +%Y-%m-%dT%H:%M:%S.%NZ | tee "$RUNNER_TEMP/xfstests-cleanup-finish.txt"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
+          path: source
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: harness
+          persist-credentials: false
+      - name: Verify source and image identities
+        working-directory: source
+        run: |
+          set -euo pipefail
+          mkdir -p ../evidence
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/source"
+          test "$(git -c safe.directory="$GITHUB_WORKSPACE/source" rev-parse HEAD)" = "$SOURCE_REVISION"
+          test "$(cat /opt/xfstests-validation/evidence/source-revision.txt)" = "$SOURCE_REVISION"
+          test -c /dev/kvm && test -r /dev/kvm && test -w /dev/kvm
+          cp "$RUNNER_TEMP"/xfstests-cleanup-*.txt ../evidence/
+          python3 - <<'PY_ID'
+          import json
+          import os
+          from pathlib import Path
+          names = ('GITHUB_SHA', 'SOURCE_REVISION', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'SAMPLE_IMAGE', 'RUNNER_OS', 'RUNNER_ARCH')
+          Path('../evidence/identity.json').write_text(json.dumps({key: os.environ.get(key) for key in names}, indent=2) + '\n')
+          PY_ID
+          uname -a > ../evidence/uname.txt
+          lscpu > ../evidence/lscpu.txt
+          sha256sum test/initramfs/src/conformance/xfstests/ext2/run_list/short.list > ../evidence/runlist-sha256.txt
+          nix-build test/initramfs/nix -A initramfs --arg enableConformanceTest true \
+            --argstr conformanceTestSuite xfstests --dry-run --no-out-link \
+            2>&1 | tee ../evidence/runtime-plan.log
+          if grep -E '/nix/store/[^ ]+-(xfstests-2026\.06\.21|coreutils-9\.11)\.drv' ../evidence/runtime-plan.log; then
+            echo 'The runtime image still needs to compile an expensive dependency.' >&2
+            exit 1
+          fi
+      - name: Run all ext2 short-list tests
+        working-directory: source
+        run: |
+          set -euo pipefail
+          date -u +%Y-%m-%dT%H:%M:%S.%NZ | tee ../evidence/run-start.txt
+          set +e
+          make run_kernel AUTO_TEST=conformance RELEASE=1 CONFORMANCE_TEST_SUITE=xfstests \
+            MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=short.list XFSTESTS_DISK_SIZE=2G \
+            2>&1 | tee ../evidence/run.log
+          pipeline_status=("${PIPESTATUS[@]}")
+          set -e
+          printf '%s\n' "${pipeline_status[0]}" > ../evidence/make-exit-code.txt
+          date -u +%Y-%m-%dT%H:%M:%S.%NZ | tee ../evidence/run-finish.txt
+          test "${pipeline_status[1]}" -eq 0
+          exit "${pipeline_status[0]}"
+      - name: Check 78 results and zero skips
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 harness/.github/diagnostics/xfstests-cache-verify.py source/qemu.log \
+            source/test/initramfs/src/conformance/xfstests/ext2/run_list/short.list evidence/suite-summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: standalone-ext2-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            evidence/
+            source/qemu.log
+            source/qemu-serial.log
+          retention-days: 14
