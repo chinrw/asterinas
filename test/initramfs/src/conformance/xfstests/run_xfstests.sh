@@ -37,6 +37,13 @@ export HOST_OPTIONS="$XFSTESTS_CONFIG"
 # shellcheck source=/dev/null
 . "$XFSTESTS_CONFIG"
 
+# xfstests helpers rely on Bash process substitution.
+# Check it before the preparation script mounts or modifies filesystems.
+if ! bash -c 'readarray -t probe < <(printf "%s\n" xfstests) && [[ ${probe[*]} == xfstests ]]'; then
+    echo "Cannot use Bash process substitution; refusing to run xfstests." >&2
+    exit 1
+fi
+
 # shellcheck source=/dev/null
 . "$XFSTESTS_PREPARE"
 
