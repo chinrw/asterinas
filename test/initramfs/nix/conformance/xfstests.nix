@@ -13,6 +13,9 @@ let
       hash = "sha256-hngS9Hnsz9XKQ42yh6mcXHiTOzL+Zk9hRpai7e2tU0E=";
     };
     nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.pkg-config ];
+    patchPhase = (old.patchPhase or "") + ''
+      patch -p1 < ${./xfstests-exclusions.patch}
+    '';
   });
 
   standaloneCoreutils = pkgs.coreutils.override { singleBinary = false; };
