@@ -27,6 +27,11 @@ mount -t configfs none /sys/kernel/config
 if ! grep -q '^[^ ]* /dev devtmpfs ' /proc/mounts; then
     mount -t devtmpfs devtmpfs /dev
 fi
+# Bash uses /dev/fd for process substitution. Create the link after mounting
+# devtmpfs so the mount does not hide it.
+if ! ln -sfnT /proc/self/fd /dev/fd; then
+    echo "Failed to create /dev/fd. Continuing initialization." >&2
+fi
 mkdir -p /dev/pts /dev/shm
 mount -t tmpfs tmpfs /dev/shm
 chmod 1777 /dev/shm
