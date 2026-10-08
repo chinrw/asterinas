@@ -1,0 +1,22 @@
+--- a/check
++++ b/check
+@@ -303,9 +303,16 @@
+ 		;;
+ 
+ 	-E)	xfile=$2; shift ;
+-		if [ -f $xfile ]; then
+-			readarray -t -O ${#exclude_tests[@]} exclude_tests < \
+-				<(sed "s/#.*$//" $xfile)
++		if [ -f "$xfile" ]; then
++			# Check the producer's status before appending exclusions.
++			exclude_list=$(sed -e 's/#.*$//' -- "$xfile") ||
++				_fatal "Failed to read exclusion file: $xfile"
++
++			if [ -n "$exclude_list" ]; then
++				readarray -t -O "${#exclude_tests[@]}" \
++					exclude_tests <<< "$exclude_list" ||
++					_fatal "Failed to load exclusion file: $xfile"
++			fi
+ 		fi
+ 		;;
+ 	-s)	RUN_SECTION="$RUN_SECTION $2"; shift ;;
