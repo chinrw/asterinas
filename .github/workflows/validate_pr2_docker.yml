@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: MPL-2.0
+name: Validate PR2 Flake Docker migration
+on:
+  push:
+    branches:
+      - test/pr2-qemu-vdso-ci
+permissions:
+  contents: read
+jobs:
+  flake-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: aster-nixos-dev
+          skipPush: true
+      - name: Evaluate and build Flake outputs
+        run: |
+          mkdir -p /tmp/pr2-ci
+          nix flake check --accept-flake-config --no-build --all-systems --no-update-lock-file 2>&1 | tee /tmp/pr2-ci/flake-check.log
+          nix build --accept-flake-config --no-update-lock-file .#qemu .#vdso 2>&1 | tee /tmp/pr2-ci/flake-build.log
+      - name: Check and boot in the ARM64 development shell
+        run: |
+          nix develop --accept-flake-config --ignore-environment --keep HOME --keep NIX_USER_CONF_FILES --command make check 2>&1 | tee /tmp/pr2-ci/make-check.log
+          nix develop --accept-flake-config --ignore-environment --keep HOME --keep NIX_USER_CONF_FILES --command make run_kernel AUTO_TEST=boot ENABLE_KVM=0 2>&1 | tee /tmp/pr2-ci/boot.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr2-flake-arm64
+          path: /tmp/pr2-ci
+  docker-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record the runner and source
+        run: |
+          uname -a
+          df -h
+          docker info --format '{{.Architecture}}'
+          git rev-parse HEAD
+      - name: Build and validate the complete image chain
+        run: bash .github/pr2-ci/docker-chain.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr2-docker-arm64
+          path: /tmp/pr2-ci
