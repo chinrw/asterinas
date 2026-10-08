@@ -27,6 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git rev-parse HEAD | tee .validation/head.txt
           sha256sum test/initramfs/nix/conformance/xfstests-exclusions.patch > .validation/patch.sha256
           timeout --kill-after=15s 20m nix-build test/initramfs/nix -A conformance.xfstests \
