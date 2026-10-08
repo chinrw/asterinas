@@ -7,7 +7,7 @@ If you only want to use the shell, read
 ## File organization
 
 - The root [`flake.nix`](../../../flake.nix) declares the inputs
-  and exports the development shells and the boot-stack packages
+  and exports the development shells, boot-stack packages, and vDSO files
   for `x86_64-linux` and `aarch64-linux`.
 - [`overlay.nix`](overlay.nix) assembles the Rust toolchain, the vDSO source,
   and the project-specific packages into a nixpkgs overlay.
@@ -17,10 +17,9 @@ If you only want to use the shell, read
 - The test suites are packaged under [`test/initramfs/nix`](../../../test/initramfs/nix), not here.
   The shell only provides the `nix` command that the existing Make targets use to build them.
 
-nixpkgs packages QEMU, GRUB, and OVMF too, but for now the shell must provide the same boot stack as the Docker image,
-so each definition under `packages/` pins the versions or source revisions the Dockerfiles use
-and overrides nixpkgs' patches and build settings where needed.
-The header comment of each file lists its deviations from nixpkgs.
+The definitions under `packages/` select the QEMU, GRUB, and OVMF versions used for development
+and adjust nixpkgs' patches and build settings where needed.
+Comments in each package definition explain its deviations from nixpkgs.
 
 The shell sets `GRUB_MKRESCUE` to its packaged GRUB executable
 so that the `iso` and `nixos` targets do not depend on `/usr/bin/grub-mkrescue`.
@@ -35,10 +34,8 @@ The Rust toolchain is read from [`rust-toolchain.toml`](../../../rust-toolchain.
 and the shell adds `rust-analyzer` from the same nightly.
 Never pin a second Rust version in the Nix expressions.
 
-The QEMU and GRUB versions and the edk2 release used to build OVMF follow the
+The GRUB version and the edk2 release used to build OVMF follow the
 [OSDK Dockerfile](../../../osdk/tools/docker/Dockerfile).
-The vDSO revision follows the
-[kernel development Dockerfile](../docker/kernel-dev/Dockerfile).
 When you bump one of these dependencies in a Dockerfile,
 bump its Nix counterpart in the same change.
 Nothing in CI compares the two yet, so a Dockerfile-only bump passes unnoticed.
@@ -49,6 +46,16 @@ and let the [Test Nix flake workflow](../../../.github/workflows/test_nix_flake.
 That first run is expected to fail with a hash mismatch.
 The error prints the real hash after `got:`, so copy that value into the file.
 The workflow then rebuilds the packages and boots the kernel from them.
+
+The development shell and [OSDK image](../../../osdk/tools/docker/Dockerfile)
+use the QEMU definition in [`packages/qemu.nix`](packages/qemu.nix).
+To update QEMU, change its version and hash there, then run `nix build .#qemu`.
+Rebuild the OSDK image and its downstream images to use the updated package.
+
+The development shell and [kernel development image](../docker/kernel-dev/Dockerfile)
+use the vDSO files defined by `asterinas-vdso` in [`overlay.nix`](overlay.nix).
+To update them, change that definition's revision and hash, then run `nix build .#vdso`.
+Rebuild the Docker image to include the updated files.
 
 The development shell and Make-based builds take their main nixpkgs source from `flake.lock`.
 To update it, run `nix flake update nixpkgs` from the repository root, either
@@ -72,6 +79,25 @@ through a separate nixpkgs input, because that Dockerfile checks the spelling wi
 The other tools that the Dockerfile installs with `cargo install`
 come from the main nixpkgs input and may be older or newer than the Docker versions.
 The shell omits klint, because no build or check target invokes it.
+
+## Docker builds
+
+The OSDK image installs Nix and builds `.#qemu`.
+Downstream images inherit that Nix installation and store.
+Both QEMU and vDSO builds accept the Flake's Cachix configuration,
+so Nix can download matching cached outputs instead of rebuilding them.
+
+QEMU has a named garbage-collection root under `/nix/var/nix/gcroots/qemu`.
+Preserve it when changing the prebuilt image's cleanup steps,
+which remove automatic roots before building the test packages.
+Also preserve the final initramfs warm-up: its build dependencies are kept for later builds,
+so the Dockerfile deliberately does not run garbage collection afterward.
+
+Build the image chain with a new shared tag, starting with `osdk-dev`,
+then `prebuilt-nix-packages`, `kernel-dev`, and `dev`.
+The updated prebuilt Dockerfile requires Nix from the new OSDK image.
+Publish the required platforms before changing Make or CI callers to use the new tag.
+The publication workflow skips tags that already exist.
 
 ## Validation
 
