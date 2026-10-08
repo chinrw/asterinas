@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
+import json
+import os
+from pathlib import Path
+import sys
+
+Path(__file__).with_name('qemu-args.json').write_text(json.dumps(sys.argv[1:], indent=2)+'\n')
+os.execvp('timeout', ['timeout', '--foreground', '--kill-after=15s', '300', os.environ['VALIDATION_REAL_QEMU'], *sys.argv[1:]])

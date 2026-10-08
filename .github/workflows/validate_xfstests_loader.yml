@@ -1,0 +1,74 @@
+name: Validate xfstests exclusion loading
+
+on:
+  push:
+    branches: [validate/xfstests-loader-20261008]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  loader:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: asterinas/dev:0.18.1-20260926
+      options: --device=/dev/kvm
+    env:
+      HOME: /root
+      RUSTUP_HOME: /root/.rustup
+      CARGO_HOME: /root/.cargo
+      CARGO_BUILD_JOBS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record source and build patched suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD | tee .validation/head.txt
+          sha256sum test/initramfs/nix/conformance/xfstests-exclusions.patch > .validation/patch.sha256
+          timeout --kill-after=15s 20m nix-build test/initramfs/nix -A conformance.xfstests \
+            --arg enableConformanceTest true --argstr conformanceTestSuite xfstests \
+            --out-link /tmp/loader-suite 2>&1 | tee .validation/nix-build.log
+          python3 .validation/prepare.py /tmp/loader-suite/xfstests/check
+      - name: Run Linux loading matrix with the packaged Bash
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LOADER_BASH="$(python3 -c 'import json; print(json.load(open(".validation/source-identity.json"))["bash"])')"
+          "$LOADER_BASH" --version | head -1 | tee .validation/bash-version.txt
+          python3 .validation/loader-cases.py | tee .validation/linux-results.json
+      - name: Build and run the actual guest matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          export VALIDATION_REAL_QEMU="$(command -v qemu-system-x86_64)"
+          export PATH="$PWD/.validation:$PATH"
+          rm -f qemu.log qemu-serial.log
+          timeout --kill-after=15s 30m make -f Makefile -f .validation/guest.mk run_kernel \
+            AUTO_TEST=none ENABLE_CONFORMANCE_TEST=true CONFORMANCE_TEST_SUITE=xfstests \
+            XFSTESTS_FS_TYPE=tmpfs CONFORMANCE_TEST_SELECTOR= \
+            RELEASE=1 SMP=2 MEM=3G NETDEV=none VHOST=off ENABLE_KVM=1 \
+            2>&1 | tee .validation/guest-run.log
+          grep -q '^XFSTESTS_LOADER_VALIDATION_PASS' qemu.log
+          for marker in LOADER_MISSING_FD_COMPARISON_PASS LOADER_LINKED_COMPARISON_PASS \
+            LOADER_CONTENT_CASES_PASS LOADER_PRODUCER_FAILURES_PASS; do
+            grep -q "^$marker" qemu.log
+          done
+          sha256sum test/initramfs/build/initramfs.cpio.gz target/osdk/asterinas-osdk-bin.iso \
+            > .validation/boot-inputs.sha256
+          git diff -- test/initramfs/src/conformance/xfstests > .validation/generated-overlay.diff
+      - name: Save validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xfstests-loader-evidence
+          retention-days: 7
+          include-hidden-files: true
+          path: |
+            .validation/
+            qemu.log
+            qemu-serial.log
+            target/osdk/asterinas/bundle.toml
