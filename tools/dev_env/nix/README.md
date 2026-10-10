@@ -119,8 +119,8 @@ nix build .#qemu .#grub .#ovmf
 Then reproduce the CI checks, which run the shell with a stripped-down host environment:
 
 ```bash
-nix develop --ignore-environment --keep HOME --command make check
-nix develop --ignore-environment --keep HOME --command make run_kernel AUTO_TEST=boot
+nix develop --no-update-lock-file --ignore-environment --keep HOME --command make check
+nix develop --no-update-lock-file --ignore-environment --keep HOME --command make run_kernel AUTO_TEST=boot
 ```
 
 CI runs the two commands above on an ARM64 runner as well,
@@ -131,3 +131,32 @@ To check the formatting of the Nix files alone, pass their paths to the shared f
 ```bash
 ./tools/nixfmt.sh --check flake.nix tools/dev_env/nix
 ```
+
+### Candidate Docker images
+
+The [Test Docker images workflow](../../../.github/workflows/test_docker_images.yml)
+builds the four development images from the checked-out source and tests those images.
+Changes to the Docker or Nix build inputs run it automatically on an AMD64 host.
+Documentation-only changes do not trigger it.
+For a final migration candidate, run the workflow manually to test both native AMD64 and ARM64 hosts:
+
+```bash
+gh workflow run test_docker_images.yml --ref YOUR_BRANCH
+```
+
+The workflow must already exist on the repository's default branch for manual runs.
+Select the branch containing the candidate, and retain the results for its recorded source commit and tree.
+ARM64 builds can take about four hours.
+The workflow does not publish images or upload packages to Cachix.
+
+Both jobs must finish with `Candidate image validation passed.`.
+Their artifacts contain image IDs, build logs, expected Flake outputs, store-path comparisons,
+GC checks, and test logs.
+The `*.missing` files must be empty, and the new `qemu.log` must contain `Successfully booted.`.
+AMD64 boots the x86_64 guest with KVM, while ARM64 uses TCG for the same guest.
+These checks do not cover every guest architecture or replace the existing NixOS compatibility tests.
+
+The extra GC checks run in disposable containers.
+They verify runtime dependencies, while the store-path comparisons verify that downstream images
+retain everything from the prebuilt image, including its final warm-up dependencies.
+They do not establish that the prebuilt package selection itself is complete.
