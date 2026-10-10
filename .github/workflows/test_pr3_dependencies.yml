@@ -53,6 +53,8 @@ jobs:
       - name: Install and execute native clients through Make
         run: |
           set -euo pipefail
+          nix-env -q --out-path > /tmp/pr3-evidence/pre-existing-profile.txt
+          nix-env --switch-profile /tmp/pr3-host-profile
           make -C test/initramfs install_host_pkgs 2>&1 | tee /tmp/pr3-evidence/install-host.log
           nix-env -q --out-path > /tmp/pr3-evidence/installed-host-paths.txt
           {
