@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MPL-2.0
+name: Probe PR2 ARM64 debugger
+on:
+  push:
+    branches: [test/pr2-arm64-gdb-20261010]
+permissions:
+  contents: read
+jobs:
+  gdb:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - name: Check Ubuntu's native debugger against the x86 guest target
+        shell: bash
+        run: |
+          docker run --rm --entrypoint bash ubuntu:24.04 -euc '
+            apt-get update
+            apt-get install -y --no-install-recommends gdb
+            uname -m
+            gdb --batch -ex "show configuration"
+            gdb --batch -ex "set architecture i386:x86-64"
+          '
