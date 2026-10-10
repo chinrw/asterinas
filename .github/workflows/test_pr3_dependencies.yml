@@ -26,6 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/pr3-evidence
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git rev-parse HEAD | tee /tmp/pr3-evidence/head.txt
           uname -m | tee /tmp/pr3-evidence/host.txt
           test "$(uname -m)" = aarch64
