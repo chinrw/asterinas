@@ -50,6 +50,30 @@ jobs:
             echo "Expected nixpkgs $flake_source, found $legacy_source in distro/nixpkgs.nix" >&2
             exit 1
           fi
+      - name: Check benchmark clients use the host architecture
+        run: |
+          nix-instantiate --eval --strict --expr '
+            let
+              packages = args: import ./test/initramfs/nix args;
+              systems = [ "x86_64-linux" "aarch64-linux" ];
+              targets = [ "x86_64" "riscv64" "aarch64" ];
+              checkHost = system:
+                let
+                  native = (packages { inherit system; }).iperf3;
+                in
+                if native.stdenv.hostPlatform.system != system then
+                  throw "Expected native benchmark clients on ${system}"
+                else
+                  builtins.all (target:
+                    if (packages { inherit system target; }).iperf3.drvPath == native.drvPath then
+                      true
+                    else
+                      throw "Guest target ${target} changed benchmark clients on ${system}"
+                  ) targets;
+            in
+            assert builtins.all checkHost systems;
+            true
+          '
       - name: Check flake
         run: nix flake check --no-build --all-systems --no-update-lock-file
 

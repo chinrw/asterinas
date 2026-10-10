@@ -1,0 +1,78 @@
+name: Validate PR3 dependencies in the fork
+on:
+  push:
+    branches: [test/pr3-dependencies-20261010]
+permissions:
+  contents: read
+jobs:
+  arm64-host:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    container:
+      image: asterinas/dev:0.18.1-20260926
+    env:
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+        extra-substituters = https://aster-nixos-release.cachix.org https://aster-nixos-dev.cachix.org
+        extra-trusted-public-keys = aster-nixos-release.cachix.org-1:xB6U/f5ck5vGDJZ04kPp3zGpZ4Nro9X4+TSSMAETVFE= aster-nixos-dev.cachix.org-1:xrCbE2flfliFTQCY/2HeJoT2tCO+5kMTZeLIUH9lnIA=
+        post-build-hook =
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record candidate and check Flake
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pr3-evidence
+          git rev-parse HEAD | tee /tmp/pr3-evidence/head.txt
+          uname -m | tee /tmp/pr3-evidence/host.txt
+          test "$(uname -m)" = aarch64
+          sha256sum flake.lock > /tmp/pr3-evidence/lock.sha256
+          ./tools/nixfmt.sh --check flake.nix test/initramfs/nix tools/dev_env/nix
+          nix flake check --accept-flake-config --no-build --all-systems --no-update-lock-file 2>&1 | tee /tmp/pr3-evidence/flake-check.log
+      - name: Check host dependency selection
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('.github/workflows/test_nix_flake.yml').read_text()
+          s = s.split('      - name: Check benchmark clients use the host architecture\n        run: |\n', 1)[1].split('      - name:', 1)[0]
+          Path('/tmp/pr3-host-regression.sh').write_text('\n'.join(line[10:] for line in s.splitlines()) + '\n')
+          PY
+          bash /tmp/pr3-host-regression.sh | tee /tmp/pr3-evidence/host-regression.log
+          nix-instantiate --eval --strict --json --expr '
+            let p = import ./test/initramfs/nix {};
+            in builtins.listToAttrs (map (name: {
+              inherit name;
+              value = { drv = p.${name}.drvPath; platform = p.${name}.stdenv.hostPlatform.system; };
+            }) [ "apacheHttpd" "iperf3" "libmemcached" "lmbench" "redis" ])
+          ' | tee /tmp/pr3-evidence/host-packages.json
+      - name: Install and execute native clients through Make
+        run: |
+          set -euo pipefail
+          make -C test/initramfs install_host_pkgs 2>&1 | tee /tmp/pr3-evidence/install-host.log
+          nix-env -q --out-path > /tmp/pr3-evidence/installed-host-paths.txt
+          {
+            profile="$HOME/.nix-profile"
+            for tool in ab iperf3 memaslap lat_syscall redis-server redis-cli redis-benchmark; do
+              path=$(readlink -f "$profile/bin/$tool")
+              printf '%s: %s\n' "$tool" "$path"
+              file "$path"
+              readelf -h "$path" | grep -F 'AArch64'
+            done
+            timeout 15 "$profile/bin/ab" -V
+            timeout 15 "$profile/bin/iperf3" --version
+            timeout 15 "$profile/bin/memaslap" --help
+            timeout 20 "$profile/bin/lat_syscall" -N 1 null
+            timeout 15 "$profile/bin/redis-server" --version
+            timeout 15 "$profile/bin/redis-cli" --version
+            echo 'PASS: native ARM64 benchmark clients.'
+          } 2>&1 | tee /tmp/pr3-evidence/host-runtime.log
+          sha256sum --check /tmp/pr3-evidence/lock.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr3-arm64-evidence
+          path: /tmp/pr3-evidence/

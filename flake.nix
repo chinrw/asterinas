@@ -53,11 +53,26 @@
         import ./tools/dev_env/nix/overlay.nix
       );
 
-      devShells = forAllSystems (pkgs: {
-        default = pkgs.callPackage ./tools/dev_env/nix/devshell.nix {
-          typos = nixpkgs-typos.legacyPackages.${pkgs.stdenv.hostPlatform.system}.typos;
-        };
-      });
+      devShells = forAllSystems (
+        pkgs:
+        let
+          hostPkgs = import nixpkgs {
+            system = pkgs.stdenv.hostPlatform.system;
+            config = { };
+            overlays = [ ];
+            crossSystem = null;
+          };
+          benchmarkHostPackages = (import ./test/initramfs/nix/packages.nix).host {
+            inherit hostPkgs;
+          };
+        in
+        {
+          default = pkgs.callPackage ./tools/dev_env/nix/devshell.nix {
+            inherit benchmarkHostPackages;
+            typos = nixpkgs-typos.legacyPackages.${pkgs.stdenv.hostPlatform.system}.typos;
+          };
+        }
+      );
 
       packages = forAllSystems (pkgs: {
         qemu = pkgs.asterinas-qemu;

@@ -24,9 +24,14 @@ Comments in each package definition explain its deviations from nixpkgs.
 The shell sets `GRUB_MKRESCUE` to its packaged GRUB executable
 so that the `iso` and `nixos` targets do not depend on `/usr/bin/grub-mkrescue`.
 
-The host-side clients of the network benchmarks come from
-[`test/initramfs/nix`](../../../test/initramfs/nix/default.nix),
-the definitions that the Docker image installs with `make install_host_pkgs`.
+To change the host-side benchmark clients, edit the `host` function in
+[`packages.nix`](../../../test/initramfs/nix/packages.nix).
+The development shell supplies a native package set from its Flake `nixpkgs` input.
+The Make entry supplies the native build package set from its locked guest dependencies.
+Both callers use empty configuration and overlays.
+
+The `guest` function receives the guest package set and test options from the Make entry.
+Make continues to read test sources from the working tree.
 
 ## Dependency versions
 
@@ -72,8 +77,8 @@ The "Check nixpkgs source" step in the
 [Test Nix flake workflow](../../../.github/workflows/test_nix_flake.yml)
 fails if [`distro/nixpkgs.nix`](../../../distro/nixpkgs.nix) resolves to a different source than the flake.
 
-`--override-input` changes only what the flake sees.
-Make-based builds read `flake.lock` directly,
+`--override-input` changes what the flake sees, including the shell's benchmark clients.
+Nested Make builds still read `flake.lock` through `distro/nixpkgs.nix`,
 so update the lock itself to test a nixpkgs change across all entry points.
 
 The `typos` version is pinned to the one in the OSDK Dockerfile
