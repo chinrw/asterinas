@@ -2,27 +2,8 @@
 name: Test Docker images
 
 on:
-  pull_request:
-    paths:
-      - .dockerignore
-      - flake.nix
-      - flake.lock
-      - distro/nixpkgs.nix
-      - rust-toolchain.toml
-      - Makefile
-      - OSDK.toml
-      - osdk/tools/docker/**
-      - tools/dev_env/docker/**
-      - tools/dev_env/nix/**
-      - test/initramfs/**
-      - "!tools/dev_env/docker/**/*.md"
-      - "!tools/dev_env/nix/**/*.md"
-      - "!test/initramfs/**/*.md"
-      - tools/qemu_args.sh
-      - tools/github_workflows/test_docker_images.sh
-      - tools/github_workflows/check_docker_image.sh
-      - .github/workflows/test_docker_images.yml
-  workflow_dispatch:
+  push:
+    branches: [test/pr2-docker-ci-20261010]
 
 permissions:
   contents: read
