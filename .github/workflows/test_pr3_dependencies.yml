@@ -58,7 +58,7 @@ jobs:
           make -C test/initramfs install_host_pkgs 2>&1 | tee /tmp/pr3-evidence/install-host.log
           nix-env -q --out-path > /tmp/pr3-evidence/installed-host-paths.txt
           {
-            profile="$HOME/.nix-profile"
+            profile=/tmp/pr3-host-profile
             for tool in ab iperf3 memaslap lat_syscall redis-server redis-cli redis-benchmark; do
               path=$(readlink -f "$profile/bin/$tool")
               printf '%s: %s\n' "$tool" "$path"
