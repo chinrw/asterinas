@@ -113,7 +113,7 @@ in
   system.activationScripts.modprobe = lib.mkForce "";
 
   nix.nixPath = [
-    "nixpkgs=${pkgs.path}"
+    "nixpkgs=${builtins.storePath pkgs.path}"
   ]
   ++ builtins.filter (entry: !(lib.hasPrefix "nixpkgs=" entry)) options.nix.nixPath.default
   ++ [ "nixpkgs-overlays=/etc/nixos/overlays" ];
