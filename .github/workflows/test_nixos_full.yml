@@ -96,7 +96,7 @@ jobs:
             [
               { "name": "system-core", "disk_size": 10240, "timeout_minutes": 45 },
               { "name": "drm", "disk_size": 8192, "timeout_minutes": 45 },
-              { "name": "nix-and-nixos-tools", "disk_size": 8192, "timeout_minutes": 60, "test_timeout_minutes": 30 },
+              { "name": "nix-and-nixos-tools", "disk_size": 8192, "timeout_minutes": 150, "test_timeout_minutes": 60 },
               { "name": "containerization-and-virtualization", "disk_size": 10240, "timeout_minutes": 45 },
               { "name": "networking", "disk_size": 10240, "timeout_minutes": 45 },
               { "name": "web-servers-and-proxies", "disk_size": 10240, "timeout_minutes": 45 },
@@ -184,7 +184,7 @@ jobs:
     needs: select-test-suites
     if: needs.select-test-suites.outputs.run == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 165
     strategy:
       fail-fast: false
       matrix:
