@@ -92,7 +92,11 @@ impl Session {
         println!("--> Running: {}", command);
         self.pty_session.send_line(command).map_err(Error::from)?;
         // Read and consume the echoed command line
-        self.pty_session.exp_string(command).map_err(Error::from)?;
+        if let Err(error) = self.pty_session.exp_string(command) {
+            // DIAGNOSTIC: show the raw (escaped) bytes when the echoed command never matches.
+            println!("=== Echo Mismatch (raw) ===\n{:?}\n===========================", error);
+            return Err(Error::from(error));
+        }
 
         if let Err(error) = self
             .pty_session
@@ -138,7 +142,11 @@ impl Session {
         println!("--> Running: {} (expecting: {})", command, expected);
         self.pty_session.send_line(command).map_err(Error::from)?;
         // Read and consume the echoed command line
-        self.pty_session.exp_string(command).map_err(Error::from)?;
+        if let Err(error) = self.pty_session.exp_string(command) {
+            // DIAGNOSTIC: show the raw (escaped) bytes when the echoed command never matches.
+            println!("=== Echo Mismatch (raw) ===\n{:?}\n===========================", error);
+            return Err(Error::from(error));
+        }
 
         match self
             .pty_session
