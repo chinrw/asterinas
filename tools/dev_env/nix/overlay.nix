@@ -37,6 +37,9 @@ final: prev:
   };
   asterinas-ovmf = final.callPackage ./packages/ovmf.nix {
     edk2 = final.pkgsCross.gnu64.edk2;
-    OVMF = final.pkgsCross.gnu64.OVMF;
+    OVMF = final.pkgsCross.gnu64.OVMF.overrideAttrs (old: {
+      # Keep IPv6 PXE disabled to preserve the Docker firmware's feature set.
+      buildFlags = builtins.filter (flag: flag != "-D NETWORK_IP6_ENABLE=TRUE") old.buildFlags;
+    });
   };
 }
