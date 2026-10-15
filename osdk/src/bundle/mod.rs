@@ -10,7 +10,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     os::unix::net::UnixStream,
     process::{self, ExitStatus},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tempfile::NamedTempFile;
 use vm_image::{AsterVmImage, AsterVmImageType};
@@ -35,6 +35,13 @@ use crate::{
 /// Timeout for monitor reads; this is intentionally longer than the daemon
 /// supervision poll interval because monitor responses are socket-based.
 const MONITOR_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// How long to wait for QEMU to create its monitor socket after it is spawned.
+///
+/// QEMU usually creates the socket within tens of milliseconds, but it can take
+/// a second or more on a busy machine, e.g., when several kernels are being
+/// built and booted at the same time.
+const MONITOR_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The osdk bundle artifact that stores as `bundle` directory.
 ///
@@ -353,10 +360,14 @@ impl Bundle {
             let Ok(mut qemu_child) = qemu_cmd.spawn() else {
                 daemon_supervisor.abort(None, Errno::ExecuteCommand);
             };
-            std::thread::sleep(Duration::from_secs(1)); // Wait for QEMU to start
-            let Ok(mut qemu_monitor_stream) = UnixStream::connect(&qemu_monitor_socket_path) else {
-                daemon_supervisor.abort(Some(&mut qemu_child), Errno::ExecuteCommand);
-            };
+            let mut qemu_monitor_stream =
+                match connect_to_qemu_monitor(&qemu_monitor_socket_path, &mut qemu_child) {
+                    Ok(stream) => stream,
+                    Err(reason) => {
+                        error_msg!("Failed to connect to the QEMU monitor: {reason}");
+                        daemon_supervisor.abort(Some(&mut qemu_child), Errno::ExecuteCommand);
+                    }
+                };
             wait_until_guest_kernel_shutdown(
                 config,
                 &qemu_log_path,
@@ -386,6 +397,41 @@ impl Bundle {
             self.post_run_action(config, action, None);
             exit_status
         };
+
+        /// Connects to the QEMU monitor socket at `socket_path`.
+        ///
+        /// QEMU creates the socket while it starts up, so this function keeps
+        /// retrying until a connection succeeds. It gives up if QEMU exits or the
+        /// socket is still not ready after `MONITOR_CONNECT_TIMEOUT`, and the
+        /// returned error says which.
+        fn connect_to_qemu_monitor(
+            socket_path: &Path,
+            qemu_child: &mut process::Child,
+        ) -> Result<UnixStream, String> {
+            let deadline = Instant::now() + MONITOR_CONNECT_TIMEOUT;
+            loop {
+                let connect_err = match UnixStream::connect(socket_path) {
+                    Ok(stream) => return Ok(stream),
+                    Err(err) => err,
+                };
+                match qemu_child.try_wait() {
+                    Ok(None) => {}
+                    Ok(Some(status)) => {
+                        return Err(format!(
+                            "QEMU exited ({status}) before the monitor was ready"
+                        ));
+                    }
+                    Err(err) => return Err(format!("cannot check whether QEMU is running: {err}")),
+                }
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "{} is not ready after {MONITOR_CONNECT_TIMEOUT:?}: {connect_err}",
+                        socket_path.display()
+                    ));
+                }
+                std::thread::sleep(MONITOR_POLL_INTERVAL);
+            }
+        }
 
         fn wait_until_guest_kernel_shutdown(
             config: &Config,
