@@ -4,8 +4,8 @@
 # $out/{OVMF.fd,OVMF_VARS.fd,OVMF_CODE.fd} and $out/microvm/MICROVM.fd.
 #
 # The caller passes pkgsCross.gnu64.{edk2,OVMF}; the overlay pins edk2 before
-# that cross package set is evaluated, so both firmware builds use the Docker
-# image's edk2 tag.
+# that cross package set is evaluated, so both firmware builds use the edk2
+# release pinned in edk2.nix.
 {
   edk2,
   OVMF,

@@ -29,9 +29,9 @@ final: prev:
 
   asterinas-qemu = final.callPackage ./packages/qemu.nix { };
   asterinas-grub = final.callPackage ./packages/grub.nix {
-    # Match the Docker image's x86_64-efi GRUB build. On non-x86_64 hosts
-    # the cross-built tools cannot run locally, so grub.nix pairs these
-    # modules with tools from the native build below.
+    # Boot images target x86_64-efi. On non-x86_64 hosts the cross-built
+    # tools cannot run locally, so grub.nix pairs these modules with tools
+    # from the native build below.
     grub2 = final.pkgsCross.gnu64.grub2.override { efiSupport = true; };
     grub2-host = final.grub2.override { efiSupport = true; };
   };

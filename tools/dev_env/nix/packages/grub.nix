@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: MPL-2.0
 #
-# GRUB from the Asterinas fork used by the Docker image. Boot images always
-# target x86_64-efi, so the module tree comes from an x86_64 build (the
-# caller passes grub2 from pkgsCross.gnu64). On x86_64 hosts that build also
-# provides the userland tools. On other hosts the cross-built tools cannot
-# run locally, so they come from a native build of the same fork instead and
-# grub-mkrescue is pointed at the x86_64-efi modules explicitly.
+# GRUB from the Asterinas fork, used by the development shell and the OSDK
+# image. Ubuntu's GRUB is patched to force the deprecated EFI handover boot,
+# so testing general EFI boot needs this build. See
+# https://github.com/asterinas/asterinas/pull/1710 for the fork.
+#
+# Boot images always target x86_64-efi, so the module tree comes from an
+# x86_64 build (the caller passes grub2 from pkgsCross.gnu64). On x86_64
+# hosts that build also provides the userland tools. On other hosts the
+# cross-built tools cannot run locally, so they come from a native build of
+# the same fork instead and grub-mkrescue is pointed at the x86_64-efi
+# modules explicitly.
 {
   stdenv,
   grub2,

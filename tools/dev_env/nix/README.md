@@ -34,12 +34,11 @@ The Rust toolchain is read from [`rust-toolchain.toml`](../../../rust-toolchain.
 and the shell adds `rust-analyzer` from the same nightly.
 Never pin a second Rust version in the Nix expressions.
 
-The GRUB version and the edk2 release used to build OVMF follow the
-[OSDK Dockerfile](../../../osdk/tools/docker/Dockerfile).
-When you bump one of these dependencies in that Dockerfile,
-bump its Nix counterpart in the same change.
-Nothing in CI compares the two yet, so a Dockerfile-only bump passes unnoticed.
-Until such a check exists, verify the pins by hand.
+To update GRUB or the edk2 release used to build OVMF,
+change [`packages/grub.nix`](packages/grub.nix) or [`packages/edk2.nix`](packages/edk2.nix),
+then run `nix build .#grub .#ovmf`.
+The development shell and the [OSDK image](../../../osdk/tools/docker/Dockerfile) both use these definitions,
+so rebuild the OSDK image and the images built on it.
 If you do not have Nix installed,
 update the version or revision, set the `hash` to an empty string,
 and let the [Test Nix flake workflow](../../../.github/workflows/test_nix_flake.yml) run.

@@ -11,7 +11,5 @@ The Docker images build on `asterinas/osdk-dev`.
 That image also serves other OSDK-based kernels,
 so its configuration stays in [osdk/tools/docker](../../osdk/tools/docker/README.md).
 
-The Docker images build QEMU and the vDSO files from the Nix definitions
+The Docker images build QEMU, GRUB, OVMF, and the vDSO files from the Nix definitions
 and read nixpkgs from `flake.lock`, so those versions have one source.
-GRUB and edk2 are still pinned in both the OSDK Dockerfile and the Nix packages.
-When you bump either of them in the Dockerfile, bump the matching Nix package as well.

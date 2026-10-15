@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 #
-# Vendored from nixpkgs pkgs/by-name/ed/edk2/package.nix (MIT-licensed)
-# and pinned to the edk2 tag used by osdk/tools/docker/Dockerfile.
+# Vendored from nixpkgs pkgs/by-name/ed/edk2/package.nix (MIT-licensed).
+# The development shell and the OSDK image build OVMF from this edk2 release.
 #
 # Local changes from nixpkgs:
 # - use edk2-stable202508 and its matching source hash;

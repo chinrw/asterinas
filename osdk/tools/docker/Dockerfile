@@ -17,108 +17,6 @@ RUN apt update && apt-get install -y --no-install-recommends \
     python3-venv \
     wget
 
-#= Install Cross Compilation Tools ============================================
-
-FROM build-base AS build-cross-tools
-
-ARG TARGETARCH
-
-# If we are on ARM64, we need to cross compile to x86_64 for x86 development.
-RUN if [ "${TARGETARCH}" = "arm64" ]; then \
-        apt-get install -y --no-install-recommends \
-            gcc-multilib-x86-64-linux-gnu; \
-    fi
-
-#= Build OVMF =================================================================
-
-FROM build-cross-tools AS build-ovmf
-
-RUN apt update && apt-get install -y --no-install-recommends \
-    bison \
-    flex \
-    iasl \
-    nasm \
-    uuid-dev
-RUN apt clean && rm -rf /var/lib/apt/lists/*
-
-FROM build-ovmf AS ovmf
-
-ARG TARGETARCH
-
-# Fetch and build OVMF from the EDK2 official source
-WORKDIR /root
-RUN git clone --depth 1 --branch edk2-stable202508 --recurse-submodules --shallow-submodules https://github.com/tianocore/edk2.git
-WORKDIR /root/edk2
-RUN if [ "${TARGETARCH}" = "arm64" ]; then \
-        export GCC5_BIN=x86_64-linux-gnu-; \
-    fi \
-    && /bin/bash -c "source ./edksetup.sh \
-    && make -C BaseTools \
-    && build -a X64 -t GCC5 -b RELEASE -p OvmfPkg/OvmfPkgX64.dsc \
-    && build -a X64 -t GCC5 -b RELEASE -p OvmfPkg/Microvm/MicrovmX64.dsc"
-
-#= Build GRUB =================================================================
-
-FROM build-cross-tools AS build-grub
-
-RUN apt update && apt-get install -y --no-install-recommends \
-    autoconf \
-    automake \
-    autopoint \
-    bison \
-    flex \
-    gawk \
-    gettext \
-    libfreetype6-dev \
-    pkg-config
-RUN apt clean && rm -rf /var/lib/apt/lists/*
-
-FROM build-grub AS grub
-
-ARG TARGETARCH
-
-# Fetch and install GRUB from the GNU official source
-#
-# We have installed grub-efi-amd64-bin for the unicode.pf2 file, which is not
-# included in the GRUB release. The Ubuntu release modifies the GRUB source
-# code and enforces EFI handover boot, which is deprecated. To test general EFI
-# boot we have to build GRUB from source.
-WORKDIR /root
-# See also: https://github.com/asterinas/asterinas/pull/1710
-RUN git clone --single-branch -b asterinas/2.12 https://github.com/asterinas/grub.git \
-    && git -C grub checkout 0633bc8
-# Fetch and install the Unicode font data for grub.
-RUN wget -O unifont.pcf.gz https://ftp.gnu.org/gnu/unifont/unifont-15.1.04/unifont-15.1.04.pcf.gz \
-    && mkdir -pv /usr/share/fonts/unifont \
-    && gunzip -c unifont.pcf.gz > /usr/share/fonts/unifont/unifont.pcf \
-    && rm unifont.pcf.gz
-WORKDIR /root/grub
-
-# Use GitHub mirror for `gnulib` to improve connection stability because
-# `git.savannah.gnu.org` repository may have unstable connections.
-RUN git config --global url."https://github.com/coreutils/gnulib".insteadOf "https://git.savannah.gnu.org/git/gnulib"
-
-RUN if [ "${TARGETARCH}" = "arm64" ]; then \
-        export TARGET_CC=x86_64-linux-gnu-gcc; \
-        export TARGET_OBJCOPY=x86_64-linux-gnu-objcopy; \
-        export TARGET_STRIP=x86_64-linux-gnu-strip; \
-        export TARGET_NM=x86_64-linux-gnu-nm; \
-        export TARGET_RANLIB=x86_64-linux-gnu-ranlib; \
-    fi \
-    && echo depends bli part_gpt > grub-core/extra_deps.lst \
-    && ./bootstrap \
-    && ./configure \
-        --target=x86_64 \
-        --disable-efiemu \
-        --with-platform=efi \
-        --enable-grub-mkfont \
-        --prefix=/usr/local/grub \
-        --disable-werror \
-    && make -j \
-    && make install
-WORKDIR /root
-RUN rm -rf /root/grub
-
 #= The final stages to produce the OSDK development image ====================
 
 FROM build-base AS osdk-final
@@ -155,8 +53,8 @@ RUN apt update \
     clang               `# Used by the build script of minicov` \
     curl \
     gdb                 `# A part of OSDK debug support` \
-    grub-efi-amd64 \
-    grub2-common \
+    grub-efi-amd64      `# used for linux-efi-handover64 ISOs` \
+    grub2-common        `# used for linux-efi-handover64 ISOs` \
     libsqlite3-dev      `# used by klint` \
     libssl-dev          `# used by cargo-udeps` \
     mtools              `# used by grub-mkrescue` \
@@ -202,27 +100,28 @@ RUN cargo install klint --git https://github.com/Rust-for-Linux/klint --rev d2a4
 
 COPY flake.nix flake.lock /tmp/asterinas/
 COPY tools/dev_env/nix /tmp/asterinas/tools/dev_env/nix
-# The prebuilt image clears automatic roots. Keep QEMU under a named root
-# so downstream garbage collection retains it and its runtime dependencies.
-# Collect garbage in the same layer, so the nixpkgs source and any QEMU build
+# The prebuilt image clears automatic roots. Keep QEMU and GRUB under named
+# roots so downstream garbage collection retains them and their runtime
+# dependencies. OSDK opens `OVMF_VARS.fd` as writable pflash, so copy the
+# firmware to its existing path instead of linking to the read-only store.
+# Collect garbage in the same layer, so the nixpkgs source and any build
 # inputs do not stay in the image.
-RUN nix --extra-experimental-features 'nix-command flakes' \
-    build --accept-flake-config --no-update-lock-file \
-    --out-link /nix/var/nix/gcroots/qemu path:/tmp/asterinas#qemu \
-    && ln -s /nix/var/nix/gcroots/qemu /usr/local/qemu \
-    && rm -rf /tmp/asterinas \
-    && nix-store --gc
-ENV PATH="/usr/local/qemu/bin:${PATH}"
-
-# Install OVMF built from the previous stages
-COPY --from=ovmf /root/edk2/Build/OvmfX64/RELEASE_GCC5/FV/ /root/ovmf/release
-COPY --from=ovmf /root/edk2/Build/MicrovmX64/RELEASE_GCC5/FV/ /root/ovmf/release/microvm/
-
-# Install GRUB built from the previous stages
-COPY --from=grub /usr/local/grub /usr/local/grub
-ENV PATH="/usr/local/grub/bin:${PATH}"
-# Make a symbolic link for `unicode.pf2` from the APT package
-RUN ln -sf /usr/share/grub/unicode.pf2 /usr/local/grub/share/grub/unicode.pf2
+RUN set -e; \
+    for package in qemu grub; do \
+        nix --extra-experimental-features 'nix-command flakes' \
+            build --accept-flake-config --no-update-lock-file \
+            --out-link /nix/var/nix/gcroots/$package path:/tmp/asterinas#$package; \
+    done; \
+    nix --extra-experimental-features 'nix-command flakes' \
+        build --accept-flake-config --no-update-lock-file \
+        --out-link /tmp/ovmf path:/tmp/asterinas#ovmf; \
+    mkdir -p /root/ovmf/release; \
+    cp -R --no-preserve=mode /tmp/ovmf/. /root/ovmf/release; \
+    ln -s /nix/var/nix/gcroots/qemu /usr/local/qemu; \
+    ln -s /nix/var/nix/gcroots/grub /usr/local/grub; \
+    rm -rf /tmp/asterinas /tmp/ovmf; \
+    nix-store --gc
+ENV PATH="/usr/local/grub/bin:/usr/local/qemu/bin:${PATH}"
 
 # Download and install Firecracker VMM
 RUN ARCH=$(case ${TARGETARCH} in \
