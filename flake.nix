@@ -55,6 +55,12 @@
 
       devShells = forAllSystems (pkgs: {
         default = pkgs.callPackage ./tools/dev_env/nix/devshell.nix {
+          # `host-packages.nix` explains why these clients use nixpkgs without the overlay.
+          benchmarkHostClients = builtins.attrValues (
+            import ./test/initramfs/nix/host-packages.nix {
+              pkgs = nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+            }
+          );
           typos = nixpkgs-typos.legacyPackages.${pkgs.stdenv.hostPlatform.system}.typos;
         };
       });

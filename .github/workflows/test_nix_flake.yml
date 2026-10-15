@@ -55,8 +55,13 @@ jobs:
       - name: Check benchmark clients
         run: |
           for system in x86_64-linux aarch64-linux; do
-            nix-instantiate --eval --strict --argstr system "$system" \
-              test/initramfs/nix/check-host-clients.nix > /dev/null
+            nix-instantiate --eval --strict --json --argstr system "$system" \
+              test/initramfs/nix/check-host-clients.nix > make.json
+            nix eval --json --no-update-lock-file \
+              ".#devShells.$system.default.nativeBuildInputs" \
+              --apply 'map (p: p.drvPath)' > shell.json
+            # The shell must contain the same clients that Make installs.
+            jq -e --slurpfile shell shell.json 'all(.[]; IN($shell[0][]))' make.json
           done
 
   dev-shell-smoke:

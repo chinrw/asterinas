@@ -25,8 +25,9 @@ The shell sets `GRUB_MKRESCUE` to its packaged GRUB executable
 so that the `iso` and `nixos` targets do not depend on `/usr/bin/grub-mkrescue`.
 
 The host-side clients of the network benchmarks come from
-[`test/initramfs/nix`](../../../test/initramfs/nix/default.nix),
+[`test/initramfs/nix/host-packages.nix`](../../../test/initramfs/nix/host-packages.nix),
 the definitions that the Docker image installs with `make install_host_pkgs`.
+That file's header says what keeps the shell's clients identical to the image's.
 
 ## Dependency versions
 
