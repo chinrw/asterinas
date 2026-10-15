@@ -29,6 +29,8 @@ let
     overlays = [ ];
     inherit system crossSystem;
   };
+  # The benchmark clients run on the build machine, whatever the guest target is.
+  buildMachinePkgs = pkgs.pkgsBuildBuild;
 in
 rec {
   # Packages needed by initramfs
@@ -56,21 +58,17 @@ rec {
   rootfs-image = pkgs.callPackage ./rootfs-image.nix { inherit initramfs; };
 
   # Packages needed by host
-  apacheHttpd = pkgs.apacheHttpd;
-  iperf3 = pkgs.iperf3;
-  libmemcached = pkgs.libmemcached.overrideAttrs (_: {
+  apacheHttpd = buildMachinePkgs.apacheHttpd;
+  iperf3 = buildMachinePkgs.iperf3;
+  libmemcached = buildMachinePkgs.libmemcached.overrideAttrs (_: {
     configureFlags = [ "--enable-memaslap" ];
     LDFLAGS = "-lpthread";
     CPPFLAGS = "-fcommon -fpermissive";
   });
-  lmbench = pkgs.callPackage ./benchmark/lmbench.nix { };
+  lmbench = buildMachinePkgs.callPackage ./benchmark/lmbench.nix { };
   redis =
-    (pkgs.redis.overrideAttrs (old: {
+    (buildMachinePkgs.redis.overrideAttrs (_: {
       doCheck = false;
-      makeFlags = (old.makeFlags or [ ]) ++ [
-        "CC=${pkgs.stdenv.cc.targetPrefix}cc"
-        "LD=${pkgs.stdenv.cc.targetPrefix}cc"
-      ];
     })).override
       { withSystemd = false; };
 }
