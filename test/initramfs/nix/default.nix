@@ -29,8 +29,6 @@ let
     overlays = [ ];
     inherit system crossSystem;
   };
-  # The benchmark clients run on the build machine, whatever the guest target is.
-  buildMachinePkgs = pkgs.pkgsBuildBuild;
 in
 rec {
   # Packages needed by initramfs
@@ -56,19 +54,6 @@ rec {
     compressed = initramfsCompressed;
   };
   rootfs-image = pkgs.callPackage ./rootfs-image.nix { inherit initramfs; };
-
-  # Packages needed by host
-  apacheHttpd = buildMachinePkgs.apacheHttpd;
-  iperf3 = buildMachinePkgs.iperf3;
-  libmemcached = buildMachinePkgs.libmemcached.overrideAttrs (_: {
-    configureFlags = [ "--enable-memaslap" ];
-    LDFLAGS = "-lpthread";
-    CPPFLAGS = "-fcommon -fpermissive";
-  });
-  lmbench = buildMachinePkgs.callPackage ./benchmark/lmbench.nix { };
-  redis =
-    (buildMachinePkgs.redis.overrideAttrs (_: {
-      doCheck = false;
-    })).override
-      { withSystemd = false; };
 }
+# Packages needed by host, built for the build machine whatever the guest target is
+// import ./host-packages.nix { pkgs = pkgs.pkgsBuildBuild; }
