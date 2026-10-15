@@ -4,15 +4,9 @@
   mkShell,
   asterinas-rust-toolchain,
   asterinas-vdso,
-  # Tools osdk/tools/docker/Dockerfile installs with `cargo install`; nixpkgs
-  # provides them here, so versions may lag the Docker pins.
-  cargo-binutils,
+  dev-tools,
   cargo-expand,
-  cargo-udeps,
   lychee,
-  mdbook,
-  mdbook-mermaid,
-  typos,
   clang,
   clang-tools,
   git,
@@ -48,13 +42,9 @@
 
 let
   cargoTools = [
-    cargo-binutils
+    dev-tools
     cargo-expand
-    cargo-udeps
     lychee
-    mdbook
-    mdbook-mermaid
-    typos
   ];
   hostCommon = [
     clang

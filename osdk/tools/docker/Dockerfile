@@ -56,9 +56,9 @@ RUN apt update \
     grub-efi-amd64      `# used for linux-efi-handover64 ISOs` \
     grub2-common        `# used for linux-efi-handover64 ISOs` \
     libsqlite3-dev      `# used by klint` \
-    libssl-dev          `# used by cargo-udeps` \
+    libssl-dev \
     mtools              `# used by grub-mkrescue` \
-    pkg-config          `# used by cargo-udeps` \
+    pkg-config \
     xorriso \
     && apt clean \
     && rm -rf /var/lib/apt/lists/*
@@ -87,27 +87,23 @@ RUN mkdir -p /github/home \
 
 # Install cargo tools
 RUN cargo install --locked \
-    cargo-binutils \
     cargo-expand@1.0.122 \
-    cargo-udeps@0.1.61 \
-    lychee@0.24.2 \
-    mdbook-mermaid@0.17.0 \
-    mdbook@0.5.2 \
-    typos-cli@1.39.0
+    lychee@0.24.2
 
 # Install klint. Pin the Klint commit compatible with the Asterinas toolchain.
 RUN cargo install klint --git https://github.com/Rust-for-Linux/klint --rev d2a4d60
 
 COPY flake.nix flake.lock /tmp/asterinas/
 COPY tools/dev_env/nix /tmp/asterinas/tools/dev_env/nix
-# The prebuilt image clears automatic roots. Keep QEMU and GRUB under named
-# roots so downstream garbage collection retains them and their runtime
-# dependencies. OSDK opens `OVMF_VARS.fd` as writable pflash, so copy the
-# firmware to its existing path instead of linking to the read-only store.
+# The prebuilt image clears automatic roots. Keep QEMU, GRUB, and the shared
+# development tools under named roots so downstream garbage collection
+# retains them and their runtime dependencies. OSDK opens `OVMF_VARS.fd` as
+# writable pflash, so copy the firmware to its existing path instead of
+# linking to the read-only store.
 # Collect garbage in the same layer, so the nixpkgs source and any build
 # inputs do not stay in the image.
 RUN set -e; \
-    for package in qemu grub; do \
+    for package in qemu grub dev-tools; do \
         nix --extra-experimental-features 'nix-command flakes' \
             build --accept-flake-config --no-update-lock-file \
             --out-link /nix/var/nix/gcroots/$package path:/tmp/asterinas#$package; \
@@ -121,7 +117,7 @@ RUN set -e; \
     ln -s /nix/var/nix/gcroots/grub /usr/local/grub; \
     rm -rf /tmp/asterinas /tmp/ovmf; \
     nix-store --gc
-ENV PATH="/usr/local/grub/bin:/usr/local/qemu/bin:${PATH}"
+ENV PATH="/nix/var/nix/gcroots/dev-tools/bin:/usr/local/grub/bin:/usr/local/qemu/bin:${PATH}"
 
 # Download and install Firecracker VMM
 RUN ARCH=$(case ${TARGETARCH} in \

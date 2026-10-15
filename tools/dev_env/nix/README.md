@@ -7,13 +7,15 @@ If you only want to use the shell, read
 ## File organization
 
 - The root [`flake.nix`](../../../flake.nix) declares the inputs
-  and exports the development shells, boot-stack packages, and vDSO files
+  and exports the development shells, boot-stack packages, vDSO files,
+  and the development tools shared with the OSDK image
   for `x86_64-linux` and `aarch64-linux`.
 - [`overlay.nix`](overlay.nix) assembles the Rust toolchain, the vDSO source,
   and the project-specific packages into a nixpkgs overlay.
-- [`devshell.nix`](devshell.nix) selects the host tools
+- [`devshell.nix`](devshell.nix) adds the remaining host tools to that shared set
   and sets the environment variables of the shell.
-- [`packages/`](packages/) contains the definitions of QEMU, GRUB, and the OVMF firmware.
+- [`packages/`](packages/) contains the definitions of QEMU, GRUB, the OVMF firmware,
+  and the shared development tools.
 - The test suites are packaged under [`test/initramfs/nix`](../../../test/initramfs/nix), not here.
   The shell only provides the `nix` command that the existing Make targets use to build them.
 
@@ -75,21 +77,27 @@ fails if [`distro/nixpkgs.nix`](../../../distro/nixpkgs.nix) resolves to a diffe
 Make-based builds read `flake.lock` directly,
 so update the lock itself to test a nixpkgs change across all entry points.
 
-The `typos` version is pinned to the one in the OSDK Dockerfile
-through a separate nixpkgs input, because that Dockerfile checks the spelling with a fixed release.
-The other tools that the Dockerfile installs with `cargo install`
-come from the main nixpkgs input and may be older or newer than the Docker versions.
+The OSDK image and development shell share [`packages/dev-tools.nix`](packages/dev-tools.nix)
+for `cargo-binutils`, `cargo-udeps`, `mdbook`, `mdbook-mermaid`, and `typos`.
+After changing that list or updating the nixpkgs lock,
+rebuild the OSDK image and the images built on it.
+`typos` comes from a separate nixpkgs input at 1.39.0,
+because typos 1.46 reports `controllen` as a misspelling and `make check` would fail.
+`cargo-expand` and `lychee` are not in that set yet.
+The OSDK image installs newer releases with `cargo install` than nixpkgs provides,
+so moving them would downgrade the image.
 The shell omits klint, because no build or check target invokes it.
 
 ## Docker builds
 
-The OSDK image installs Nix and builds `.#qemu`.
+The OSDK image installs Nix and builds `.#qemu` and `.#dev-tools`.
 Downstream images inherit that Nix installation and store.
 The QEMU and vDSO builds accept the flake's Cachix configuration,
 so Nix can download matching cached outputs instead of rebuilding them.
 
-QEMU has a named garbage-collection root under `/nix/var/nix/gcroots/qemu`.
-Preserve it when changing the prebuilt image's cleanup steps,
+QEMU and the shared development tools have named garbage-collection roots
+under `/nix/var/nix/gcroots/qemu` and `/nix/var/nix/gcroots/dev-tools`.
+Preserve both when changing the prebuilt image's cleanup steps,
 which remove automatic roots before building the test packages.
 Do not add garbage collection after the final `initramfs_pkgs` build.
 That step keeps its build dependencies, such as `stdenvNoCC`, in the store for CI.
