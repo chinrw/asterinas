@@ -15,6 +15,13 @@
 }:
 
 let
+  # nixpkgs' OVMF passes `-D NETWORK_IP6_ENABLE=TRUE`, while edk2's
+  # `OvmfPkgX64.dsc` leaves IPv6 network boot off. edk2 keeps the last `-D`
+  # value given for a macro, so append `FALSE` to restore the edk2 default.
+  ovmf = OVMF.overrideAttrs (old: {
+    buildFlags = old.buildFlags ++ [ "-D NETWORK_IP6_ENABLE=FALSE" ];
+  });
+
   # The standard OVMF package does not include MICROVM.fd, so build the
   # MicrovmX64 platform separately.
   #
@@ -36,9 +43,9 @@ let
 in
 runCommand "asterinas-ovmf" { } ''
   mkdir -p $out
-  cp ${OVMF.fd}/FV/OVMF.fd      $out/OVMF.fd
-  cp ${OVMF.fd}/FV/OVMF_VARS.fd $out/OVMF_VARS.fd
-  cp ${OVMF.fd}/FV/OVMF_CODE.fd $out/OVMF_CODE.fd
+  cp ${ovmf.fd}/FV/OVMF.fd      $out/OVMF.fd
+  cp ${ovmf.fd}/FV/OVMF_VARS.fd $out/OVMF_VARS.fd
+  cp ${ovmf.fd}/FV/OVMF_CODE.fd $out/OVMF_CODE.fd
   mkdir -p $out/microvm
   cp ${microvm}/FV/MICROVM.fd $out/microvm/MICROVM.fd
 ''
