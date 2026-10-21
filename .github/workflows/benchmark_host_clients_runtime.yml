@@ -1,0 +1,72 @@
+name: Validate benchmark host clients at 7615ba74b
+
+on:
+  push:
+    branches:
+      - ci/benchmark-host-clients-runtime-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  native-arm-host-clients:
+    if: github.repository == 'chinrw/asterinas' && github.event.repository.private == false
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - name: Check out validation harness
+        uses: actions/checkout@v4
+        with:
+          path: validation
+          persist-credentials: false
+      - name: Check out exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: 7615ba74baaa03b9c04b2921d44a7b81977d5606
+          fetch-depth: 0
+          path: candidate
+          persist-credentials: false
+      - name: Free disk space for the development image
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Check native ARM host and fetch ARM development image
+        env:
+          VALIDATION_IMAGE: asterinas/dev@sha256:6d08ac6a5c1d0f63a4595ed1578ca19a6ebe5ac312a0fd3163b907b41a3b6ad6
+        run: |
+          test "$(uname -m)" = aarch64
+          docker pull --platform linux/arm64 "$VALIDATION_IMAGE"
+      - name: Install and exercise candidate clients before and after GC
+        env:
+          VALIDATION_PLATFORM: linux/arm64
+          VALIDATION_EXPECTED_ARCH: aarch64
+          VALIDATION_IMAGE: asterinas/dev@sha256:6d08ac6a5c1d0f63a4595ed1578ca19a6ebe5ac312a0fd3163b907b41a3b6ad6
+        run: |
+          bash validation/tools/ci/benchmark-host-clients-runtime/run-container.sh \
+            "$GITHUB_WORKSPACE/candidate" "$GITHUB_WORKSPACE/results-arm64"
+      - name: Record runtime evidence in the job log
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('results-arm64')
+          names = [
+              'source-commit.txt', 'source-base.txt', 'host-uname.txt',
+              'container-uname.txt', 'image-profile-before.txt',
+              'test-profile-before.txt', 'test-profile-after-install.txt',
+              'test-profile-after-gc.txt', 'selected-clients.json',
+              'harness-sha256.txt', 'install-exit-code.txt',
+              'before-gc-exit-code.txt', 'gc-exit-code.txt',
+              'after-gc-exit-code.txt', 'container-exit-code.txt',
+              'driver-exit-code.txt', 'source-unchanged.log', 'cleanup.log',
+              'before-gc/results.json', 'before-gc/binary-paths.json',
+              'before-gc/commands.json', 'after-gc/results.json',
+              'after-gc/binary-paths.json', 'after-gc/commands.json',
+          ]
+          for name in names:
+              path = root / name
+              print(f'::group::Evidence: {name}', flush=True)
+              print(path.read_text() if path.exists() else 'Not produced.', flush=True)
+              print('::endgroup::', flush=True)
+          PY
