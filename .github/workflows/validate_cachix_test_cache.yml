@@ -13,9 +13,13 @@ jobs:
     if: github.repository == 'chinrw/asterinas'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     env:
       TEST_CACHE: asterina-test
       TEST_CACHE_KEY: asterina-test.cachix.org-1:LUjQ7OX2Ur+VC605+JQbI1wGyYTHN90RdmICRwc4K8M=
+      CONSUMER_IMAGE: nixos/nix@sha256:ff480dbb23511aa1c10710aa068ceea5b93fed9bfce5f5379f3a6b07282cbc7b
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
@@ -73,10 +77,12 @@ jobs:
 
       - name: Download into an independent container store
         run: |
-          docker pull nixos/nix:latest
-          docker image inspect nixos/nix:latest > cachix-roundtrip/consumer-image.json
+          docker pull "$CONSUMER_IMAGE"
+          docker image inspect "$CONSUMER_IMAGE" > cachix-roundtrip/consumer-image.json
           cat > "$RUNNER_TEMP/cold-download.sh" <<'SCRIPT'
           set -euo pipefail
+          # This image's PATH uses a numbered profile link that GC removes.
+          export PATH="$(readlink -f /root/.nix-profile)/bin:$PATH"
           expected="$(cat /evidence/output.path)"
           nix --extra-experimental-features nix-command path-info --all > /evidence/initial-store.txt
           if grep -Fxq "$expected" /evidence/initial-store.txt; then
@@ -95,25 +101,25 @@ jobs:
             --out-link /tmp/schbench \
             > /evidence/consumer.path 2> /evidence/download.log
           echo "$(( $(date +%s) - start ))" > /evidence/download-seconds.txt
-          cmp /evidence/output.path /evidence/consumer.path
+          test "$(cat /evidence/output.path)" = "$(cat /evidence/consumer.path)"
           grep -F "copying path '$expected' from 'https://$TEST_CACHE.cachix.org'" /evidence/download.log
           nix-store --query --hash "$expected" > /evidence/consumer.hash
-          cmp /evidence/producer.hash /evidence/consumer.hash
+          test "$(cat /evidence/producer.hash)" = "$(cat /evidence/consumer.hash)"
           nix-store --query --requisites "$expected" | sort > /evidence/consumer.closure
-          cmp /evidence/producer.closure /evidence/consumer.closure
+          test "$(cat /evidence/producer.closure)" = "$(cat /evidence/consumer.closure)"
           nix-collect-garbage -d > /evidence/gc.log 2>&1
           nix-store --query --requisites "$expected" | sort > /evidence/after-gc.closure
-          cmp /evidence/consumer.closure /evidence/after-gc.closure
+          test "$(cat /evidence/consumer.closure)" = "$(cat /evidence/after-gc.closure)"
           nix-store --verify-path "$expected" > /evidence/verify.log 2>&1
           /tmp/schbench/bin/schbench -m 1 -t 1 -r 1 > /evidence/runtime.log 2>&1
           echo passed > /evidence/result.txt
           SCRIPT
-          docker run --rm --entrypoint /bin/bash \
+          docker run --rm --entrypoint bash \
             -e TEST_CACHE -e TEST_CACHE_KEY \
             -v "$GITHUB_WORKSPACE:/source:ro" \
             -v "$GITHUB_WORKSPACE/cachix-roundtrip:/evidence" \
             -v "$RUNNER_TEMP/cold-download.sh:/cold-download.sh:ro" \
-            nixos/nix:latest /cold-download.sh
+            "$CONSUMER_IMAGE" /cold-download.sh
 
       - uses: actions/upload-artifact@v4
         if: always()
