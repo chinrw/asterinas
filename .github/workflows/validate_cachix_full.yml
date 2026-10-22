@@ -1,0 +1,97 @@
+name: Compile and measure populated Cachix consumers
+
+on:
+  push:
+    branches:
+      - validate/cachix-full-20261022
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    if: github.repository == 'chinrw/asterinas'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify full logs and fresh consumer stages
+        run: python3 tools/github_workflows/cachix-full-validation/preflight.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preflight-${{ matrix.runner }}
+          path: preflight/
+
+  publish:
+    needs: preflight
+    if: github.repository == 'chinrw/asterinas'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: x86_64
+          - runner: ubuntu-24.04-arm
+            architecture: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.35.3/install
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 4
+      - uses: cachix/cachix-action@v17
+        with:
+          name: asterina-test
+          extraPullNames: aster-nixos-dev,aster-nixos-release
+          skipPush: true
+      - name: Compile and upload the actual Make outputs
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN_FOR_TEST_CACHE }}
+        run: python3 tools/github_workflows/cachix-full-validation/publish.py published
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: published-${{ matrix.architecture }}
+          path: published/
+
+  consumers:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        kind: [timing, profile]
+        include:
+          - runner: ubuntu-24.04
+            architecture: x86_64
+          - runner: ubuntu-24.04-arm
+            architecture: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: published-${{ matrix.architecture }}
+          path: published
+      - name: Run cold consumers with the existing GC boundaries
+        run: |
+          python3 tools/github_workflows/cachix-full-validation/benchmark.py \
+            '${{ matrix.kind }}' --published published --output full-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: consumers-${{ matrix.architecture }}-${{ matrix.kind }}
+          path: |
+            full-results/
+            !full-results/context/**
