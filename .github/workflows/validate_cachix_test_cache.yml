@@ -1,0 +1,108 @@
+name: Verify personal Cachix uploads and cold downloads
+
+on:
+  push:
+    branches:
+      - validate/cachix-test-cache-20261022
+
+permissions:
+  contents: read
+
+jobs:
+  roundtrip:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TEST_CACHE: asterina-test
+      TEST_CACHE_KEY: asterina-test.cachix.org-1:LUjQ7OX2Ur+VC605+JQbI1wGyYTHN90RdmICRwc4K8M=
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: asterina-test
+          skipPush: true
+
+      - name: Build a package consumed by the prebuilt image
+        run: |
+          mkdir -p cachix-roundtrip
+          nix-build test/initramfs/nix/default.nix \
+            --argstr target x86_64 \
+            --arg enableBenchmarkTest true \
+            --arg enableConformanceTest true \
+            -A benchmark.schbench \
+            --out-link "$RUNNER_TEMP/schbench" \
+            > cachix-roundtrip/output.path 2> cachix-roundtrip/build.log
+          output="$(cat cachix-roundtrip/output.path)"
+          nix-store --query --hash "$output" > cachix-roundtrip/producer.hash
+          nix-store --query --requisites "$output" | sort > cachix-roundtrip/producer.closure
+          nix --extra-experimental-features nix-command path-info --json --recursive "$output" \
+            > cachix-roundtrip/producer-path-info.json
+          curl --silent --show-error --output cachix-roundtrip/before.narinfo \
+            --write-out '%{http_code}\n' \
+            "https://$TEST_CACHE.cachix.org/$(basename "$output" | cut -d- -f1).narinfo" \
+            > cachix-roundtrip/before.status
+
+      - name: Upload the runtime closure to the personal cache
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN_FOR_TEST_CACHE }}
+        run: |
+          test -n "$CACHIX_AUTH_TOKEN"
+          cachix push "$TEST_CACHE" < cachix-roundtrip/output.path 2>&1 \
+            | tee cachix-roundtrip/upload.log
+          while IFS= read -r path; do
+            hash="$(basename "$path" | cut -d- -f1)"
+            curl --fail --silent --show-error "https://$TEST_CACHE.cachix.org/$hash.narinfo" \
+              > "cachix-roundtrip/$hash.narinfo"
+          done < cachix-roundtrip/producer.closure
+
+      - name: Download into an independent container store
+        run: |
+          docker pull nixos/nix:latest
+          docker image inspect nixos/nix:latest > cachix-roundtrip/consumer-image.json
+          cat > "$RUNNER_TEMP/cold-download.sh" <<'SCRIPT'
+          set -euo pipefail
+          expected="$(cat /evidence/output.path)"
+          nix --extra-experimental-features nix-command path-info --all > /evidence/initial-store.txt
+          if grep -Fxq "$expected" /evidence/initial-store.txt; then
+            echo "The consumer already contains the output" >&2
+            exit 1
+          fi
+          start="$(date +%s)"
+          nix-build /source/test/initramfs/nix/default.nix \
+            --argstr target x86_64 \
+            --arg enableBenchmarkTest true \
+            --arg enableConformanceTest true \
+            --option substituters "https://$TEST_CACHE.cachix.org" \
+            --option trusted-public-keys "$TEST_CACHE_KEY" \
+            --option require-sigs true \
+            -A benchmark.schbench \
+            --out-link /tmp/schbench \
+            > /evidence/consumer.path 2> /evidence/download.log
+          echo "$(( $(date +%s) - start ))" > /evidence/download-seconds.txt
+          cmp /evidence/output.path /evidence/consumer.path
+          grep -F "copying path '$expected' from 'https://$TEST_CACHE.cachix.org'" /evidence/download.log
+          nix-store --query --hash "$expected" > /evidence/consumer.hash
+          cmp /evidence/producer.hash /evidence/consumer.hash
+          nix-store --query --requisites "$expected" | sort > /evidence/consumer.closure
+          cmp /evidence/producer.closure /evidence/consumer.closure
+          nix-collect-garbage -d > /evidence/gc.log 2>&1
+          nix-store --query --requisites "$expected" | sort > /evidence/after-gc.closure
+          cmp /evidence/consumer.closure /evidence/after-gc.closure
+          nix-store --verify-path "$expected" > /evidence/verify.log 2>&1
+          /tmp/schbench/bin/schbench -m 1 -t 1 -r 1 > /evidence/runtime.log 2>&1
+          echo passed > /evidence/result.txt
+          SCRIPT
+          docker run --rm --entrypoint /bin/bash \
+            -e TEST_CACHE -e TEST_CACHE_KEY \
+            -v "$GITHUB_WORKSPACE:/source:ro" \
+            -v "$GITHUB_WORKSPACE/cachix-roundtrip:/evidence" \
+            -v "$RUNNER_TEMP/cold-download.sh:/cold-download.sh:ro" \
+            nixos/nix:latest /cold-download.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: personal-cachix-roundtrip
+          path: cachix-roundtrip/
