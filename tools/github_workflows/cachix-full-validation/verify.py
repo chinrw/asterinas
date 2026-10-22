@@ -11,6 +11,9 @@ from common import capture, path_info, roots, run, write_json
 output = Path("/evidence")
 rows = json.loads(Path("/expected-roots.json").read_text())
 paths = roots(rows)
+initial = Path("/tmp/initial-store.txt").read_text().splitlines()
+assert initial and not set(initial).intersection(paths)
+write_json(output / "initial-store.json", initial)
 subprocess.run(["nix-store", "--check-validity", *paths], check=True)
 write_json(output / "runtime-closure.json", path_info(paths))
 run(["du", "-sk", "/nix/store", "/nix/var/nix/db", "/nix/var/log/nix", "/root/.cache/nix"], output / "final-disk-usage.log")
@@ -47,5 +50,7 @@ link = Path("/nix/var/nix/gcroots/auto/x86_64-initramfs-with-benchmark")
 assert link.exists(), link
 metadata = json.loads(capture(["nix", "--extra-experimental-features", "nix-command", "path-info", "--json", str(link.resolve())]))
 metadata = metadata[str(link.resolve())] if isinstance(metadata, dict) else metadata[0]
-write_json(output / "initramfs.json", {"path": str(link.resolve()), "size_bytes": link.stat().st_size, "metadata": metadata, "deriver": capture(["nix-store", "--query", "--deriver", str(link.resolve())]).strip()})
+initially_present = str(link.resolve()) in initial
+assert not initially_present
+write_json(output / "initramfs.json", {"path": str(link.resolve()), "size_bytes": link.stat().st_size, "metadata": metadata, "deriver": capture(["nix-store", "--query", "--deriver", str(link.resolve())]).strip(), "initially_present": initially_present})
 write_json(output / "result.json", {"result": "passed", "root_count": len(paths), "guest_architectures": len(elf), "host_architecture": platform.machine()})

@@ -37,19 +37,25 @@ bootstrap = bootstrap[:start] + bootstrap[end:]
 bootstrap = bootstrap.replace("AS build-base", "AS bootstrap")
 bootstrap = bootstrap.replace("https://nixos.org/nix/install", "https://releases.nixos.org/nix/nix-2.35.3/install")
 consumer = consumer[consumer.index("COPY test/initramfs"):]
+nix_path_env = 'ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"'
+assert consumer.count(nix_path_env) == 1
+consumer = consumer.replace(nix_path_env + "\n", "")
 if args.kind == "profile":
     consumer = consumer.replace("VERBOSE=0", "VERBOSE=1")
     consumer = consumer.replace("&& make nix_gc", "&& python3 /tmp/cache-measure.py --snapshot && make nix_gc")
 release = "aster-nixos-release.cachix.org-1:xB6U/f5ck5vGDJZ04kPp3zGpZ4Nro9X4+TSSMAETVFE="
 header = f"""
 FROM bootstrap AS measured
+{nix_path_env}
+SHELL ["/bin/bash", "-e", "-o", "pipefail", "-c"]
 ARG CACHE_MODE
 ARG PROFILE_STORE=0
 ENV PROFILE_STORE=${{PROFILE_STORE}}
 COPY measure.py /tmp/cache-measure.py
 COPY expected-roots.json /tmp/expected-roots.json
 RUN python3 -c 'import json,pathlib; rows=json.load(open("/tmp/expected-roots.json")); present=sorted({{p for r in rows for p in r["paths"] if pathlib.Path(p).exists()}}); print("INITIAL_CONSUMER_PATHS "+json.dumps(present)); assert not present, present'
-RUN nix --extra-experimental-features nix-command path-info --all | python3 -c 'import json,sys; print("INITIAL_STORE_PATHS "+json.dumps(sys.stdin.read().splitlines()))'
+RUN nix --extra-experimental-features nix-command path-info --all > /tmp/initial-store.txt \\
+    && python3 -c 'import pathlib; p=pathlib.Path("/tmp/initial-store.txt").read_text().splitlines(); assert p; print("INITIAL_STORE_PATH_COUNT "+str(len(p)))'
 RUN printf '%s\\n' 'sandbox = false' 'max-jobs = 2' 'cores = 4' 'connect-timeout = 30' 'stalled-download-timeout = 120' 'require-sigs = true' >> /etc/nix/nix.conf \\
     && if [[ "$CACHE_MODE" == candidate ]]; then \\
         printf '%s\\n' 'extra-substituters = https://aster-nixos-release.cachix.org https://{CACHE}.cachix.org' 'extra-trusted-public-keys = {release} {CACHE_KEY}' >> /etc/nix/nix.conf; \\
@@ -106,8 +112,7 @@ try:
         result["initramfs_cache_http"] = statuses
         if mode == "candidate":
             assert set(statuses.values()) == {"404"}, ("The miss-fallback output was unexpectedly cached", statuses)
-            initial = [json.loads(line.split("INITIAL_STORE_PATHS ", 1)[1]) for line in text.splitlines() if "INITIAL_STORE_PATHS [" in line]
-            assert len(initial) == 1 and initramfs not in initial[0]
+            assert not initramfs_info["initially_present"]
             assert initramfs_info["metadata"]["ultimate"], "The initramfs output was not built locally"
             if args.kind == "profile":
                 assert f"building '{initramfs_info['deriver']}'" in text, "The fallback derivation was not built"
