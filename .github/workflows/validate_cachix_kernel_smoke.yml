@@ -1,0 +1,43 @@
+name: Compile and boot kernels with cached Nix packages
+
+on:
+  push:
+    branches:
+      - validate/cachix-kernel-smoke-20261022
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  kernel-smoke:
+    if: github.repository == 'chinrw/asterinas'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: x86_64
+          - runner: ubuntu-24.04-arm
+            architecture: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: published-${{ matrix.architecture }}
+          path: published
+          run-id: 39764157003
+          github-token: ${{ github.token }}
+      - name: Validate cached outputs and run kernel smoke checks
+        run: |
+          python3 tools/github_workflows/cachix-full-validation/benchmark.py \
+            smoke --published published --output full-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kernel-smoke-${{ matrix.architecture }}
+          path: |
+            full-results/
+            !full-results/context/**

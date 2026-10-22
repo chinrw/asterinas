@@ -10,7 +10,7 @@ import subprocess
 from common import CACHE, CACHE_KEY, HostMonitor, capture, record_machine, roots, run, write_json
 
 parser = argparse.ArgumentParser()
-parser.add_argument("kind", choices=("timing", "profile"))
+parser.add_argument("kind", choices=("timing", "profile", "smoke"))
 parser.add_argument("--published", type=Path, required=True)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--prepare-only", action="store_true")
@@ -78,7 +78,7 @@ smoke_image = None
 try:
     with HostMonitor(output / "bootstrap-host.jsonl"):
         summary["bootstrap"] = run([*base, "--target", "bootstrap", "-t", "cachix-common-bootstrap:validation", str(context)], output / "bootstrap.log")
-    order = ("baseline", "candidate", "candidate", "baseline") if args.kind == "timing" else ("baseline", "candidate")
+    order = ("baseline", "candidate", "candidate", "baseline") if args.kind == "timing" else (("baseline", "candidate") if args.kind == "profile" else ("candidate",))
     for index, mode in enumerate(order):
         case = output / f"{index}-{mode}"
         case.mkdir()
@@ -122,7 +122,7 @@ try:
             assert any(f"{CACHE}.cachix.org-1" in signers for signers in result["root_signers"].values()), "No required root came from the personal cache"
         write_json(output / "summary.json", summary)
         print(json.dumps({key: value for key, value in result.items() if key not in ("stages", "root_hash_comparison")}), flush=True)
-        if args.kind == "timing" and mode == "candidate" and smoke_image is None:
+        if args.kind in ("timing", "smoke") and mode == "candidate" and smoke_image is None:
             smoke_image = tag
         else:
             subprocess.run(["docker", "image", "rm", tag], check=True, stdout=subprocess.DEVNULL)
