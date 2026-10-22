@@ -21,6 +21,10 @@ RUN sh <(curl -L https://nixos.org/nix/install) --daemon --yes \
     && nix-env -iA nixpkgs.nixfmt \
     && nix-env -iA nixpkgs.nixos-install-tools \
     && nix-env -iA cachix -f https://cachix.org/api/v1/install \
+    && printf '%s\n' \
+        'extra-substituters = https://aster-nixos-release.cachix.org https://aster-nixos-dev.cachix.org' \
+        'extra-trusted-public-keys = aster-nixos-release.cachix.org-1:xB6U/f5ck5vGDJZ04kPp3zGpZ4Nro9X4+TSSMAETVFE= aster-nixos-dev.cachix.org-1:xrCbE2flfliFTQCY/2HeJoT2tCO+5kMTZeLIUH9lnIA=' \
+        >> /etc/nix/nix.conf \
     && rm /nix/var/nix/gcroots/auto/* \
     && nix-collect-garbage -d
 

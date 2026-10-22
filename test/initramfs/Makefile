@@ -19,6 +19,8 @@ NIXPKGS_CACHE_TTL := 2592000 # In seconds
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CUR_DIR := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
 BUILD_DIR := $(CUR_DIR)/build
+# CI runners can keep the prebuilt result links in a writable directory.
+PREBUILT_ROOT ?= /nix/var/nix/gcroots/auto
 INITRAMFS_DIR := $(BUILD_DIR)/initramfs
 ROOTFS_IMAGE := $(BUILD_DIR)/rootfs.img
 INITRAMFS_SKIP_GZIP ?= 0
@@ -125,7 +127,7 @@ x86_64_pkgs:
 		--argstr target x86_64 \
 		--arg enableBenchmarkTest true \
 		--arg enableConformanceTest true \
-		--out-link /nix/var/nix/gcroots/auto/x86_64-pkgs \
+		--out-link $(PREBUILT_ROOT)/x86_64-pkgs \
 		-A busybox \
 		-A benchmark.fio \
 		-A benchmark.hackbench \
@@ -153,7 +155,7 @@ riscv64_pkgs:
 		--argstr target riscv64 \
 		--arg enableBenchmarkTest false \
 		--arg enableConformanceTest true \
-		--out-link /nix/var/nix/gcroots/auto/riscv64-pkgs \
+		--out-link $(PREBUILT_ROOT)/riscv64-pkgs \
 		-A busybox \
 		-A conformance.ltp \
 		-A regression.package
@@ -169,7 +171,7 @@ aarch64_pkgs:
 		--argstr target aarch64 \
 		--arg enableBenchmarkTest false \
 		--arg enableConformanceTest true \
-		--out-link /nix/var/nix/gcroots/auto/aarch64-pkgs \
+		--out-link $(PREBUILT_ROOT)/aarch64-pkgs \
 		-A busybox \
 		-A conformance.ltp \
 		-A regression.package
@@ -196,7 +198,7 @@ initramfs_pkgs:
 		$(NIX_QUIET) \
 		--argstr target x86_64 \
 		--arg enableBenchmarkTest true \
-		--out-link /nix/var/nix/gcroots/auto/x86_64-initramfs-with-benchmark \
+		--out-link $(PREBUILT_ROOT)/x86_64-initramfs-with-benchmark \
 		-A initramfs-image
 
 $(EXT2_IMAGE):
