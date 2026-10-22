@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 
+import bz2
 import difflib
 import hashlib
 import json
@@ -7,8 +8,10 @@ import os
 from pathlib import Path
 import platform
 import re
+import shutil
 import stat
 import subprocess
+import sys
 
 from common import capture, run, write_json
 
@@ -75,6 +78,9 @@ def compare(original, rebuilt, folder):
 
 native = "x86_64" if platform.machine() == "x86_64" else "aarch64"
 cases = [("busybox-riscv64", "riscv64", "busybox"), ("ltp-native", native, "conformance.ltp"), ("kselftest-x86_64", "x86_64", "conformance.kselftest")]
+direct_busybox = "--direct-busybox" in sys.argv
+if direct_busybox:
+    cases = cases[:1]
 summary = {"architecture": platform.machine(), "checks": []}
 try:
     for label, target, attr in cases:
@@ -102,5 +108,36 @@ try:
                 run(["sudo", "mv", str(rebuilt), str(Path(os.environ["RUNNER_TEMP"]) / f"{label}-sandbox-{sandbox}")], check_folder / "preserve.log")
             write_json(output / "summary.json", summary)
             print(json.dumps({"label": label, **row}), flush=True)
+        if direct_busybox:
+            direct_folder = folder / "direct-sandbox-false"
+            direct_folder.mkdir()
+            preserved = Path(os.environ["RUNNER_TEMP"]) / "cached-busybox"
+            shutil.copytree(original, preserved, symlinks=True)
+            drv = capture(["nix-instantiate", *command[1:command.index("--out-link")]]).strip()
+            outputs = capture(["nix-store", "--query", "--outputs", drv]).splitlines()
+            Path(os.environ["RUNNER_TEMP"], label).unlink()
+            existing = [path for path in outputs if Path(path).exists()]
+            run(["nix-store", "--delete", *existing], direct_folder / "delete.log")
+            assert not original.exists()
+            run([*command, "--option", "sandbox", "false", "--option", "substitute", "false"], direct_folder / "build.log")
+            assert Path(os.path.realpath(Path(os.environ["RUNNER_TEMP"]) / label)) == original
+            row = compare(preserved, original, direct_folder)
+            record["direct_sandbox_false"] = row
+            for variant, root in (("cached", preserved), ("rebuilt", original)):
+                binary = root / "bin/busybox"
+                data = binary.read_bytes()
+                shutil.copy2(binary, direct_folder / f"{variant}-busybox")
+                blocks = []
+                for index, match in enumerate(re.finditer(b"h[1-9]1AY&SY", data)):
+                    decoder = bz2.BZ2Decompressor()
+                    try:
+                        decoded = decoder.decompress(b"BZ" + data[match.start():])
+                    except (OSError, EOFError):
+                        continue
+                    name = f"{variant}-bzip2-{index}.bin"
+                    (direct_folder / name).write_bytes(decoded)
+                    blocks.append({"offset": match.start(), "decoded_bytes": len(decoded), "file": name})
+                write_json(direct_folder / f"{variant}-compressed-blocks.json", blocks)
+            write_json(output / "summary.json", summary)
 finally:
     write_json(output / "summary.json", summary)

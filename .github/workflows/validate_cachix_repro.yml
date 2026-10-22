@@ -31,7 +31,7 @@ jobs:
           extraPullNames: aster-nixos-dev,aster-nixos-release
           skipPush: true
       - name: Rebuild representative outputs with both sandbox settings
-        run: python3 tools/github_workflows/cachix-full-validation/repro.py
+        run: python3 tools/github_workflows/cachix-full-validation/repro.py --direct-busybox
       - uses: actions/upload-artifact@v4
         if: always()
         with:
