@@ -96,8 +96,8 @@ class HostMonitor:
         start = time.monotonic()
         with self.path.open("w") as stream:
             while True:
-                row = {"elapsed_s": time.monotonic() - start}
-                for name in ("stat", "diskstats", "meminfo", "loadavg", "pressure/cpu", "pressure/io"):
+                row = {"elapsed_s": time.monotonic() - start, "filesystem_sample_path": str(self.path.parent)}
+                for name in ("stat", "diskstats", "meminfo", "loadavg", "net/dev", "net/route", "pressure/cpu", "pressure/io"):
                     path = Path("/proc") / name
                     if path.exists():
                         row[name] = path.read_text()

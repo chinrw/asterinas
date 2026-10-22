@@ -36,7 +36,10 @@ end = bootstrap.index("    && rm /nix/var/nix/gcroots", start)
 bootstrap = bootstrap[:start] + bootstrap[end:]
 bootstrap = bootstrap.replace("AS build-base", "AS bootstrap")
 bootstrap = bootstrap.replace("https://nixos.org/nix/install", "https://releases.nixos.org/nix/nix-2.35.3/install")
-consumer = consumer[consumer.index("COPY test/initramfs"):].replace("VERBOSE=0", "VERBOSE=1")
+consumer = consumer[consumer.index("COPY test/initramfs"):]
+if args.kind == "profile":
+    consumer = consumer.replace("VERBOSE=0", "VERBOSE=1")
+    consumer = consumer.replace("&& make nix_gc", "&& python3 /tmp/cache-measure.py --snapshot && make nix_gc")
 release = "aster-nixos-release.cachix.org-1:xB6U/f5ck5vGDJZ04kPp3zGpZ4Nro9X4+TSSMAETVFE="
 header = f"""
 FROM bootstrap AS measured
@@ -46,10 +49,12 @@ ENV PROFILE_STORE=${{PROFILE_STORE}}
 COPY measure.py /tmp/cache-measure.py
 COPY expected-roots.json /tmp/expected-roots.json
 RUN python3 -c 'import json,pathlib; rows=json.load(open("/tmp/expected-roots.json")); present=sorted({{p for r in rows for p in r["paths"] if pathlib.Path(p).exists()}}); print("INITIAL_CONSUMER_PATHS "+json.dumps(present)); assert not present, present'
+RUN nix --extra-experimental-features nix-command path-info --all | python3 -c 'import json,sys; print("INITIAL_STORE_PATHS "+json.dumps(sys.stdin.read().splitlines()))'
 RUN printf '%s\\n' 'sandbox = false' 'max-jobs = 2' 'cores = 4' 'connect-timeout = 30' 'stalled-download-timeout = 120' 'require-sigs = true' >> /etc/nix/nix.conf \\
     && if [[ "$CACHE_MODE" == candidate ]]; then \\
         printf '%s\\n' 'extra-substituters = https://aster-nixos-release.cachix.org https://{CACHE}.cachix.org' 'extra-trusted-public-keys = {release} {CACHE_KEY}' >> /etc/nix/nix.conf; \\
-       else test "$CACHE_MODE" == baseline; fi
+       else test "$CACHE_MODE" == baseline; fi \\
+    && nix --extra-experimental-features nix-command config show --json | python3 -c 'import json,os,sys; c=json.load(sys.stdin); wanted={{"https://cache.nixos.org"}}; wanted.update(["https://aster-nixos-release.cachix.org", "https://{CACHE}.cachix.org"] if os.environ["CACHE_MODE"]=="candidate" else []); assert {{x.rstrip("/") for x in c["substituters"]["value"]}}==wanted, c["substituters"]; assert c["require-sigs"]["value"]; print("CACHE_CONFIG "+json.dumps({{k:c[k]["value"] for k in ["substituters","require-sigs","max-jobs","cores","sandbox"]}}))'
 SHELL ["/usr/bin/python3", "/tmp/cache-measure.py", "/bin/bash", "-c"]
 """
 (context / "Dockerfile").write_text(bootstrap + header + consumer)
@@ -78,7 +83,8 @@ try:
         text = (case / "build.log").read_text()
         assert "INITIAL_CONSUMER_PATHS []" in text
         assert "output clipped" not in text, "The build log was clipped"
-        result.update(mode=mode, index=index, stages=[json.loads(line.split("MEASUREMENT ", 1)[1]) for line in text.splitlines() if "MEASUREMENT {" in line])
+        result.update(mode=mode, index=index, stages=[json.loads(line.split("MEASUREMENT ", 1)[1]) for line in text.splitlines() if "MEASUREMENT {" in line], pre_gc_snapshots=[json.loads(line.split("STORE_SNAPSHOT ", 1)[1]) for line in text.splitlines() if "STORE_SNAPSHOT {" in line])
+        assert len(result["pre_gc_snapshots"]) == (4 if args.kind == "profile" else 0)
         image = json.loads(capture(["docker", "image", "inspect", tag]))[0]
         result.update(image_id=image["Id"], image_size_bytes=image["Size"])
         write_json(case / "image.json", image)
@@ -91,22 +97,38 @@ try:
         closure = json.loads((verify / "runtime-closure.json").read_text())
         producer = json.loads((published / "published-closure.json").read_text())
         result["root_hash_comparison"] = {path: {"producer": producer[path]["narHash"], "consumer": closure[path]["narHash"], "equal": producer[path]["narHash"] == closure[path]["narHash"]} for path in roots(rows)}
-        initramfs = json.loads((verify / "initramfs.json").read_text())["path"]
-        nar_hash = Path(initramfs).name.split("-", 1)[0]
-        status = capture(["curl", "--silent", "--show-error", "--output", str(case / "initramfs.narinfo"), "--write-out", "%{http_code}", f"https://{CACHE}.cachix.org/{nar_hash}.narinfo"])
-        result["initramfs_cache_http"] = status
+        initramfs_info = json.loads((verify / "initramfs.json").read_text())
+        initramfs = initramfs_info["path"]
+        store_path_hash = Path(initramfs).name.split("-", 1)[0]
+        statuses = {}
+        for endpoint in ("cache.nixos.org", "aster-nixos-release.cachix.org", f"{CACHE}.cachix.org"):
+            statuses[endpoint] = capture(["curl", "--silent", "--show-error", "--connect-timeout", "10", "--max-time", "60", "--output", str(case / f"initramfs-{endpoint}.narinfo"), "--write-out", "%{http_code}", f"https://{endpoint}/{store_path_hash}.narinfo"])
+        result["initramfs_cache_http"] = statuses
         if mode == "candidate":
-            assert status == "404", ("The miss-fallback output was unexpectedly cached", status)
-            assert f"from 'https://{CACHE}.cachix.org'" in text
-            assert all(row["equal"] for row in result["root_hash_comparison"].values()), "Downloaded roots differ from producer hashes"
+            assert set(statuses.values()) == {"404"}, ("The miss-fallback output was unexpectedly cached", statuses)
+            initial = [json.loads(line.split("INITIAL_STORE_PATHS ", 1)[1]) for line in text.splitlines() if "INITIAL_STORE_PATHS [" in line]
+            assert len(initial) == 1 and initramfs not in initial[0]
+            assert initramfs_info["metadata"]["ultimate"], "The initramfs output was not built locally"
+            if args.kind == "profile":
+                assert f"building '{initramfs_info['deriver']}'" in text, "The fallback derivation was not built"
+            result["root_signers"] = {path: [sig.split(":", 1)[0] for sig in closure[path]["signatures"]] for path in roots(rows)}
+            allowed = {"cache.nixos.org-1", "aster-nixos-release.cachix.org-1", f"{CACHE}.cachix.org-1"}
+            assert all(allowed.intersection(signers) for signers in result["root_signers"].values()), "A required root was not downloaded from an allowed cache"
+            assert any(f"{CACHE}.cachix.org-1" in signers for signers in result["root_signers"].values()), "No required root came from the personal cache"
         write_json(output / "summary.json", summary)
         print(json.dumps({key: value for key, value in result.items() if key not in ("stages", "root_hash_comparison")}), flush=True)
         if args.kind == "timing" and mode == "candidate" and smoke_image is None:
             smoke_image = tag
         else:
             subprocess.run(["docker", "image", "rm", tag], check=True, stdout=subprocess.DEVNULL)
+    assert all(row["equal"] for result in summary["runs"] for row in result["root_hash_comparison"].values()), "Baseline and cached output bytes differ"
     if smoke_image:
-        smoke = ["docker", "run", "--rm", "--privileged", "--network", "host", "-v", "/dev:/dev", "-v", f"{source}:/root/asterinas", "-w", "/root/asterinas", smoke_image, "bash", "-c"]
+        kernel_dockerfile = (source / "tools/dev_env/docker/kernel-dev/Dockerfile").read_text()
+        vdso = kernel_dockerfile.split("#= Download VDSO files", 1)[1].split("#= Build syscall test", 1)[0]
+        smoke_file = output / "smoke.Dockerfile"
+        smoke_file.write_text(f"FROM {smoke_image}\nSHELL [\"/bin/bash\", \"-c\"]\n#= Download VDSO files" + vdso + "\nRUN apt-get update && apt-get install -y --no-install-recommends exfatprogs e2fsprogs cpio && rm -rf /var/lib/apt/lists/*\n")
+        run(["docker", "buildx", "build", "--builder", "default", "--load", "--network", "host", "--progress", "plain", "-f", str(smoke_file), "-t", "cachix-kernel-smoke:validation", str(context)], output / "smoke-image.log")
+        smoke = ["docker", "run", "--rm", "--privileged", "--network", "host", "-v", "/dev:/dev", "-v", f"{source}:/root/asterinas", "-w", "/root/asterinas", "cachix-kernel-smoke:validation", "bash", "-c"]
         run([*smoke, "git config --global --add safe.directory /root/asterinas && make kernel TARGET_ARCH=riscv64 && make kernel TARGET_ARCH=x86_64 && timeout 1200 make run_kernel TARGET_ARCH=x86_64 AUTO_TEST=boot ENABLE_KVM=0"], output / "kernel-smoke.log")
         summary["kernel_smoke"] = "passed"
     summary["complete"] = True

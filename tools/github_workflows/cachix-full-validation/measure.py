@@ -38,6 +38,11 @@ def monitor():
         sample()
 
 
+if command == ["--snapshot"]:
+    sample()
+    print("STORE_SNAPSHOT " + json.dumps(samples[0]), flush=True)
+    raise SystemExit(0)
+
 if profile:
     sample()
     thread = threading.Thread(target=monitor, daemon=True)

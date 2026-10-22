@@ -6,13 +6,15 @@ import platform
 import struct
 import subprocess
 
-from common import path_info, roots, run, write_json
+from common import capture, path_info, roots, run, write_json
 
 output = Path("/evidence")
 rows = json.loads(Path("/expected-roots.json").read_text())
 paths = roots(rows)
 subprocess.run(["nix-store", "--check-validity", *paths], check=True)
 write_json(output / "runtime-closure.json", path_info(paths))
+run(["du", "-sk", "/nix/store", "/nix/var/nix/db", "/nix/var/log/nix", "/root/.cache/nix"], output / "final-disk-usage.log")
+(output / "final-store.txt").write_text(capture(["nix", "--extra-experimental-features", "nix-command", "path-info", "--all"]))
 for index, path in enumerate(paths):
     run(["nix-store", "--verify-path", path], output / f"verify-{index}.log")
 
@@ -43,5 +45,7 @@ for name, args in {
 
 link = Path("/nix/var/nix/gcroots/auto/x86_64-initramfs-with-benchmark")
 assert link.exists(), link
-write_json(output / "initramfs.json", {"path": str(link.resolve()), "size_bytes": link.stat().st_size})
+metadata = json.loads(capture(["nix", "--extra-experimental-features", "nix-command", "path-info", "--json", str(link.resolve())]))
+metadata = metadata[str(link.resolve())] if isinstance(metadata, dict) else metadata[0]
+write_json(output / "initramfs.json", {"path": str(link.resolve()), "size_bytes": link.stat().st_size, "metadata": metadata, "deriver": capture(["nix-store", "--query", "--deriver", str(link.resolve())]).strip()})
 write_json(output / "result.json", {"result": "passed", "root_count": len(paths), "guest_architectures": len(elf), "host_architecture": platform.machine()})
