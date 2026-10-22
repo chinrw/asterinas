@@ -51,10 +51,24 @@ jobs:
           test -n "$CACHIX_AUTH_TOKEN"
           cachix push "$TEST_CACHE" < cachix-roundtrip/output.path 2>&1 \
             | tee cachix-roundtrip/upload.log
+          output="$(cat cachix-roundtrip/output.path)"
+          curl --fail --silent --show-error \
+            "https://$TEST_CACHE.cachix.org/$(basename "$output" | cut -d- -f1).narinfo" \
+            > cachix-roundtrip/output.narinfo
+          # Cachix omits dependencies that are already available from cache.nixos.org.
           while IFS= read -r path; do
             hash="$(basename "$path" | cut -d- -f1)"
-            curl --fail --silent --show-error "https://$TEST_CACHE.cachix.org/$hash.narinfo" \
-              > "cachix-roundtrip/$hash.narinfo"
+            status="$(curl --silent --show-error --output "cachix-roundtrip/$hash.narinfo" \
+              --write-out '%{http_code}' "https://$TEST_CACHE.cachix.org/$hash.narinfo")"
+            case "$status" in
+              200) echo "$path $TEST_CACHE" >> cachix-roundtrip/closure-sources.txt ;;
+              404)
+                curl --fail --silent --show-error "https://cache.nixos.org/$hash.narinfo" \
+                  > "cachix-roundtrip/$hash.narinfo"
+                echo "$path cache.nixos.org" >> cachix-roundtrip/closure-sources.txt
+                ;;
+              *) echo "Unexpected cache response: $status" >&2; exit 1 ;;
+            esac
           done < cachix-roundtrip/producer.closure
 
       - name: Download into an independent container store
@@ -74,8 +88,8 @@ jobs:
             --argstr target x86_64 \
             --arg enableBenchmarkTest true \
             --arg enableConformanceTest true \
-            --option substituters "https://$TEST_CACHE.cachix.org" \
-            --option trusted-public-keys "$TEST_CACHE_KEY" \
+            --option substituters "https://cache.nixos.org https://$TEST_CACHE.cachix.org" \
+            --option extra-trusted-public-keys "$TEST_CACHE_KEY" \
             --option require-sigs true \
             -A benchmark.schbench \
             --out-link /tmp/schbench \
