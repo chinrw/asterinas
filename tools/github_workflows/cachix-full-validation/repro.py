@@ -40,11 +40,13 @@ def sections(path):
     text = capture(["readelf", "--wide", "--sections", str(path)])
     result = {}
     for line in text.splitlines():
-        match = re.search(r"\[\s*\d+\]\s+(\S+)\s+\S+\s+[0-9a-fA-F]+\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)", line)
+        match = re.search(r"\[\s*\d+\]\s+(\S+)\s+(\S+)\s+[0-9a-fA-F]+\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)", line)
         if match:
-            name, offset, size = match.groups()
+            name, kind, offset, size = match.groups()
             part = data[int(offset, 16):int(offset, 16) + int(size, 16)]
-            result[name] = {"size": int(size, 16), "sha256": hashlib.sha256(part).hexdigest()}
+            result[name] = {"type": kind, "size": int(size, 16)}
+            if kind != "NOBITS":
+                result[name]["sha256"] = hashlib.sha256(part).hexdigest()
     return result
 
 
@@ -90,10 +92,12 @@ try:
                 result = subprocess.run([*command, "--check", "--keep-failed", "--option", "sandbox", sandbox], stdout=log, stderr=subprocess.STDOUT)
             row = {"sandbox": sandbox, "exit_code": result.returncode}
             record["checks"].append(row)
-            assert result.returncode in (0, 104), (label, sandbox, result.returncode)
             rebuilt = Path(str(original) + ".check")
-            if result.returncode == 104:
-                assert rebuilt.exists(), rebuilt
+            log_text = (check_folder / "build.log").read_text()
+            different = result.returncode != 0 and "may not be deterministic" in log_text and rebuilt.exists()
+            assert result.returncode == 0 or different, (label, sandbox, result.returncode)
+            row["different"] = different
+            if different:
                 row.update(compare(original, rebuilt, check_folder))
                 run(["sudo", "mv", str(rebuilt), str(Path(os.environ["RUNNER_TEMP"]) / f"{label}-sandbox-{sandbox}")], check_folder / "preserve.log")
             write_json(output / "summary.json", summary)
