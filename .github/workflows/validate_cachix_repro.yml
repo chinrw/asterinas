@@ -1,0 +1,39 @@
+name: Investigate Nix output reproducibility
+
+on:
+  push:
+    branches:
+      - validate/cachix-repro-20261022
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    if: github.repository == 'chinrw/asterinas'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.35.3/install
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 4
+      - uses: cachix/cachix-action@v17
+        with:
+          name: asterina-test
+          extraPullNames: aster-nixos-dev,aster-nixos-release
+          skipPush: true
+      - name: Rebuild representative outputs with both sandbox settings
+        run: python3 tools/github_workflows/cachix-full-validation/repro.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repro-${{ matrix.runner }}
+          path: repro-results/

@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: MPL-2.0
+
+import difflib
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import stat
+import subprocess
+
+from common import capture, run, write_json
+
+output = Path("repro-results").resolve()
+output.mkdir(exist_ok=True)
+
+
+def manifest(root):
+    result = {}
+    for folder, directories, files in os.walk(root, followlinks=False):
+        for name in directories + files:
+            path = Path(folder) / name
+            info = path.lstat()
+            row = {"mode": stat.S_IMODE(info.st_mode)}
+            if path.is_symlink():
+                row["link"] = os.readlink(path)
+            elif path.is_file():
+                row.update(size=info.st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+            else:
+                row["directory"] = True
+            result[str(path.relative_to(root))] = row
+    return result
+
+
+def sections(path):
+    data = path.read_bytes()
+    if not data.startswith(b"\x7fELF"):
+        return None
+    text = capture(["readelf", "--wide", "--sections", str(path)])
+    result = {}
+    for line in text.splitlines():
+        match = re.search(r"\[\s*\d+\]\s+(\S+)\s+\S+\s+[0-9a-fA-F]+\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)", line)
+        if match:
+            name, offset, size = match.groups()
+            part = data[int(offset, 16):int(offset, 16) + int(size, 16)]
+            result[name] = {"size": int(size, 16), "sha256": hashlib.sha256(part).hexdigest()}
+    return result
+
+
+def compare(original, rebuilt, folder):
+    left, right = manifest(original), manifest(rebuilt)
+    write_json(folder / "cached-manifest.json", left)
+    write_json(folder / "rebuilt-manifest.json", right)
+    changed = {name: {"cached": left.get(name), "rebuilt": right.get(name)} for name in sorted(set(left) | set(right)) if left.get(name) != right.get(name)}
+    write_json(folder / "changed-files.json", changed)
+    details = {}
+    for index, name in enumerate(list(changed)[:12]):
+        a, b = original / name, rebuilt / name
+        if not a.is_file() or not b.is_file() or a.is_symlink() or b.is_symlink():
+            continue
+        sa, sb = sections(a), sections(b)
+        if sa is not None and sb is not None:
+            details[name] = {"sections": {key: {"cached": sa.get(key), "rebuilt": sb.get(key)} for key in sorted(set(sa) | set(sb)) if sa.get(key) != sb.get(key)}}
+        strings_a = capture(["strings", "-a", str(a)]).splitlines()
+        strings_b = capture(["strings", "-a", str(b)]).splitlines()
+        difference = list(difflib.unified_diff(strings_a, strings_b, fromfile="cached", tofile="rebuilt", n=2))
+        (folder / f"strings-{index}.diff").write_text("\n".join(difference[:300]) + "\n")
+        details.setdefault(name, {})["strings_diff_lines"] = len(difference)
+    write_json(folder / "file-details.json", details)
+    return {"changed_files": len(changed), "examples": list(changed)[:12]}
+
+
+native = "x86_64" if platform.machine() == "x86_64" else "aarch64"
+cases = [("busybox-riscv64", "riscv64", "busybox"), ("ltp-native", native, "conformance.ltp"), ("kselftest-x86_64", "x86_64", "conformance.kselftest")]
+summary = {"architecture": platform.machine(), "checks": []}
+try:
+    for label, target, attr in cases:
+        folder = output / label
+        folder.mkdir()
+        command = ["nix-build", "test/initramfs/nix/default.nix", "--argstr", "target", target, "--arg", "enableBenchmarkTest", "true" if target == "x86_64" else "false", "--arg", "enableConformanceTest", "true", "-A", attr, "--out-link", str(Path(os.environ["RUNNER_TEMP"]) / label)]
+        run(command, folder / "seed.log")
+        original = Path(os.path.realpath(Path(os.environ["RUNNER_TEMP"]) / label))
+        record = {"label": label, "output": str(original), "checks": []}
+        summary["checks"].append(record)
+        for sandbox in ("true", "false"):
+            check_folder = folder / f"sandbox-{sandbox}"
+            check_folder.mkdir()
+            with (check_folder / "build.log").open("w") as log:
+                result = subprocess.run([*command, "--check", "--keep-failed", "--option", "sandbox", sandbox], stdout=log, stderr=subprocess.STDOUT)
+            row = {"sandbox": sandbox, "exit_code": result.returncode}
+            record["checks"].append(row)
+            assert result.returncode in (0, 104), (label, sandbox, result.returncode)
+            rebuilt = Path(str(original) + ".check")
+            if result.returncode == 104:
+                assert rebuilt.exists(), rebuilt
+                row.update(compare(original, rebuilt, check_folder))
+                run(["sudo", "mv", str(rebuilt), str(Path(os.environ["RUNNER_TEMP"]) / f"{label}-sandbox-{sandbox}")], check_folder / "preserve.log")
+            write_json(output / "summary.json", summary)
+            print(json.dumps({"label": label, **row}), flush=True)
+finally:
+    write_json(output / "summary.json", summary)
