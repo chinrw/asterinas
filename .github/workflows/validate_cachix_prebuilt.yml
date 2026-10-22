@@ -1,0 +1,40 @@
+name: Measure prebuilt Cachix consumers
+
+on:
+  push:
+    branches:
+      - validate/cachix-prebuilt-20261022
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    if: github.repository == 'chinrw/asterinas'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+        mode: [baseline, candidate]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record runner capacity
+        run: |
+          mkdir -p cachix-results
+          df -B1 > cachix-results/disk-before.txt
+          free -b > cachix-results/memory.txt
+          nproc > cachix-results/cpus.txt
+      - name: Build with the existing GC boundaries
+        run: |
+          python3 tools/github_workflows/cachix-validation/run-full-validation.py \
+            '${{ matrix.mode }}' --output cachix-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cachix-${{ matrix.runner }}-${{ matrix.mode }}
+          path: |
+            cachix-results/*.json
+            cachix-results/*.log
+            cachix-results/*.txt
