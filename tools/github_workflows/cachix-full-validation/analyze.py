@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import statistics
 
-from common import compare_closures
+from common import PRE_GC_SNAPSHOT_COUNT, compare_closures
 from measure import summarize_scans
 
 
@@ -69,6 +69,8 @@ def analyze_case(folder, kind, run, producer_closure, expected_roots):
     test_downloads = [event for event in downloads if event["cache"] == "https://asterina-test.cachix.org"]
     hash_comparisons = run.get("root_hash_comparison", {})
     stages = [{"command": " ".join(stage["command"]), "elapsed_s": stage["elapsed_s"], "cpu_seconds": cpu_seconds(stage), "profile_store": stage["profile_store"], "disk_sampling": summarize_scans(stage.get("samples", [])), "scan_seconds": stage.get("scan_seconds", 0)} for stage in run["stages"]]
+    cpu_measurements = [stage["cpu_seconds"] for stage in stages]
+    cpu_total = sum(cpu_measurements) if cpu_measurements and all(value is not None for value in cpu_measurements) else None
     case = {
         "index": run["index"], "mode": run["mode"], "build_export_s": run["elapsed_s"],
         "command_sum_s": sum(stage["elapsed_s"] for stage in stages),
@@ -82,7 +84,7 @@ def analyze_case(folder, kind, run, producer_closure, expected_roots):
         "root_hashes_compared": len(hash_comparisons),
         "hash_differences": {path: row for path, row in hash_comparisons.items() if not row["equal"]},
         "initramfs_cache_http": run.get("initramfs_cache_http"), "stages": stages,
-        "command_cpu_s": sum(stage["cpu_seconds"] or 0 for stage in stages),
+        "command_cpu_s": cpu_total,
         "log_detail": "verbose" if kind == "profile" else "production quiet",
         "root_signers": run.get("root_signers", {}),
         "test_cache_signed_roots": sum("asterina-test.cachix.org-1" in signers for signers in run.get("root_signers", {}).values()),
@@ -109,7 +111,7 @@ def analyze_case(folder, kind, run, producer_closure, expected_roots):
             and not case["sampler_errors"]
             and bool(stages)
             and all(stage["profile_store"] and stage["disk_sampling"]["status"] == "valid" for stage in stages)
-            and len(case["pre_gc_snapshots"]) == 4
+            and len(case["pre_gc_snapshots"]) == PRE_GC_SNAPSHOT_COUNT
         )
     else:
         assert not any(stage["profile_store"] for stage in stages), "Timing sample performed store scans"
@@ -145,7 +147,8 @@ def compare_timings(folder, cases, expected_roots, bootstrap_s, byte_equal):
         comparison["repeat_byte_comparison"][mode] = compare_closures(first, second, expected_roots)
         comparison[f"{mode}_image_size_mean_bytes"] = statistics.mean(case["image_size_bytes"] for case in selected)
         comparison[f"{mode}_image_size_range_bytes"] = [min(case["image_size_bytes"] for case in selected), max(case["image_size_bytes"] for case in selected)]
-        comparison[f"{mode}_command_cpu_mean_s"] = statistics.mean(case["command_cpu_s"] for case in selected)
+        cpu_totals = [case["command_cpu_s"] for case in selected]
+        comparison[f"{mode}_command_cpu_mean_s"] = statistics.mean(cpu_totals) if all(value is not None for value in cpu_totals) else None
         comparison[f"{mode}_command_mean_s"] = statistics.mean(case["command_sum_s"] for case in selected)
     for index in range(len(cases[0]["stages"])):
         baseline_stages = [case["stages"][index]["elapsed_s"] for case in cases if case["mode"] == "baseline"]
@@ -180,11 +183,12 @@ def analyze(base):
                 "bootstrap_s": bootstrap_s, "cases": cases, "incomplete_reasons": incomplete_reasons,
             }
             expected_order = ["baseline", "candidate", "candidate", "baseline"] if kind == "timing" else ["baseline", "candidate"]
-            measured = bool(expected_roots) and [case["mode"] for case in cases] == expected_order and all(
+            has_expected_cases = [case["mode"] for case in cases] == expected_order
+            measured = bool(expected_roots) and has_expected_cases and all(
                 case["verified"] and case["root_hashes_compared"] == len(expected_roots) for case in cases
             )
             byte_equal = measured and all(case["closure_comparison"]["equal"] for case in cases)
-            disk_valid = kind != "profile" or all(case["profile_valid"] for case in cases)
+            disk_valid = kind != "profile" or (has_expected_cases and all(case["profile_valid"] for case in cases))
             passed = summary["complete"] and measured and byte_equal and disk_valid and bootstrap_s is not None
             combined[kind].update(measurements_complete=measured, byte_equivalence_passed=byte_equal, validation_passed=passed)
             if kind == "timing" and measured:

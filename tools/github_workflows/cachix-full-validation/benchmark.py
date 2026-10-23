@@ -7,7 +7,7 @@ import platform
 import shutil
 import subprocess
 
-from common import CACHE, CACHE_KEY, HostMonitor, capture, compare_closures, record_machine, roots, run, write_json
+from common import CACHE, CACHE_KEY, PRE_GC_SNAPSHOT_COUNT, HostMonitor, capture, compare_closures, record_machine, roots, run, write_json
 
 parser = argparse.ArgumentParser()
 parser.add_argument("kind", choices=("timing", "profile", "smoke"))
@@ -90,7 +90,7 @@ try:
         assert "INITIAL_CONSUMER_PATHS []" in text
         assert "output clipped" not in text, "The build log was clipped"
         result.update(mode=mode, index=index, stages=[json.loads(line.split("MEASUREMENT ", 1)[1]) for line in text.splitlines() if "MEASUREMENT {" in line], pre_gc_snapshots=[json.loads(line.split("STORE_SNAPSHOT ", 1)[1]) for line in text.splitlines() if "STORE_SNAPSHOT {" in line])
-        assert len(result["pre_gc_snapshots"]) == (4 if args.kind == "profile" else 0)
+        assert len(result["pre_gc_snapshots"]) == (PRE_GC_SNAPSHOT_COUNT if args.kind == "profile" else 0)
         image = json.loads(capture(["docker", "image", "inspect", tag]))[0]
         result.update(image_id=image["Id"], image_size_bytes=image["Size"])
         write_json(case / "image.json", image)

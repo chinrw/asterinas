@@ -10,6 +10,8 @@ import threading
 import time
 
 TARGETS = ("aarch64_pkgs", "riscv64_pkgs", "x86_64_pkgs", "install_host_pkgs")
+# The Docker consumer runs GC after each guest package build and the host install.
+PRE_GC_SNAPSHOT_COUNT = 4
 CACHE = "asterina-test"
 CACHE_KEY = "asterina-test.cachix.org-1:LUjQ7OX2Ur+VC605+JQbI1wGyYTHN90RdmICRwc4K8M="
 
