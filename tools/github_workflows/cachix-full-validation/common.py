@@ -68,6 +68,52 @@ def roots(rows):
     return sorted({path for row in rows for path in row["paths"]})
 
 
+def compare_closures(producer, consumer, expected_roots):
+    """Compare complete runtime closures, including dependencies of selected roots."""
+    producer = producer or {}
+    consumer = consumer or {}
+    missing_metadata = {}
+    reference_sets = {}
+    for name, closure in (("producer", producer), ("consumer", consumer)):
+        errors = []
+        reference_sets[name] = {}
+        paths = set(closure)
+        if not closure or not expected_roots:
+            errors.append("closure or expected roots are empty")
+        for path in sorted(set(expected_roots) - set(closure)):
+            errors.append(f"missing required root: {path}")
+        for path, row in closure.items():
+            if not isinstance(row.get("narHash"), str) or not row["narHash"]:
+                errors.append(f"missing NAR hash: {path}")
+            references = row.get("references")
+            if not isinstance(references, list) or not all(isinstance(ref, str) for ref in references):
+                errors.append(f"missing reference list: {path}")
+            else:
+                reference_sets[name][path] = set(references)
+                if set(references) - paths:
+                    errors.append(f"references outside closure: {path}")
+        missing_metadata[name] = errors
+    shared = sorted(set(producer).intersection(consumer))
+    comparison = {
+        "producer_paths": len(producer), "consumer_paths": len(consumer),
+        "missing": sorted(set(producer) - set(consumer)),
+        "extra": sorted(set(consumer) - set(producer)),
+        "missing_metadata": missing_metadata,
+        "nar_hash_differences": {
+            path: {"producer": producer[path].get("narHash"), "consumer": consumer[path].get("narHash")}
+            for path in shared if producer[path].get("narHash") != consumer[path].get("narHash")
+        },
+        "reference_differences": [
+            path for path in shared
+            if reference_sets["producer"].get(path) != reference_sets["consumer"].get(path)
+        ],
+    }
+    comparison["equal"] = not any(missing_metadata.values()) and not any(
+        comparison[key] for key in ("missing", "extra", "nar_hash_differences", "reference_differences")
+    )
+    return comparison
+
+
 def path_info(paths):
     value = json.loads(capture(["nix", "--extra-experimental-features", "nix-command", "path-info", "--json", "--recursive", *paths]))
     return value if isinstance(value, dict) else {row["path"]: row for row in value}

@@ -7,7 +7,7 @@ import platform
 import shutil
 import subprocess
 
-from common import CACHE, CACHE_KEY, HostMonitor, capture, record_machine, roots, run, write_json
+from common import CACHE, CACHE_KEY, HostMonitor, capture, compare_closures, record_machine, roots, run, write_json
 
 parser = argparse.ArgumentParser()
 parser.add_argument("kind", choices=("timing", "profile", "smoke"))
@@ -102,6 +102,7 @@ try:
         run(["docker", "run", "--rm", "--network", "host", "-v", f"{harness}:/harness:ro", "-v", f"{published / 'expected-roots.json'}:/expected-roots.json:ro", "-v", f"{verify}:/evidence", tag, "python3", "/harness/verify.py"], case / "verification.log")
         closure = json.loads((verify / "runtime-closure.json").read_text())
         producer = json.loads((published / "published-closure.json").read_text())
+        result["closure_comparison"] = compare_closures(producer, closure, roots(rows))
         result["root_hash_comparison"] = {path: {"producer": producer[path]["narHash"], "consumer": closure[path]["narHash"], "equal": producer[path]["narHash"] == closure[path]["narHash"]} for path in roots(rows)}
         initramfs_info = json.loads((verify / "initramfs.json").read_text())
         initramfs = initramfs_info["path"]
@@ -126,7 +127,7 @@ try:
             smoke_image = tag
         else:
             subprocess.run(["docker", "image", "rm", tag], check=True, stdout=subprocess.DEVNULL)
-    assert all(row["equal"] for result in summary["runs"] for row in result["root_hash_comparison"].values()), "Baseline and cached output bytes differ"
+    assert summary["runs"] and all(result["closure_comparison"]["equal"] for result in summary["runs"]), "Runtime closures differ or comparison metadata is incomplete"
     if smoke_image:
         kernel_dockerfile = (source / "tools/dev_env/docker/kernel-dev/Dockerfile").read_text()
         vdso = kernel_dockerfile.split("#= Download VDSO files", 1)[1].split("#= Build syscall test", 1)[0]
