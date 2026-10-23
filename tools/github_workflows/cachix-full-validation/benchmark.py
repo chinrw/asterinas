@@ -91,6 +91,12 @@ try:
         assert "output clipped" not in text, "The build log was clipped"
         result.update(mode=mode, index=index, stages=[json.loads(line.split("MEASUREMENT ", 1)[1]) for line in text.splitlines() if "MEASUREMENT {" in line], pre_gc_snapshots=[json.loads(line.split("STORE_SNAPSHOT ", 1)[1]) for line in text.splitlines() if "STORE_SNAPSHOT {" in line])
         assert len(result["pre_gc_snapshots"]) == (PRE_GC_SNAPSHOT_COUNT if args.kind == "profile" else 0)
+        if args.kind == "profile":
+            result["profile_valid"] = (
+                bool(result["stages"])
+                and all(stage.get("profile_valid", False) for stage in result["stages"])
+                and all(snapshot.get("valid", False) for snapshot in result["pre_gc_snapshots"])
+            )
         image = json.loads(capture(["docker", "image", "inspect", tag]))[0]
         result.update(image_id=image["Id"], image_size_bytes=image["Size"])
         write_json(case / "image.json", image)
@@ -127,6 +133,8 @@ try:
             smoke_image = tag
         else:
             subprocess.run(["docker", "image", "rm", tag], check=True, stdout=subprocess.DEVNULL)
+    if args.kind == "profile":
+        assert summary["runs"] and all(result["profile_valid"] for result in summary["runs"]), "Disk profiling failed; consumer results and scan errors are retained"
     assert summary["runs"] and all(result["closure_comparison"]["equal"] for result in summary["runs"]), "Runtime closures differ or comparison metadata is incomplete"
     if smoke_image:
         kernel_dockerfile = (source / "tools/dev_env/docker/kernel-dev/Dockerfile").read_text()

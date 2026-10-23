@@ -107,7 +107,8 @@ def main(command):
             profile_valid=disk["status"] == "valid" and not sampler_errors,
         )
     print("MEASUREMENT " + json.dumps(record), flush=True)
-    return result.returncode or (1 if profile and not record["profile_valid"] else 0)
+    # Let the benchmark collect all consumers before rejecting invalid profiles.
+    return result.returncode
 
 
 if __name__ == "__main__":

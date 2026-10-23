@@ -42,10 +42,11 @@ they include retained build images and other host data.
 
 Each new scan records its start, end, duration, exit code, output, diagnostics, and validity.
 Partial or failed scans are retained but excluded from the maximum.
-A failed scan or sampler invalidates the profile and makes the collector exit nonzero,
-even when the measured command succeeds.
-Required pre-GC snapshots also fail on scan errors.
-The command's own exit code remains in the measurement record.
+A failed periodic or boundary scan, or a sampler failure, invalidates the profile.
+The collector preserves the measured command's exit code so the remaining consumers can run.
+After collecting both consumers, the benchmark fails if either profile is invalid.
+Build failures and failed required pre-GC snapshots still stop the build immediately.
+Scan diagnostics and the command's exit code remain in the measurement record.
 
 Historical samples without scan validity remain `unknown`.
 Their complete totals appear only in `legacy_max_observed_nix_tmp_bytes`.
