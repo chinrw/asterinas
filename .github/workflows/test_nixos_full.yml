@@ -213,7 +213,7 @@ jobs:
             lscpu
             free -h
             make nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }}
-            make run_nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_TEST_TIMEOUT=${{ matrix.test.test_timeout_minutes || 10 }}min NIXOS_TEST_CASE=notingo_instrumented_suite
+            make run_nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_TEST_TIMEOUT=${{ matrix.test.test_timeout_minutes || 10 }}min NIXOS_TEST_CASE=notingo_native_startup
       - name: Upload runtime diagnostics
         if: always()
         uses: actions/upload-artifact@v4
