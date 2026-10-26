@@ -7,7 +7,7 @@ image="$repo/target/nixos/asterinas.img"
 clean_image="$repo/target/nixos/notingo-clean.img"
 cp --sparse=always "$image" "$clean_image"
 combined_status=0
-for variant in default periodic; do
+for variant in default; do
     directory="$repo/target/notingo-native-controls/live-$variant"
     mkdir -p "$directory"
     cp --sparse=always "$clean_image" "$image"
@@ -16,7 +16,7 @@ for variant in default periodic; do
     result=0
     PROBE_CPU_VARIANT=$variant QEMU_BIN="$suite/qemu_probe.py" make run_nixos \
         NIXOS_TEST_SUITE=development-tools-go NIXOS_TEST_TIMEOUT=12min \
-        NIXOS_TEST_CASE=notingo_live_controls > "$directory/driver.log" 2>&1 || result=$?
+        NIXOS_TEST_CASE=notingo_short_sleep_controls > "$directory/driver.log" 2>&1 || result=$?
     touch "$directory/done"
     monitor_result=0
     wait "$monitor_pid" || monitor_result=$?

@@ -243,3 +243,87 @@ fn notingo_live_controls(shell: &mut Session) -> Result<(), Error> {
         })
     }
 }
+
+#[nixos_test]
+fn notingo_short_sleep_controls(shell: &mut Session) -> Result<(), Error> {
+    let ok = Regex::new(r"(?m)^OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let mut failures = Vec::new();
+    for iteration in 1..=5 {
+        println!("LIVE_GO_BEGIN shared {iteration}");
+        let start = std::time::Instant::now();
+        let result = shell.run_cmd_and_expect_regex("GOMAXPROCS=1 timeout --signal=QUIT --kill-after=2s 10s /etc/notingo/shared NotInGoMetricCgoCallAndCallback", &ok);
+        println!(
+            "LIVE_GO_END shared {iteration} {:.3}s {result:?}",
+            start.elapsed().as_secs_f64()
+        );
+        match result {
+            Ok(()) => {}
+            Err(error @ Error::NonZeroExit { .. }) => {
+                failures.push(("original".to_string(), error));
+                break;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    let ready = Regex::new(r"(?m)^ALLOC_READY\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let allocated = Regex::new(r"(?m)^ALLOC_PASS ").map_err(|e| Error::Pty(e.into()))?;
+    shell.run_cmd_and_expect_regex(
+        "gcc -O2 -pthread /etc/notingo/allocation.c -o /tmp/allocation-probe && echo ALLOC_READY",
+        &ready,
+    )?;
+    for (mode, sleepers, spinners, ns) in [
+        ("idle", 0, 0, 1000),
+        ("spin", 0, 2, 1000),
+        ("sleep20us", 9, 2, 20000),
+        ("sleep1us", 9, 2, 1000),
+    ] {
+        println!("LIVE_C_BEGIN {mode} 1");
+        let start = std::time::Instant::now();
+        let result = shell.run_cmd_and_expect_regex(
+            &format!(
+                "timeout --signal=KILL 30s /tmp/allocation-probe {sleepers} {spinners} {ns} 1000"
+            ),
+            &allocated,
+        );
+        println!(
+            "LIVE_C_END {mode} 1 {:.3}s {result:?}",
+            start.elapsed().as_secs_f64()
+        );
+        match result {
+            Ok(()) => {}
+            Err(error @ Error::NonZeroExit { .. }) => failures.push((mode.to_string(), error)),
+            Err(error) => return Err(error),
+        }
+    }
+    for mode in ["poll", "yield"] {
+        for iteration in 1..=5 {
+            println!("SHORT_GO_BEGIN {mode} {iteration}");
+            let start = std::time::Instant::now();
+            let result = shell.run_cmd_and_expect_regex(
+                &format!("GOMAXPROCS=1 timeout --signal=KILL 10s /etc/notingo/minimal {mode}"),
+                &barrier,
+            );
+            println!(
+                "SHORT_GO_END {mode} {iteration} {:.3}s {result:?}",
+                start.elapsed().as_secs_f64()
+            );
+            match result {
+                Ok(()) => {}
+                Err(error @ Error::NonZeroExit { .. }) => {
+                    failures.push((mode.to_string(), error));
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::Aggregated {
+            summary: "Short-sleep and startup controls failed".into(),
+            collections: failures,
+        })
+    }
+}

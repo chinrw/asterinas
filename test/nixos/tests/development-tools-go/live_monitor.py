@@ -88,6 +88,38 @@ def snapshot(qmp):
         row = record(qmp, address, "runtime.m")
         output["Ms"].append({"address": hex(address), **row})
         address = row["alllink"]
+    output["system_goroutines"] = []
+    for thread in output["Ms"]:
+        address = thread["g0"]
+        if not address:
+            continue
+        row = record(qmp, address, "runtime.g")
+        low = qmp.number(address)
+        high = qmp.number(address + 8)
+        entry = {"M": thread["address"], "g0": hex(address), "fields": row, "stack_low": hex(low), "stack_high": hex(high)}
+        if low < high and high - low <= 64 * 1024 * 1024:
+            entry["stack_chunks"] = []
+            begin = max(low, high - 8192) & ~4095
+            for page in range(begin, high, 4096):
+                start = max(page, low)
+                end = min(page + 4096, high)
+                chunk = {"address": hex(start)}
+                try:
+                    chunk["hex"] = qmp.memory(start, end - start).hex()
+                except Exception as error:
+                    chunk["error"] = str(error)
+                entry["stack_chunks"].append(chunk)
+        output["system_goroutines"].append(entry)
+    registers = output["registers"]
+    for register in ("RSP", "RBP"):
+        match = re.search(register + r"=([0-9a-fA-F]+)", registers)
+        if match and int(match[1], 16) >= 0xffff800000000000:
+            address = int(match[1], 16) & ~4095
+            try:
+                output["kernel_" + register + "_address"] = hex(address)
+                output["kernel_" + register + "_hex"] = qmp.memory(address, 4096).hex()
+            except Exception as error:
+                output["kernel_" + register + "_error"] = str(error)
     output["Gs"] = []
     if "runtime.allgs" in addresses:
         array = addresses["runtime.allgs"][0]
