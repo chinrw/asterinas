@@ -190,6 +190,13 @@ jobs:
       matrix:
         test: ${{ fromJson(needs.select-test-suites.outputs.matrix) }}
     steps:
+      - name: Require the affected CPU class
+        run: |
+          lscpu
+          if ! grep -Eq '^model name[[:space:]]*:.*AMD EPYC 7763' /proc/cpuinfo; then
+            echo CPU_CLASS_MISMATCH
+            exit 1
+          fi
       - uses: endersonmenezes/free-disk-space@v3
         with:
           rm_cmd: "rmz"
