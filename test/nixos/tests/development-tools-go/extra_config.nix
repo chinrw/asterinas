@@ -1,15 +1,28 @@
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 
 let
+  linuxGuestEnabled = builtins.getEnv "PROBE_LINUX_GUEST" == "1";
+  linuxGuest = import ./linux_guest.nix { inherit pkgs; };
   sharedHelpers = import ./shared_helpers.nix { inherit pkgs; };
 in
 {
+  aster_nixos.kernel = lib.mkIf linuxGuestEnabled linuxGuest.kernel;
+  system.systemBuilderCommands = lib.mkIf linuxGuestEnabled (
+    lib.mkAfter ''
+      ln -sfn ${linuxGuest.initrd}/initrd $out/initrd
+    ''
+  );
   environment.systemPackages = with pkgs; [
     go_1_26
     gcc
     python3
   ];
-  environment.etc."notingo/build.py".source = ./build_notingo_probe.py;
-  environment.etc."notingo/shared".source = "${sharedHelpers}/bin/original";
-  environment.etc."notingo/clock-probe".source = "${sharedHelpers}/bin/clock-probe";
+  environment.etc = {
+    "notingo/build.py".source = ./build_notingo_probe.py;
+    "notingo/shared".source = "${sharedHelpers}/bin/original";
+    "notingo/clock-probe".source = "${sharedHelpers}/bin/clock-probe";
+  }
+  // lib.optionalAttrs linuxGuestEnabled {
+    "notingo/linux-version".text = linuxGuest.version;
+  };
 }

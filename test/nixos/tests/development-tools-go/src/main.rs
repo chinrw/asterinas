@@ -102,9 +102,18 @@ fn notingo_instrumented_suite(nixos_shell: &mut Session) -> Result<(), Error> {
     go_stdlib(nixos_shell)
 }
 
-// Compare helper execution in one guest while keeping the kernel unchanged.
+// Compare the helper modes on the current guest kernel.
 #[nixos_test]
 fn notingo_same_vm_controls(nixos_shell: &mut Session) -> Result<(), Error> {
+    nixos_shell.run_cmd("uname -a")?;
+    if std::env::var("PROBE_LINUX_GUEST").as_deref() == Ok("1") {
+        let confirmed =
+            Regex::new(r"(?m)^LINUX_KERNEL_CONFIRMED\s*$").map_err(|err| Error::Pty(err.into()))?;
+        nixos_shell.run_cmd_and_expect_regex(
+            "test \"$(uname -r)\" = \"$(cat /etc/notingo/linux-version)\" && echo LINUX_KERNEL_CONFIRMED",
+            &confirmed,
+        )?;
+    }
     let built_original =
         Regex::new(r"(?m)^PROBE_ORIGINAL_BUILD_OK\s*$").map_err(|err| Error::Pty(err.into()))?;
     let ready = Regex::new(r"(?m)^OK\s*$").map_err(|err| Error::Pty(err.into()))?;
