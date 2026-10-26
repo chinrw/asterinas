@@ -41,7 +41,11 @@ fn go_stdlib(nixos_shell: &mut Session) -> Result<(), Error> {
         .map(str::trim)
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
     {
-        let cmd = format!("go test -short {testcase}");
+        let cmd = if testcase == "runtime" || testcase.starts_with("runtime ") {
+            format!("go test -short -v -count=1 -timeout=9m {testcase}")
+        } else {
+            format!("go test -short {testcase}")
+        };
         if let Err(err) = nixos_shell.run_cmd_and_expect_regex(&cmd, &success_regex) {
             failed_tests.push((testcase.to_string(), err));
         }

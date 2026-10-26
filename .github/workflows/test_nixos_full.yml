@@ -102,7 +102,7 @@ jobs:
               { "name": "web-servers-and-proxies", "disk_size": 10240, "timeout_minutes": 45 },
               { "name": "databases-and-middleware", "disk_size": 10240, "timeout_minutes": 45 },
               { "name": "development-tools", "disk_size": 10240, "timeout_minutes": 45 },
-              { "name": "development-tools-go", "disk_size": 8192, "timeout_minutes": 60 },
+              { "name": "development-tools-go", "disk_size": 8192, "timeout_minutes": 60, "test_timeout_minutes": 12 },
               { "name": "development-tools-python", "disk_size": 8192, "timeout_minutes": 60 },
               { "name": "development-tools-openjdk", "disk_size": 8192, "timeout_minutes": 60 },
               { "name": "cicd-and-devops", "disk_size": 8192, "timeout_minutes": 45 },
@@ -209,5 +209,19 @@ jobs:
           # So we have to do `set -e` explicitly here.
           run: |
             set -e
+            uname -r
+            lscpu
+            free -h
             make nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }}
             make run_nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_TEST_TIMEOUT=${{ matrix.test.test_timeout_minutes || 10 }}min
+      - name: Upload runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nixos-runtime-${{ matrix.test.name }}-${{ github.run_id }}
+          path: |
+            qemu.log
+            qemu-serial.log
+            target/osdk/asterinas/asterinas-osdk-bin
+          if-no-files-found: ignore
+          retention-days: 3

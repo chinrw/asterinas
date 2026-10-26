@@ -236,7 +236,8 @@ pub fn __nixos_test_main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("✓ Test case '{}' passed\n", test_case.name);
                 passed += 1;
             }
-            Err(_) => {
+            Err(error) => {
+                eprintln!("Test failure details: {error:?}");
                 println!("✗ Test case '{}' failed\n", test_case.name);
                 failed += 1;
                 failed_tests.push(test_case.name);
