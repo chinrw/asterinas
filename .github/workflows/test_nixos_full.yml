@@ -220,9 +220,9 @@ jobs:
             lscpu
             free -h
             make nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }}
-            python3 test/nixos/tests/development-tools-go/linux_controls.py
+            python3 test/nixos/tests/development-tools-go/minimal_linux_controls.py
             bash test/nixos/tests/development-tools-go/run_live_controls.sh
-            python3 test/nixos/tests/development-tools-go/linux_controls.py --check
+            python3 test/nixos/tests/development-tools-go/minimal_linux_controls.py --check
       - name: Upload runtime diagnostics
         if: always()
         uses: actions/upload-artifact@v4

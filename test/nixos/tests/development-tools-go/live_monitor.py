@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import socket
@@ -118,6 +119,15 @@ def snapshot(qmp):
             try:
                 output["kernel_" + register + "_address"] = hex(address)
                 output["kernel_" + register + "_hex"] = qmp.memory(address, 4096).hex()
+                if register == "RSP":
+                    output["kernel_stack_chunks"] = []
+                    for page in range(address, address + 16384, 4096):
+                        chunk = {"address": hex(page)}
+                        try:
+                            chunk["hex"] = qmp.memory(page, 4096).hex()
+                        except Exception as error:
+                            chunk["error"] = str(error)
+                        output["kernel_stack_chunks"].append(chunk)
             except Exception as error:
                 output["kernel_" + register + "_error"] = str(error)
     output["Gs"] = []
@@ -132,11 +142,12 @@ def snapshot(qmp):
     return output
 
 suite = Path(__file__).resolve().parent
-layout = json.loads((suite / "helper_layout.json").read_text())
+minimal = os.environ.get("PROBE_HELPER_KIND") == "minimal"
+layout = json.loads((suite / ("minimal_layout.json" if minimal else "helper_layout.json")).read_text())
 def main():
     directory = Path(sys.argv[1])
     repo = suite.parents[3]
-    helper = repo / "target/notingo-native-controls/shared-helper"
+    helper = repo / "target/notingo-native-controls" / ("minimal-helper" if minimal else "shared-helper")
     assert hashlib.sha256(helper.read_bytes()).hexdigest() == layout["sha256"]
     started = {}
     completed = set()
@@ -150,15 +161,22 @@ def main():
         for kind, mode, iteration in re.findall(r"(?m)^LIVE_(GO|C)_END (\S+) (\d+)", text):
             completed.add(kind + "-" + mode + "-" + iteration)
         for key, (begin, kind, mode) in list(started.items()):
-            if key in completed or key in captured:
+            if key in completed:
                 continue
             elapsed = time.monotonic() - begin
             if kind == "C" and elapsed < 60:
                 continue
-            if kind == "GO" and (elapsed < 2 or mode == "original"):
+            phase = 2
+            if kind == "GO":
+                phase = 8 if elapsed >= 8 else 2
+                if elapsed < phase or mode == "original":
+                    continue
+            capture_key = key + "-t" + str(phase)
+            if capture_key in captured:
                 continue
-            captured.add(key)
-            result = {"mode": key, "host_seconds_before_probe": elapsed}
+            captured.add(capture_key)
+            result = {"mode": key, "probe_phase_seconds": phase, "host_seconds_before_probe": elapsed}
+            probe_start = time.monotonic()
             for attempt in range(8):
                 qmp = None
                 try:
@@ -180,8 +198,9 @@ def main():
                             result["resume_error"] = str(error)
                         qmp.close()
                 time.sleep(0.02)
-            (directory / (key + ".json")).write_text(json.dumps(result, indent=2) + "\n")
-            print("LIVE_SNAPSHOT " + key + " " + ("captured" if "state" in result else "unavailable"), flush=True)
+            result["probe_host_seconds"] = time.monotonic() - probe_start
+            (directory / (capture_key + ".json")).write_text(json.dumps(result, indent=2) + "\n")
+            print("LIVE_SNAPSHOT " + capture_key + " " + ("captured" if "state" in result else "unavailable"), flush=True)
         time.sleep(0.05)
 
 

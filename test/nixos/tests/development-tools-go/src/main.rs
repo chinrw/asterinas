@@ -327,3 +327,68 @@ fn notingo_short_sleep_controls(shell: &mut Session) -> Result<(), Error> {
         })
     }
 }
+
+#[nixos_test]
+fn notingo_minimal_live_controls(shell: &mut Session) -> Result<(), Error> {
+    let digest = std::env::var("PROBE_MINIMAL_SHA256").expect("Host minimal helper checksum");
+    let checksum = Regex::new(&format!(r"(?m)^{}  /etc/notingo/minimal\s*$", digest))
+        .map_err(|e| Error::Pty(e.into()))?;
+    shell.run_cmd_and_expect_regex("sha256sum /etc/notingo/minimal", &checksum)?;
+    let state = Regex::new(r"(?m)^PROCESS_STATE_END\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let mut failures = Vec::new();
+    for mode in ["poll", "yield"] {
+        for iteration in 1..=8 {
+            if iteration == 1 {
+                shell.run_cmd_and_expect_regex("echo PROCESS_STATE_BEGIN && ps -eLo pid,tid,ppid,stat,comm && cat /proc/meminfo && echo PROCESS_STATE_END",&state)?;
+            }
+            println!("LIVE_GO_BEGIN {mode} {iteration}");
+            let start = std::time::Instant::now();
+            let result=shell.run_cmd_and_expect_regex(&format!("GOMAXPROCS=1 timeout --signal=QUIT --kill-after=2s 10s /etc/notingo/minimal {mode}"),&barrier);
+            println!(
+                "LIVE_GO_END {mode} {iteration} {:.3}s {result:?}",
+                start.elapsed().as_secs_f64()
+            );
+            match result {
+                Ok(()) => {}
+                Err(error @ Error::NonZeroExit { .. }) => {
+                    failures.push((mode.to_string(), error));
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    shell.run_cmd_and_expect_regex("echo PROCESS_STATE_BEGIN && ps -eLo pid,tid,ppid,stat,comm && cat /proc/meminfo && echo PROCESS_STATE_END",&state)?;
+    let ready = Regex::new(r"(?m)^ALLOC_READY\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let allocated = Regex::new(r"(?m)^ALLOC_PASS ").map_err(|e| Error::Pty(e.into()))?;
+    shell.run_cmd_and_expect_regex(
+        "gcc -O2 -pthread /etc/notingo/allocation.c -o /tmp/allocation-probe && echo ALLOC_READY",
+        &ready,
+    )?;
+    for (mode, ns) in [("ten-spin-20us", 20000), ("ten-spin-1us", 1000)] {
+        println!("LIVE_C_BEGIN {mode} 1");
+        let start = std::time::Instant::now();
+        let result = shell.run_cmd_and_expect_regex(
+            &format!("timeout --signal=KILL 30s /tmp/allocation-probe 9 10 {ns} 1000"),
+            &allocated,
+        );
+        println!(
+            "LIVE_C_END {mode} 1 {:.3}s {result:?}",
+            start.elapsed().as_secs_f64()
+        );
+        match result {
+            Ok(()) => {}
+            Err(error @ Error::NonZeroExit { .. }) => failures.push((mode.to_string(), error)),
+            Err(error) => return Err(error),
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::Aggregated {
+            summary: "Standalone cgo progress failed".into(),
+            collections: failures,
+        })
+    }
+}
