@@ -107,6 +107,7 @@ fn notingo_instrumented_suite(nixos_shell: &mut Session) -> Result<(), Error> {
 fn notingo_same_vm_controls(nixos_shell: &mut Session) -> Result<(), Error> {
     nixos_shell.run_cmd("uname -a")?;
     if std::env::var("PROBE_LINUX_GUEST").as_deref() == Ok("1") {
+        nixos_shell.run_cmd("stty -onlcr")?;
         let confirmed =
             Regex::new(r"(?m)^LINUX_KERNEL_CONFIRMED\s*$").map_err(|err| Error::Pty(err.into()))?;
         nixos_shell.run_cmd_and_expect_regex(
