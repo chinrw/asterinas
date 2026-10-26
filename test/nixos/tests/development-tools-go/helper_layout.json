@@ -1,0 +1,354 @@
+{
+  "addresses": {
+    "_cgo_9adf7b08d132_Cfunc_Spinning": [
+      5619825
+    ],
+    "main._cgo_9adf7b08d132_Cfunc_Spinning": [
+      7401720
+    ],
+    "main.blockedForever": [
+      7606620
+    ],
+    "runtime.allgs": [
+      7468576
+    ],
+    "runtime.allm": [
+      7467648
+    ],
+    "runtime.allp": [
+      7468800
+    ],
+    "runtime.extraM": [
+      7607048
+    ],
+    "runtime.extraMInUse": [
+      7606732
+    ],
+    "runtime.extraMLength": [
+      7606660
+    ],
+    "runtime.extraMWaiters": [
+      7606664
+    ],
+    "runtime.gomaxprocs": [
+      7606676
+    ],
+    "runtime.m0": [
+      7475616
+    ],
+    "runtime.sched": [
+      7479552
+    ],
+    "spinning": [
+      7604024,
+      7604224,
+      7604304,
+      7604312,
+      7604320,
+      7604328
+    ]
+  },
+  "elf_type": "ET_EXEC",
+  "identity": {
+    "address": 4195244,
+    "bytes": "040000005300000004000000476f00004573745a37307550413630334d4f7135575443372f6842585675457246534d71307957576e6b5f6e552f6345375f396c42357530775436337a32457241692f39784955704848584c5972366d4e624b6258573900"
+  },
+  "structures": {
+    "runtime.g": {
+      "size": 456,
+      "fields": {
+        "goid": {
+          "offset": 152,
+          "size": 8,
+          "type": "uint64"
+        },
+        "m": {
+          "offset": 48,
+          "size": 8,
+          "type": "*runtime.m"
+        },
+        "atomicstatus": {
+          "offset": 144,
+          "size": 4,
+          "type": "internal/runtime/atomic.Uint32"
+        },
+        "waitreason": {
+          "offset": 176,
+          "size": 1,
+          "type": "runtime.waitReason"
+        },
+        "preempt": {
+          "offset": 177,
+          "size": 1,
+          "type": "bool"
+        },
+        "preemptStop": {
+          "offset": 178,
+          "size": 1,
+          "type": "bool"
+        },
+        "lockedm": {
+          "offset": 208,
+          "size": 8,
+          "type": "runtime.muintptr"
+        },
+        "syscallpc": {
+          "offset": 112,
+          "size": 8,
+          "type": "uintptr"
+        },
+        "syscallsp": {
+          "offset": 104,
+          "size": 8,
+          "type": "uintptr"
+        },
+        "sched": {
+          "offset": 56,
+          "size": 48,
+          "type": "runtime.gobuf"
+        }
+      }
+    },
+    "runtime.gQueue": {
+      "size": 24,
+      "fields": {
+        "head": {
+          "offset": 0,
+          "size": 8,
+          "type": "runtime.guintptr"
+        },
+        "tail": {
+          "offset": 8,
+          "size": 8,
+          "type": "runtime.guintptr"
+        },
+        "size": {
+          "offset": 16,
+          "size": 4,
+          "type": "int32"
+        }
+      }
+    },
+    "runtime.gobuf": {
+      "size": 48,
+      "fields": {
+        "sp": {
+          "offset": 0,
+          "size": 8,
+          "type": "uintptr"
+        },
+        "pc": {
+          "offset": 8,
+          "size": 8,
+          "type": "uintptr"
+        },
+        "g": {
+          "offset": 16,
+          "size": 8,
+          "type": "runtime.guintptr"
+        }
+      }
+    },
+    "runtime.m": {
+      "size": 1824,
+      "fields": {
+        "g0": {
+          "offset": 0,
+          "size": 8,
+          "type": "*runtime.g"
+        },
+        "gsignal": {
+          "offset": 72,
+          "size": 8,
+          "type": "*runtime.g"
+        },
+        "curg": {
+          "offset": 184,
+          "size": 8,
+          "type": "*runtime.g"
+        },
+        "p": {
+          "offset": 208,
+          "size": 8,
+          "type": "runtime.puintptr"
+        },
+        "nextp": {
+          "offset": 216,
+          "size": 8,
+          "type": "runtime.puintptr"
+        },
+        "oldp": {
+          "offset": 224,
+          "size": 8,
+          "type": "runtime.puintptr"
+        },
+        "procid": {
+          "offset": 64,
+          "size": 8,
+          "type": "uint64"
+        },
+        "alllink": {
+          "offset": 352,
+          "size": 8,
+          "type": "*runtime.m"
+        },
+        "park": {
+          "offset": 344,
+          "size": 8,
+          "type": "runtime.note"
+        },
+        "blocked": {
+          "offset": 277,
+          "size": 1,
+          "type": "bool"
+        },
+        "spinning": {
+          "offset": 276,
+          "size": 1,
+          "type": "bool"
+        },
+        "locks": {
+          "offset": 264,
+          "size": 4,
+          "type": "int32"
+        },
+        "mallocing": {
+          "offset": 240,
+          "size": 4,
+          "type": "int32"
+        },
+        "throwing": {
+          "offset": 244,
+          "size": 4,
+          "type": "runtime.throwType"
+        },
+        "dying": {
+          "offset": 268,
+          "size": 4,
+          "type": "int32"
+        },
+        "lockedg": {
+          "offset": 384,
+          "size": 8,
+          "type": "runtime.guintptr"
+        }
+      }
+    },
+    "runtime.note": {
+      "size": 8,
+      "fields": {
+        "key": {
+          "offset": 0,
+          "size": 8,
+          "type": "uintptr"
+        }
+      }
+    },
+    "runtime.p": {
+      "size": 15920,
+      "fields": {
+        "id": {
+          "offset": 0,
+          "size": 4,
+          "type": "int32"
+        },
+        "status": {
+          "offset": 4,
+          "size": 4,
+          "type": "uint32"
+        },
+        "m": {
+          "offset": 48,
+          "size": 8,
+          "type": "runtime.muintptr"
+        },
+        "schedtick": {
+          "offset": 16,
+          "size": 4,
+          "type": "uint32"
+        },
+        "syscalltick": {
+          "offset": 20,
+          "size": 4,
+          "type": "uint32"
+        },
+        "runqhead": {
+          "offset": 400,
+          "size": 4,
+          "type": "uint32"
+        },
+        "runqtail": {
+          "offset": 404,
+          "size": 4,
+          "type": "uint32"
+        },
+        "runnext": {
+          "offset": 2456,
+          "size": 8,
+          "type": "runtime.guintptr"
+        },
+        "sysmontick": {
+          "offset": 24,
+          "size": 24,
+          "type": "runtime.sysmontick"
+        }
+      }
+    },
+    "runtime.schedt": {
+      "size": 6872,
+      "fields": {
+        "npidle": {
+          "offset": 112,
+          "size": 4,
+          "type": "internal/runtime/atomic.Int32"
+        },
+        "nmspinning": {
+          "offset": 116,
+          "size": 4,
+          "type": "internal/runtime/atomic.Int32"
+        },
+        "needspinning": {
+          "offset": 120,
+          "size": 4,
+          "type": "internal/runtime/atomic.Uint32"
+        },
+        "nmidle": {
+          "offset": 64,
+          "size": 4,
+          "type": "int32"
+        },
+        "nmidlelocked": {
+          "offset": 68,
+          "size": 4,
+          "type": "int32"
+        },
+        "sysmonwait": {
+          "offset": 280,
+          "size": 1,
+          "type": "internal/runtime/atomic.Bool"
+        },
+        "gcwaiting": {
+          "offset": 264,
+          "size": 1,
+          "type": "internal/runtime/atomic.Bool"
+        },
+        "stopwait": {
+          "offset": 268,
+          "size": 4,
+          "type": "int32"
+        },
+        "runq": {
+          "offset": 128,
+          "size": 24,
+          "type": "runtime.gQueue"
+        },
+        "midle": {
+          "offset": 40,
+          "size": 24,
+          "type": "runtime.listHeadManual"
+        }
+      }
+    }
+  },
+  "sha256": "597b249fd3edf30b25d076ba5d0e34d12b3affa90b28e8f4f33adb4350560792"
+}

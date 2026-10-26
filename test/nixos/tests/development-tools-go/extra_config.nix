@@ -19,6 +19,8 @@ in
   ];
   environment.etc = {
     "notingo/build.py".source = ./build_notingo_probe.py;
+    "notingo/wait.c".source = ./wait_primitive_probe.c;
+    "notingo/signal.c".source = ./futex_signal_probe.c;
     "notingo/shared".source = "${sharedHelpers}/bin/original";
     "notingo/clock-probe".source = "${sharedHelpers}/bin/clock-probe";
   }

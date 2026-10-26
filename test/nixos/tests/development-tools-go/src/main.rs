@@ -181,3 +181,65 @@ fn notingo_same_vm_controls(nixos_shell: &mut Session) -> Result<(), Error> {
         })
     }
 }
+
+// Read live scheduler state after a helper has already exceeded normal startup time.
+#[nixos_test]
+fn notingo_live_controls(shell: &mut Session) -> Result<(), Error> {
+    let built =
+        Regex::new(r"(?m)^PROBE_ORIGINAL_BUILD_OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let ok = Regex::new(r"(?m)^OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    shell.run_cmd_and_expect_regex("python3 /etc/notingo/build.py --original", &built)?;
+    let mut failures = Vec::new();
+    for (mode, binary, debug) in [
+        ("original", "/tmp/notingo-original", ""),
+        ("shared", "/etc/notingo/shared", ""),
+        (
+            "noasync",
+            "/etc/notingo/shared",
+            "GODEBUG=asyncpreemptoff=1",
+        ),
+        (
+            "noavx",
+            "/etc/notingo/shared",
+            "GODEBUG=cpu.avx=off,cpu.avx2=off",
+        ),
+    ] {
+        for iteration in 1..=5 {
+            println!("LIVE_GO_BEGIN {mode} {iteration}");
+            let start = std::time::Instant::now();
+            let result = shell.run_cmd_and_expect_regex(&format!("GOMAXPROCS=1 {debug} timeout --signal=QUIT --kill-after=2s 10s {binary} NotInGoMetricCgoCallAndCallback"), &ok);
+            println!(
+                "LIVE_GO_END {mode} {iteration} {:.3}s {result:?}",
+                start.elapsed().as_secs_f64()
+            );
+            match result {
+                Ok(()) => {}
+                Err(error @ Error::NonZeroExit { .. }) => {
+                    failures.push((mode.to_string(), error));
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    let built_c = Regex::new(r"(?m)^C_READY\s*$").map_err(|e| Error::Pty(e.into()))?;
+    shell.run_cmd_and_expect_regex("gcc -O2 -pthread /etc/notingo/wait.c -o /tmp/wait-probe && gcc -O2 -pthread /etc/notingo/signal.c -o /tmp/signal-probe && echo C_READY", &built_c)?;
+    for (mode, command, expected) in [
+        ("sleep-idle", "/tmp/wait-probe 0 1000", "WAIT_PROBE_PASS"),
+        ("sleep-busy", "/tmp/wait-probe 20 100", "WAIT_PROBE_PASS"),
+        ("signal", "/tmp/signal-probe 100000 1 1", "PING_DONE"),
+    ] {
+        println!("LIVE_C_BEGIN {mode} 1");
+        let result = shell.run_cmd_and_expect(command, expected);
+        println!("LIVE_C_END {mode} 1 {result:?}");
+        result?;
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::Aggregated {
+            summary: "Live progress controls failed".into(),
+            collections: failures,
+        })
+    }
+}
