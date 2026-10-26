@@ -42,7 +42,7 @@ fn go_stdlib(nixos_shell: &mut Session) -> Result<(), Error> {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
     {
         let cmd = if testcase == "runtime" || testcase.starts_with("runtime ") {
-            format!("go test -short -v -count=1 -timeout=9m {testcase}")
+            format!("go test -short -v -count=50 -timeout=2m {testcase}")
         } else {
             format!("go test -short {testcase}")
         };
