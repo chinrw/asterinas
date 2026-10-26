@@ -392,3 +392,61 @@ fn notingo_minimal_live_controls(shell: &mut Session) -> Result<(), Error> {
         })
     }
 }
+
+#[nixos_test]
+fn notingo_wait_interval_controls(shell: &mut Session) -> Result<(), Error> {
+    let digest = std::env::var("PROBE_MINIMAL_SHA256").expect("Original minimal checksum");
+    let mut expected = vec![("minimal".to_string(), digest)];
+    for line in std::env::var("PROBE_FOREIGN_WAIT_DIGESTS")
+        .expect("Variant checksums")
+        .lines()
+    {
+        let mut fields = line.split_whitespace();
+        let name = fields.next().expect("Variant name").to_string();
+        let digest = fields.next().expect("Variant checksum").to_string();
+        expected.push((name, digest));
+    }
+    for (name, digest) in expected {
+        let checksum = Regex::new(&format!(r"(?m)^{}  /etc/notingo/{}\s*$", digest, name))
+            .map_err(|e| Error::Pty(e.into()))?;
+        shell.run_cmd_and_expect_regex(&format!("sha256sum /etc/notingo/{name}"), &checksum)?;
+    }
+    let state = Regex::new(r"(?m)^PROCESS_STATE_END\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let mut failures = Vec::new();
+    for (mode, binary, alternate) in [
+        ("base-before", "minimal", false),
+        ("sleep20", "sleep20", true),
+        ("base-middle", "minimal", false),
+        ("sleep1000", "sleep1000", true),
+        ("base-after", "minimal", false),
+    ] {
+        shell.run_cmd_and_expect_regex("echo PROCESS_STATE_BEGIN && ps -eLo pid,tid,ppid,stat,comm && cat /proc/meminfo && echo PROCESS_STATE_END",&state)?;
+        let prefix = if alternate { "ALT_GO" } else { "LIVE_GO" };
+        for iteration in 1..=if alternate { 10 } else { 8 } {
+            println!("{prefix}_BEGIN {mode} {iteration}");
+            let start = std::time::Instant::now();
+            let result=shell.run_cmd_and_expect_regex(&format!("GOMAXPROCS=1 timeout --signal=QUIT --kill-after=2s 10s /etc/notingo/{binary} poll"),&barrier);
+            println!(
+                "{prefix}_END {mode} {iteration} {:.3}s {result:?}",
+                start.elapsed().as_secs_f64()
+            );
+            match result {
+                Ok(()) => {}
+                Err(error @ Error::NonZeroExit { .. }) => {
+                    failures.push((mode.to_string(), error));
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::Aggregated {
+            summary: "Foreign-thread wait interval controls failed".into(),
+            collections: failures,
+        })
+    }
+}

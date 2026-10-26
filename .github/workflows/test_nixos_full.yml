@@ -53,7 +53,7 @@ jobs:
   # To do so, this first job specifies the selected NixOS test suites
   # by producing a test matrix to be consumed by the second job.
   select-test-suites:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       run: ${{ steps.select.outputs.run }}
       matrix: ${{ steps.select.outputs.matrix }}
@@ -183,7 +183,7 @@ jobs:
     name: Test ${{ matrix.test.name }}
     needs: select-test-suites
     if: needs.select-test-suites.outputs.run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 75
     strategy:
       fail-fast: false
@@ -221,6 +221,7 @@ jobs:
             free -h
             make nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }}
             python3 test/nixos/tests/development-tools-go/minimal_linux_controls.py
+            python3 test/nixos/tests/development-tools-go/foreign_wait_controls.py
             bash test/nixos/tests/development-tools-go/run_live_controls.sh
             python3 test/nixos/tests/development-tools-go/minimal_linux_controls.py --check
       - name: Upload runtime diagnostics

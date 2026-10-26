@@ -14,9 +14,9 @@ for variant in default; do
     PROBE_HELPER_KIND=minimal python3 "$suite/live_monitor.py" "$directory" > "$directory/monitor.log" 2>&1 &
     monitor_pid=$!
     result=0
-    PROBE_MINIMAL_SHA256=$(cat "$repo/target/notingo-native-controls/minimal-sha256.txt") PROBE_CPU_VARIANT=$variant QEMU_BIN="$suite/qemu_probe.py" make run_nixos \
+    PROBE_MINIMAL_SHA256=$(cat "$repo/target/notingo-native-controls/minimal-sha256.txt") PROBE_FOREIGN_WAIT_DIGESTS=$(cat "$repo/target/notingo-native-controls/foreign-wait-digests.txt") PROBE_CPU_VARIANT=$variant QEMU_BIN="$suite/qemu_probe.py" make run_nixos \
         NIXOS_TEST_SUITE=development-tools-go NIXOS_TEST_TIMEOUT=12min \
-        NIXOS_TEST_CASE=notingo_minimal_live_controls > "$directory/driver.log" 2>&1 || result=$?
+        NIXOS_TEST_CASE=notingo_wait_interval_controls > "$directory/driver.log" 2>&1 || result=$?
     touch "$directory/done"
     monitor_result=0
     wait "$monitor_pid" || monitor_result=$?
