@@ -42,7 +42,9 @@ fn go_stdlib(nixos_shell: &mut Session) -> Result<(), Error> {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
     {
         let cmd = if testcase == "runtime" || testcase.starts_with("runtime ") {
-            format!("go test -short -v -count=1 -timeout=9m {testcase}")
+            format!(
+                "GOFLAGS=-overlay=/tmp/notingo-probe-src/overlay.json go test -short -v -count=1 -timeout=9m {testcase}"
+            )
         } else {
             format!("go test -short {testcase}")
         };
@@ -65,4 +67,37 @@ fn go_stdlib(nixos_shell: &mut Session) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+// Run the original helper with native thread-creation failures made explicit.
+#[nixos_test]
+fn notingo_native_startup(nixos_shell: &mut Session) -> Result<(), Error> {
+    const PROBE_RUNS: usize = 1000;
+    const PROGRESS_INTERVAL: usize = 100;
+    let built = Regex::new(r"(?m)^PROBE_BUILD_OK\s*$").map_err(|err| Error::Pty(err.into()))?;
+    let ready = Regex::new(r"(?m)^OK\s*$").map_err(|err| Error::Pty(err.into()))?;
+    nixos_shell.run_cmd_and_expect_regex("python3 /etc/notingo/build.py", &built)?;
+    for name in ["NotInGoMetricCgoCall", "NotInGoMetricCgoCallback"] {
+        let command = format!("timeout --signal=QUIT --kill-after=2s 5s /tmp/notingo-probe {name}");
+        nixos_shell.run_cmd_and_expect_regex(&command, &ready)?;
+    }
+    for iteration in 1..=PROBE_RUNS {
+        nixos_shell.run_cmd_and_expect_regex(
+            "timeout --signal=QUIT --kill-after=2s 5s /tmp/notingo-probe NotInGoMetricCgoCallAndCallback",
+            &ready,
+        )?;
+        if iteration % PROGRESS_INTERVAL == 0 {
+            println!("Completed {iteration} mixed C/Go startup probes");
+        }
+    }
+    Ok(())
+}
+
+// Keep the full preceding workload while tracing native thread-creation errors.
+#[nixos_test]
+fn notingo_instrumented_suite(nixos_shell: &mut Session) -> Result<(), Error> {
+    let ready =
+        Regex::new(r"(?m)^PROBE_OVERLAY_READY\s*$").map_err(|err| Error::Pty(err.into()))?;
+    nixos_shell.run_cmd_and_expect_regex("python3 /etc/notingo/build.py --prepare-only", &ready)?;
+    go_stdlib(nixos_shell)
 }
