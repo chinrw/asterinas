@@ -8,6 +8,17 @@ import subprocess
 
 source_root = Path(subprocess.check_output(["go", "env", "GOROOT"], text=True).strip())
 source = source_root / "src/runtime/testdata/testprogcgo"
+if "--original" in sys.argv:
+    experiment = os.environ.get("GOEXPERIMENT", "")
+    experiment = experiment + ",goroutineleakprofile" if experiment else "goroutineleakprofile"
+    subprocess.run(
+        ["go", "build", "-o", "/tmp/notingo-original", "."],
+        cwd=source,
+        env=dict(os.environ, GO111MODULE="off", GOEXPERIMENT=experiment),
+        check=True,
+    )
+    print("PROBE_ORIGINAL_BUILD_OK")
+    sys.exit(0)
 work = Path("/tmp/notingo-probe-src")
 work.mkdir(exist_ok=True)
 text = (source / "notingo.go").read_text()

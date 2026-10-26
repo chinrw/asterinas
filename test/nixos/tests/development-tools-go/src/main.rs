@@ -101,3 +101,55 @@ fn notingo_instrumented_suite(nixos_shell: &mut Session) -> Result<(), Error> {
     nixos_shell.run_cmd_and_expect_regex("python3 /etc/notingo/build.py --prepare-only", &ready)?;
     go_stdlib(nixos_shell)
 }
+
+// Compare helper execution in one guest while keeping the kernel unchanged.
+#[nixos_test]
+fn notingo_same_vm_controls(nixos_shell: &mut Session) -> Result<(), Error> {
+    let built_original =
+        Regex::new(r"(?m)^PROBE_ORIGINAL_BUILD_OK\s*$").map_err(|err| Error::Pty(err.into()))?;
+    let built_checked =
+        Regex::new(r"(?m)^PROBE_BUILD_OK\s*$").map_err(|err| Error::Pty(err.into()))?;
+    let ready = Regex::new(r"(?m)^OK\s*$").map_err(|err| Error::Pty(err.into()))?;
+    let mut failures = Vec::new();
+    nixos_shell
+        .run_cmd_and_expect_regex("python3 /etc/notingo/build.py --original", &built_original)?;
+    for (mode, binary, procs) in [
+        ("original-p1", "/tmp/notingo-original", 1),
+        ("original-p2", "/tmp/notingo-original", 2),
+        ("checked-p1", "/tmp/notingo-probe", 1),
+    ] {
+        if mode == "checked-p1" {
+            nixos_shell
+                .run_cmd_and_expect_regex("python3 /etc/notingo/build.py", &built_checked)?;
+        }
+        for iteration in 1..=10 {
+            let started = std::time::Instant::now();
+            let command = format!(
+                "GOMAXPROCS={procs} timeout --signal=QUIT --kill-after=2s 10s {binary} NotInGoMetricCgoCallAndCallback"
+            );
+            match nixos_shell.run_cmd_and_expect_regex(&command, &ready) {
+                Ok(()) => println!(
+                    "PROBE_RESULT {mode} {iteration} OK {:.3}s",
+                    started.elapsed().as_secs_f64()
+                ),
+                Err(error @ Error::NonZeroExit { .. }) => {
+                    println!(
+                        "PROBE_RESULT {mode} {iteration} ERROR {:.3}s {error:?}",
+                        started.elapsed().as_secs_f64()
+                    );
+                    failures.push((mode.to_string(), error));
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::Aggregated {
+            summary: "Native helper controls failed".to_string(),
+            collections: failures,
+        })
+    }
+}
