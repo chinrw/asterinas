@@ -107,25 +107,43 @@ fn notingo_instrumented_suite(nixos_shell: &mut Session) -> Result<(), Error> {
 fn notingo_same_vm_controls(nixos_shell: &mut Session) -> Result<(), Error> {
     let built_original =
         Regex::new(r"(?m)^PROBE_ORIGINAL_BUILD_OK\s*$").map_err(|err| Error::Pty(err.into()))?;
-    let built_checked =
-        Regex::new(r"(?m)^PROBE_BUILD_OK\s*$").map_err(|err| Error::Pty(err.into()))?;
     let ready = Regex::new(r"(?m)^OK\s*$").map_err(|err| Error::Pty(err.into()))?;
     let mut failures = Vec::new();
     nixos_shell
         .run_cmd_and_expect_regex("python3 /etc/notingo/build.py --original", &built_original)?;
-    for (mode, binary, procs) in [
-        ("original-p1", "/tmp/notingo-original", 1),
-        ("original-p2", "/tmp/notingo-original", 2),
-        ("checked-p1", "/tmp/notingo-probe", 1),
+    for (mode, binary, procs, debug) in [
+        ("original-p1", "/tmp/notingo-original", 1, ""),
+        (
+            "original-p1-nosleep",
+            "/tmp/notingo-original",
+            1,
+            "GODEBUG=schedtrace=1000000",
+        ),
+        ("original-p2", "/tmp/notingo-original", 2, ""),
+        ("original-p1-repeat", "/tmp/notingo-original", 1, ""),
+        ("shared-p1", "/etc/notingo/shared", 1, ""),
     ] {
-        if mode == "checked-p1" {
-            nixos_shell
-                .run_cmd_and_expect_regex("python3 /etc/notingo/build.py", &built_checked)?;
+        if mode == "shared-p1" {
+            let clock_output =
+                Regex::new(r"(?m)^CLOCK_PROBE ").map_err(|err| Error::Pty(err.into()))?;
+            let started = std::time::Instant::now();
+            nixos_shell.run_cmd_and_expect_regex(
+                "timeout --kill-after=2s 15s /etc/notingo/clock-probe",
+                &clock_output,
+            )?;
+            println!(
+                "CLOCK_PROBE_HOST_SECONDS {:.3}",
+                started.elapsed().as_secs_f64()
+            );
+            let expected =
+                std::fs::read_to_string("../../../../target/notingo-native-controls/sha256.txt")
+                    .map_err(|err| Error::Pty(err.into()))?;
+            nixos_shell.run_cmd_and_expect("sha256sum /etc/notingo/shared", expected.trim())?;
         }
         for iteration in 1..=10 {
             let started = std::time::Instant::now();
             let command = format!(
-                "GOMAXPROCS={procs} timeout --signal=QUIT --kill-after=2s 10s {binary} NotInGoMetricCgoCallAndCallback"
+                "GOMAXPROCS={procs} {debug} timeout --signal=QUIT --kill-after=2s 10s {binary} NotInGoMetricCgoCallAndCallback"
             );
             match nixos_shell.run_cmd_and_expect_regex(&command, &ready) {
                 Ok(()) => println!(
