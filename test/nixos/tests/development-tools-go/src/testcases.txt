@@ -1,2 +1,2 @@
-# Run only the mixed C/Go synchronization subtest.
-runtime -run='^TestNotInGoMetric$/^CgoCallAndCallback$'
+# Run all three related metric cases in their original order.
+runtime -run='^TestNotInGoMetric$'
