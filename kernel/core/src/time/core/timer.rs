@@ -150,6 +150,13 @@ impl Timer {
     }
 }
 
+/// The maximum number of expired callbacks processed by one timer-softirq invocation.
+///
+/// This bounds the IRQ-disabled heap collection and the non-preemptible callback
+/// disposal loop. The remaining expired callbacks are processed by a re-raised
+/// softirq or by the softirq daemon.
+pub(crate) const MAX_EXPIRED_PER_BATCH: usize = 64;
+
 /// `TimerManager` is used to create timers and manage their expiries. It holds a clock and can
 /// create [`Timer`]s based on this clock.
 ///
@@ -196,30 +203,55 @@ impl TimerManager {
     ///
     /// If any of the timers have timed out, call the corresponding callback functions.
     pub(crate) fn process_expired_timers(&self) {
-        let callbacks = {
+        // Keep the unbounded behavior for callers that are not driven by the
+        // timer softirq (e.g., per-process CPU timers).
+        let _ = self.process_expired_timers_bounded(usize::MAX);
+    }
+
+    /// Processes at most `max` expired or cancelled timer callbacks.
+    ///
+    /// Returns `true` if the manager still has an expired or cancelled
+    /// callback at the head of the heap after the budget is exhausted. The
+    /// caller is expected to re-raise the timer softirq so that the remaining
+    /// work is deferred instead of running for an unbounded amount of time in
+    /// one non-preemptible softirq invocation.
+    pub(crate) fn process_expired_timers_bounded(&self, max: usize) -> bool {
+        let (callbacks, more) = {
             let mut timeout_list = self.timer_callbacks.disable_irq().lock();
             if timeout_list.is_empty() {
-                return;
+                return false;
             }
 
             let mut callbacks = Vec::new();
             let current_time = self.clock.read_time();
-            while let Some(t) = timeout_list.peek() {
+            let mut budget = max;
+            while budget > 0 {
+                let Some(t) = timeout_list.peek() else {
+                    break;
+                };
                 if t.is_cancelled() {
                     // Just ignore the cancelled callback
                     timeout_list.pop();
+                    budget -= 1;
                 } else if t.expired_time <= current_time {
                     callbacks.push(timeout_list.pop().unwrap());
+                    budget -= 1;
                 } else {
                     break;
                 }
             }
-            callbacks
+
+            let more = timeout_list
+                .peek()
+                .is_some_and(|t| t.is_cancelled() || t.expired_time <= current_time);
+            (callbacks, more)
         };
 
         for callback in callbacks {
             callback.call();
         }
+
+        more
     }
 
     /// Creates an [`Timer`], which will be managed by this `TimerManager`.

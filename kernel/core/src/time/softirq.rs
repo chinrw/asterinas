@@ -16,6 +16,12 @@ pub(super) fn init() {
     });
 }
 
+/// Re-raises the timer softirq so that a bounded batch leaves the remaining
+/// expired callbacks pending for the next softirq iteration.
+pub(super) fn raise_timer_softirq() {
+    SoftIrqLine::get(TIMER_SOFTIRQ_ID).raise();
+}
+
 /// Registers a function that will be executed during timer softirq.
 pub(super) fn register_callback(func: fn()) {
     loop {
