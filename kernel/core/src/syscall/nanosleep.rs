@@ -108,10 +108,15 @@ fn do_clock_nanosleep(
         }
     };
 
-    let res = waiter.pause_until_or_timeout(
-        || None,
-        ManagedTimeout::new_with_manager(Timeout::After(duration), timer_manager),
-    );
+    // Freeze the relative timeout before the waiter setup. Otherwise the
+    // timer deadline is computed only when the timer is inserted, which is
+    // after the pre-wait expiry check. A sub-microsecond request can then
+    // allocate and insert a timer that is already expired and will only be
+    // reclaimed by the timer softirq.
+    let mut timeout = ManagedTimeout::new_with_manager(Timeout::After(duration), timer_manager);
+    timeout.freeze();
+
+    let res = waiter.pause_until_or_timeout(|| None, timeout);
 
     match res {
         Err(e) if e.error() == Errno::ETIME => Ok(SyscallReturn::Return(0)),

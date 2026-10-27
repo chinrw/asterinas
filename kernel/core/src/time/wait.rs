@@ -181,6 +181,15 @@ impl WaitTimeout for Waiter {
         // No fast paths for `Waiter`. If the caller wants a fast path, it should do so _before_
         // the waiter is created.
 
+        // If the timeout has already expired (e.g., a frozen 1us relative
+        // nanosleep after waiter setup), do not create a timer that would
+        // immediately become a dead entry in the timer heap.
+        if let Some(timeout) = timeout
+            && timeout.is_expired()
+        {
+            return_errno_with_message!(Errno::ETIME, "the time limit is reached");
+        }
+
         let timer = timeout.map(|timeout| {
             let waker = self.waker();
             timeout.create_timer(move |_guard: TimerGuard| {
