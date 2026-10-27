@@ -475,6 +475,24 @@ fn notingo_runtime_package(shell: &mut Session) -> Result<(), Error> {
     )
 }
 
+// One sample per boot, driven by the host.  The host-side NIXOS_TEST_TIMEOUT
+// (rexpect) is the watchdog: if the guest stops making progress, the host
+// closes the pty and kills the QEMU process instead of relying on a timeout
+// inside the stalled guest.
+#[nixos_test]
+fn notingo_host_sample(shell: &mut Session) -> Result<(), Error> {
+    let name = std::env::var("PROBE_HOST_SAMPLE").expect("PROBE_HOST_SAMPLE is not set");
+    let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|err| Error::Pty(err.into()))?;
+    let started = std::time::Instant::now();
+    let result =
+        shell.run_cmd_and_expect_regex(&format!("GOMAXPROCS=1 /etc/notingo/{name} poll"), &barrier);
+    println!(
+        "HOST_SAMPLE name={name} seconds={:.6}",
+        started.elapsed().as_secs_f64()
+    );
+    result
+}
+
 // The full runtime package includes unrelated pprof/mincore tests that are
 // not supported by Asterinas.  Keep a separate gate for the cgo startup test
 // that this investigation is about.
