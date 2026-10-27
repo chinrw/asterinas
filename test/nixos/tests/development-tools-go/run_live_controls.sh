@@ -27,7 +27,7 @@ run_case() {
 }
 
 run_case notingo_benchmark 12min
-run_case notingo_runtime_package 20min
+run_case notingo_runtime_targeted 15min
 
 rm "$clean_image"
 exit "$combined_status"
