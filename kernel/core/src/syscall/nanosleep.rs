@@ -82,6 +82,15 @@ fn do_clock_nanosleep(
 
     // FIXME: sleeping thread can only be interrupted by signals that will call signal handler or terminate
     // current process. i.e., the signals that should be ignored will not interrupt sleeping thread.
+    let probe = if clockid == ClockId::CLOCK_MONOTONIC as clockid_t && !is_abs_time {
+        crate::runtime_timeline::begin(
+            ctx.process.pid(),
+            ctx.posix_thread.tid(),
+            duration.as_nanos() as u64,
+        )
+    } else {
+        None
+    };
     let waiter = Waiter::new_pair().0;
 
     let timer_manager = {
@@ -111,6 +120,11 @@ fn do_clock_nanosleep(
     let res = waiter.pause_until_or_timeout(
         || None,
         ManagedTimeout::new_with_manager(Timeout::After(duration), timer_manager),
+    );
+
+    crate::runtime_timeline::end(
+        probe,
+        res.as_ref().is_err_and(|e| e.error() == Errno::EINTR),
     );
 
     match res {

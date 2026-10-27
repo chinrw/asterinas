@@ -5,7 +5,7 @@ let
   linuxGuest = import ./linux_guest.nix { inherit pkgs; };
   sharedHelpers = import ./shared_helpers.nix { inherit pkgs; };
   minimalHelper = import ./minimal_helper.nix { inherit pkgs; };
-  foreignWaitHelpers = import ./foreign_wait_helpers.nix { inherit pkgs; };
+  timelineHelpers = import ./timeline_helpers.nix { inherit pkgs; };
 in
 {
   aster_nixos.kernel = lib.mkIf linuxGuestEnabled linuxGuest.kernel;
@@ -25,8 +25,10 @@ in
     "notingo/signal.c".source = ./futex_signal_probe.c;
     "notingo/allocation.c".source = ./short_sleep_allocation.c;
     "notingo/minimal".source = "${minimalHelper}/bin/minimal-cgo";
-    "notingo/sleep20".source = "${foreignWaitHelpers.sleep20}/bin/minimal-cgo";
-    "notingo/sleep1000".source = "${foreignWaitHelpers.sleep1000}/bin/minimal-cgo";
+    "notingo/tagged".source = "${timelineHelpers.original}/bin/minimal-cgo";
+    "notingo/tagged20".source = "${timelineHelpers.sleep20}/bin/minimal-cgo";
+    "notingo/timeline-launcher".source = "${timelineHelpers.tools}/bin/launcher";
+    "notingo/timeline-upload".source = "${timelineHelpers.tools}/bin/upload";
     "notingo/shared".source = "${sharedHelpers}/bin/original";
     "notingo/clock-probe".source = "${sharedHelpers}/bin/clock-probe";
   }

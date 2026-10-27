@@ -20,6 +20,10 @@ pub(super) fn sys_prctl(
     arg5: u64,
     ctx: &Context,
 ) -> Result<SyscallReturn> {
+    if option == crate::runtime_timeline::CONTROL {
+        return crate::runtime_timeline::control(arg2, arg3, arg4, arg5, ctx)
+            .map(SyscallReturn::Return);
+    }
     let prctl_cmd = PrctlCmd::from_args(option, arg2, arg3, arg4, arg5)?;
     debug!("prctl_cmd = {:x?}", prctl_cmd);
 

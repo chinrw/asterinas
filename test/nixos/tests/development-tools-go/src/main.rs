@@ -450,3 +450,81 @@ fn notingo_wait_interval_controls(shell: &mut Session) -> Result<(), Error> {
         })
     }
 }
+
+#[nixos_test]
+fn notingo_kernel_timeline(shell: &mut Session) -> Result<(), Error> {
+    let mut digests = vec![(
+        "minimal".to_string(),
+        std::env::var("PROBE_MINIMAL_SHA256").expect("Minimal checksum"),
+    )];
+    for line in std::env::var("PROBE_TIMELINE_DIGESTS")
+        .expect("Tagged checksums")
+        .lines()
+    {
+        let mut fields = line.split_whitespace();
+        digests.push((
+            fields.next().unwrap().to_string(),
+            fields.next().unwrap().to_string(),
+        ));
+    }
+    for (name, digest) in digests {
+        let checksum = Regex::new(&format!(r"(?m)^{}  /etc/notingo/{}\s*$", digest, name))
+            .map_err(|e| Error::Pty(e.into()))?;
+        shell.run_cmd_and_expect_regex(&format!("sha256sum /etc/notingo/{name}"), &checksum)?;
+    }
+    let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    let uploaded = Regex::new(r"(?m)^TIMELINE_UPLOAD_OK ").map_err(|e| Error::Pty(e.into()))?;
+    let mut failures = Vec::new();
+    for iteration in 1..=3 {
+        println!("TIMELINE_BASELINE_BEGIN {iteration}");
+        let result = shell.run_cmd_and_expect_regex(
+            "GOMAXPROCS=1 timeout --signal=QUIT --kill-after=2s 10s /etc/notingo/minimal poll",
+            &barrier,
+        );
+        println!("TIMELINE_BASELINE_END {iteration} {result:?}");
+        match result {
+            Ok(()) => {}
+            Err(e @ Error::NonZeroExit { .. }) => {
+                failures.push(("baseline".into(), e));
+                break;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    for (name, mode, binary, repeats) in [
+        ("tag-off", 0, "tagged", 2),
+        ("counts", 1, "tagged", 2),
+        ("timeline", 2, "tagged", 2),
+        ("control20", 2, "tagged20", 3),
+    ] {
+        for iteration in 1..=repeats {
+            let trial = format!("{name}-{iteration}");
+            println!("TIMELINE_TRIAL_BEGIN {trial}");
+            let start = std::time::Instant::now();
+            let command = format!(
+                "( /etc/notingo/timeline-launcher {mode} /tmp/{trial}.bin /etc/notingo/{binary} poll; trial_result=$?; /etc/notingo/timeline-upload /tmp/{trial}.bin {trial} || exit $?; exit $trial_result )"
+            );
+            let result = shell.run_cmd_and_expect_regex(&command, &uploaded);
+            println!(
+                "TIMELINE_TRIAL_END {trial} {:.3}s {result:?}",
+                start.elapsed().as_secs_f64()
+            );
+            match result {
+                Ok(()) => {}
+                Err(e @ Error::NonZeroExit { .. }) => {
+                    failures.push((trial, e));
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::Aggregated {
+            summary: "Kernel timeline trials reproduced startup failure".into(),
+            collections: failures,
+        })
+    }
+}

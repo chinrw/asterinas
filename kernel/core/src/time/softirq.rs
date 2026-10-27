@@ -45,10 +45,12 @@ pub(super) fn register_callback(func: fn()) {
 }
 
 fn timer_softirq_handler() {
+    let diagnostic_start = crate::runtime_timeline::softirq_begin();
     let callbacks = TIMER_SOFTIRQ_CALLBACKS.read();
     if let Some(callbacks) = callbacks.get() {
         for callback in callbacks.iter() {
             (callback)();
         }
     }
+    crate::runtime_timeline::softirq_end(diagnostic_start);
 }

@@ -26,7 +26,10 @@ use super::{
     nice::Nice,
     stats::{SchedulerStats, set_stats_from_scheduler},
 };
-use crate::thread::{AsThread, Thread};
+use crate::{
+    process::posix_thread::AsPosixThread,
+    thread::{AsThread, Thread},
+};
 
 mod policy;
 mod time;
@@ -219,6 +222,11 @@ impl SchedAttr {
 impl Scheduler for ClassScheduler {
     fn enqueue(&self, task: Arc<Task>, flags: EnqueueFlags) -> Option<CpuId> {
         let thread = task.as_thread()?.clone();
+        if flags == EnqueueFlags::Wake {
+            if let Some(posix) = thread.as_posix_thread() {
+                crate::runtime_timeline::wake_attempt(posix.tid());
+            }
+        }
 
         let (still_in_rq, cpu) = {
             let selected_cpu_id = self.select_cpu(&thread, flags);
@@ -247,6 +255,11 @@ impl Scheduler for ClassScheduler {
             });
 
         thread.sched_attr().set_last_cpu(cpu);
+        if flags == EnqueueFlags::Wake {
+            if let Some(posix) = thread.as_posix_thread() {
+                crate::runtime_timeline::enqueued(posix.tid());
+            }
+        }
         rq.enqueue_entity((task, thread), Some(flags));
 
         should_preempt.then_some(cpu)
@@ -372,6 +385,9 @@ impl LocalRunQueue for PerCpuClassRqSet {
 
     fn try_pick_next(&mut self) -> Option<&Arc<Task>> {
         self.pick_next_entity().and_then(|next| {
+            if let Some(posix) = next.1.as_posix_thread() {
+                crate::runtime_timeline::selected(posix.tid());
+            }
             // We guarantee that a task can appear at once in a `PerCpuClassRqSet`. So, the `next` cannot be the same
             // as the current task here.
             if let Some((old, _)) = self.current.replace((next, CurrentRuntime::new())) {
@@ -382,6 +398,15 @@ impl LocalRunQueue for PerCpuClassRqSet {
     }
 
     fn update_current(&mut self, flags: UpdateFlags) -> bool {
+        if let Some(((_, thread), _)) = &self.current {
+            if let Some(posix) = thread.as_posix_thread() {
+                match flags {
+                    UpdateFlags::Wait => crate::runtime_timeline::wait(posix.tid()),
+                    UpdateFlags::Exit => crate::runtime_timeline::exited(posix.tid()),
+                    _ => {}
+                }
+            }
+        }
         let (should_preempt, mut lookahead) = if let Some(((_, cur), rt)) = &mut self.current {
             rt.update();
             let attr = &cur.sched_attr();

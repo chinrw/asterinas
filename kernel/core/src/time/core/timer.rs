@@ -278,6 +278,15 @@ impl TimerCallback {
 
         // Pass the `timer_guard` guard to the callback, allowing it to prevent race conditions.
         // The callback may choose to use the guard or drop it if not needed.
+        let _timeline_scope = crate::runtime_timeline::timing_enabled().then(|| {
+            crate::runtime_timeline::TimerScope::new(
+                Arc::ptr_eq(
+                    &timer.timer_manager,
+                    crate::time::clocks::MonotonicClock::timer_manager(),
+                ),
+                self.expired_time,
+            )
+        });
         (timer.registered_callback)(timer_guard);
     }
 }

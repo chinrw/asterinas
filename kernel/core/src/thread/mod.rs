@@ -14,6 +14,7 @@ use ostd::{
 use self::{kernel_thread::AsKernelThread, stats::CONTEXT_SWITCH_COUNTER};
 use crate::{
     prelude::*,
+    process::posix_thread::AsPosixThread,
     sched::{SchedAttr, SchedPolicy},
 };
 
@@ -37,6 +38,9 @@ fn pre_schedule_handler(irq_guard: &DisabledLocalIrqGuard) {
         return;
     };
 
+    if let Some(posix) = task.as_posix_thread() {
+        crate::runtime_timeline::switch_out(posix.tid());
+    }
     thread_local.supp_user_context().before_schedule(irq_guard);
 }
 
@@ -48,6 +52,9 @@ fn post_schedule_handler() {
         .add_on_cpu(CpuId::current_racy(), 1);
 
     let task = Task::current().unwrap();
+    if let Some(posix) = task.as_posix_thread() {
+        crate::runtime_timeline::running(posix.tid());
+    }
     if let Some(thread_local) = task.as_thread_local() {
         let vmar = thread_local.vmar().borrow();
         if let Some(vmar) = vmar.as_ref() {
