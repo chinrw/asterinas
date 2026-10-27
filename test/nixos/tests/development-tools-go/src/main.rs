@@ -450,3 +450,27 @@ fn notingo_wait_interval_controls(shell: &mut Session) -> Result<(), Error> {
         })
     }
 }
+
+// Run a fixed, randomized sample of the minimal helper.  The Python driver
+// uses SIGKILL for failures so that a timed-out sample does not spend seconds
+// dumping goroutines to the serial console.
+#[nixos_test]
+fn notingo_benchmark(shell: &mut Session) -> Result<(), Error> {
+    let done = Regex::new(r"(?m)^BENCH_DONE$").map_err(|err| Error::Pty(err.into()))?;
+    shell.run_cmd_and_expect_regex("python3 /etc/notingo/bench.py", &done)
+}
+
+// Run the complete runtime package once.  This is the correctness gate for
+// the timer-slack change; the benchmark above is the latency/pass-rate gate.
+#[nixos_test]
+fn notingo_runtime_package(shell: &mut Session) -> Result<(), Error> {
+    let ready =
+        Regex::new(r"(?m)^PROBE_OVERLAY_READY\s*$").map_err(|err| Error::Pty(err.into()))?;
+    shell.run_cmd_and_expect_regex("python3 /etc/notingo/build.py --prepare-only", &ready)?;
+
+    let ok = Regex::new(r"(?m)^ok\s+runtime\b").map_err(|err| Error::Pty(err.into()))?;
+    shell.run_cmd_and_expect_regex(
+        "GOFLAGS=-overlay=/tmp/notingo-probe-src/overlay.json go test -short -count=1 -timeout=9m runtime",
+        &ok,
+    )
+}
