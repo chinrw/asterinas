@@ -21,6 +21,7 @@ in
   ];
   environment.etc = {
     "notingo/build.py".source = ./build_notingo_probe.py;
+    "notingo/bench.py".source = ./bench.py;
     "notingo/wait.c".source = ./wait_primitive_probe.c;
     "notingo/signal.c".source = ./futex_signal_probe.c;
     "notingo/allocation.c".source = ./short_sleep_allocation.c;
