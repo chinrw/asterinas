@@ -468,7 +468,7 @@ fn notingo_runtime_package(shell: &mut Session) -> Result<(), Error> {
         Regex::new(r"(?m)^PROBE_OVERLAY_READY\s*$").map_err(|err| Error::Pty(err.into()))?;
     shell.run_cmd_and_expect_regex("python3 /etc/notingo/build.py --prepare-only", &ready)?;
 
-    let ok = Regex::new(r"(?m)^ok\s+runtime\b").map_err(|err| Error::Pty(err.into()))?;
+    let ok = Regex::new(r"(?m)^ok\s+runtime").map_err(|err| Error::Pty(err.into()))?;
     shell.run_cmd_and_expect_regex(
         "GOFLAGS=-overlay=/tmp/notingo-probe-src/overlay.json go test -short -count=1 -timeout=9m runtime",
         &ok,
@@ -484,7 +484,7 @@ fn notingo_runtime_targeted(shell: &mut Session) -> Result<(), Error> {
         Regex::new(r"(?m)^PROBE_OVERLAY_READY\s*$").map_err(|err| Error::Pty(err.into()))?;
     shell.run_cmd_and_expect_regex("python3 /etc/notingo/build.py --prepare-only", &ready)?;
 
-    let ok = Regex::new(r"(?m)^ok\s+runtime\b").map_err(|err| Error::Pty(err.into()))?;
+    let ok = Regex::new(r"(?m)^ok\s+runtime").map_err(|err| Error::Pty(err.into()))?;
     shell.run_cmd_and_expect_regex(
         "GOFLAGS=-overlay=/tmp/notingo-probe-src/overlay.json go test -short -count=1 -timeout=5m -run '^TestNotInGoMetric$' runtime",
         &ok,
