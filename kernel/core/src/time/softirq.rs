@@ -5,6 +5,8 @@ use alloc::{boxed::Box, vec, vec::Vec};
 use aster_softirq::{SoftIrqLine, softirq_id::TIMER_SOFTIRQ_ID};
 use ostd::{sync::RcuOption, timer};
 
+use super::TimerManager;
+
 #[expect(clippy::type_complexity)]
 static TIMER_SOFTIRQ_CALLBACKS: RcuOption<Box<Vec<fn()>>> = RcuOption::new_none();
 
@@ -14,6 +16,15 @@ pub(super) fn init() {
     timer::register_callback_on_cpu(|| {
         SoftIrqLine::get(TIMER_SOFTIRQ_ID).raise();
     });
+}
+
+/// Processes a bounded batch and requests another softirq if due work remains.
+pub(super) fn process_timer_manager(manager: &TimerManager) {
+    // Bound dead and cancelled entries too: a callback-only budget leaves cleanup unbounded.
+    const TIMER_ENTRY_BUDGET: usize = 64;
+    if manager.process_expired_timers_with_budget(TIMER_ENTRY_BUDGET) {
+        SoftIrqLine::get(TIMER_SOFTIRQ_ID).raise();
+    }
 }
 
 /// Registers a function that will be executed during timer softirq.

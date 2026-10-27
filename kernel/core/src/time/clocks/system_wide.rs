@@ -235,7 +235,7 @@ macro_rules! define_timer_managers {
                     let preempt_guard = ostd::task::disable_preempt();
                     let cpu = preempt_guard.current_cpu();
                     paste! {
-                        [<$clock_id _MANAGER>].get_on_cpu(cpu).get().unwrap().process_expired_timers();
+                        time::softirq::process_timer_manager([<$clock_id _MANAGER>].get_on_cpu(cpu).get().unwrap());
                     }
                 };
                 time::softirq::register_callback(callback);
@@ -274,10 +274,7 @@ fn init_jiffies_clock_manager() {
     JIFFIES_TIMER_MANAGER.call_once(|| jiffies_timer_manager);
 
     let callback = || {
-        JIFFIES_TIMER_MANAGER
-            .get()
-            .unwrap()
-            .process_expired_timers();
+        time::softirq::process_timer_manager(JIFFIES_TIMER_MANAGER.get().unwrap());
     };
     time::softirq::register_callback(callback);
 }
