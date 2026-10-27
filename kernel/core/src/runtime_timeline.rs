@@ -82,6 +82,8 @@ static TIMER_SCOPE: AtomicU64 = AtomicU64::new(0);
 static TIMER_DUE: AtomicU64 = AtomicU64::new(0);
 static TIMER_AT: AtomicU64 = AtomicU64::new(0);
 
+const TIMER_QUEUE_VARIANT: u64 = 0;
+static EAGER_RETIREMENTS: AtomicU64 = AtomicU64::new(0);
 static DAEMON_TASK: AtomicU64 = AtomicU64::new(0);
 static FAIR_PICKS: AtomicU64 = AtomicU64::new(0);
 static GLOBAL_SLOT: Slot = Slot::new();
@@ -128,6 +130,12 @@ pub(crate) fn softirq_end(start: Option<u64>) {
     SOFTIRQ_MAX.fetch_max(elapsed, Relaxed);
     LAST_SOFTIRQ_END.store(read_tsc(), Relaxed);
     emit(&GLOBAL_SLOT, 13, elapsed, 0, 0);
+}
+
+pub(crate) fn timer_retired() {
+    if timing_enabled() {
+        EAGER_RETIREMENTS.fetch_add(1, Relaxed);
+    }
 }
 
 pub(crate) fn daemon_event(task: u64, kind: u64) {
@@ -471,6 +479,7 @@ pub(crate) fn control(
             for event in &EVENTS {
                 event.0[0].store(0, Relaxed);
             }
+            EAGER_RETIREMENTS.store(0, Relaxed);
             DAEMON_TASK.store(0, Relaxed);
             FAIR_PICKS.store(0, Relaxed);
             for field in &TIMER_STATS {
@@ -561,6 +570,8 @@ pub(crate) fn control(
             }
             header[38] = DAEMON_TASK.load(Relaxed);
             header[39] = FAIR_PICKS.load(Relaxed);
+            header[40] = TIMER_QUEUE_VARIANT;
+            header[41] = EAGER_RETIREMENTS.load(Relaxed);
             let space = ctx.user_space();
             space.write_val(arg3 as usize, &header)?;
             let mut address = arg3 as usize + size_of_val(&header);

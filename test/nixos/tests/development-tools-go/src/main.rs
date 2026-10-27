@@ -546,3 +546,159 @@ fn notingo_uninstrumented_timeline_baseline(shell: &mut Session) -> Result<(), E
     }
     Ok(())
 }
+
+fn retirement_checksums(shell: &mut Session) -> Result<(), Error> {
+    for (name, variable) in [
+        ("minimal", "PROBE_MINIMAL_SHA256"),
+        ("shared", "PROBE_SHARED_SHA256"),
+    ] {
+        shell.run_cmd_and_expect(
+            &format!("sha256sum /etc/notingo/{name}"),
+            &std::env::var(variable).expect("Helper checksum"),
+        )?;
+    }
+    Ok(())
+}
+
+#[nixos_test]
+fn notingo_retirement_phase(shell: &mut Session) -> Result<(), Error> {
+    retirement_checksums(shell)?;
+    let phase = std::env::var("PROBE_RETIREMENT_PHASE").expect("Queue phase");
+    let success =
+        Regex::new(r"(?s)BARRIER_OK.*TIMELINE_UPLOAD_OK ").map_err(|e| Error::Pty(e.into()))?;
+    let mut failures = Vec::new();
+    let mut baseline_timeout = false;
+    let original_repeats = if phase == "heap" { 3 } else { 20 };
+    for (name, binary, mode, repeats) in [
+        ("original", "minimal", 0, original_repeats),
+        ("trace-original", "minimal", 2, 3),
+        ("trace-tagged", "tagged", 2, 3),
+    ] {
+        for iteration in 1..=repeats {
+            let trial = format!("{phase}-{name}-{iteration}");
+            let command = format!(
+                "( /etc/notingo/timeline-launcher {mode} /tmp/{trial}.bin /etc/notingo/{binary} poll; trial_result=$?; /etc/notingo/timeline-upload /tmp/{trial}.bin {trial} || exit $?; exit $trial_result )"
+            );
+            let start = std::time::Instant::now();
+            let result = shell.run_cmd_and_expect_regex(&command, &success);
+            println!(
+                "RETIREMENT_TRIAL {trial} {:.3}s {result:?}",
+                start.elapsed().as_secs_f64()
+            );
+            match result {
+                Ok(()) => {}
+                Err(
+                    e @ Error::NonZeroExit {
+                        exit_status: 124, ..
+                    },
+                ) => {
+                    if phase == "heap" && name == "original" {
+                        baseline_timeout = true;
+                    }
+                    if phase == "eager" {
+                        failures.push((trial, e));
+                    }
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    if phase == "heap"
+        && !baseline_timeout
+        && std::env::var("PROBE_BASELINE_REQUIRED").as_deref() != Ok("0")
+    {
+        return Err(Error::UnexpectedOutput {
+            expected: "Original heap to reproduce startup timeout".into(),
+            got: "All original controls passed".into(),
+        });
+    }
+    if phase == "eager" {
+        let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+        for iteration in 1..=20 {
+            let start = std::time::Instant::now();
+            let result = shell.run_cmd_and_expect_regex(
+                "GOMAXPROCS=1 timeout --signal=KILL 10s /etc/notingo/minimal poll",
+                &barrier,
+            );
+            println!(
+                "RETIREMENT_REPEAT {iteration} {:.3}s {result:?}",
+                start.elapsed().as_secs_f64()
+            );
+            match result {
+                Ok(()) => {}
+                Err(e @ Error::NonZeroExit { .. }) => {
+                    failures.push(("repeat".into(), e));
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        retirement_full_helper(shell)?;
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::Aggregated {
+            summary: "Eager retirement retained startup failures".into(),
+            collections: failures,
+        })
+    }
+}
+
+fn retirement_full_helper(shell: &mut Session) -> Result<(), Error> {
+    let ok = Regex::new(r"(?m)^OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    for iteration in 1..=10 {
+        let start = std::time::Instant::now();
+        shell.run_cmd_and_expect_regex("GOMAXPROCS=1 timeout --signal=KILL 10s /etc/notingo/shared NotInGoMetricCgoCallAndCallback",&ok)?;
+        println!(
+            "RETIREMENT_FULL_HELPER_PASS {iteration} {:.3}s",
+            start.elapsed().as_secs_f64()
+        );
+    }
+    Ok(())
+}
+
+#[nixos_test]
+fn notingo_retirement_static(shell: &mut Session) -> Result<(), Error> {
+    retirement_checksums(shell)?;
+    let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    for iteration in 1..=20 {
+        let start = std::time::Instant::now();
+        shell.run_cmd_and_expect_regex(
+            "GOMAXPROCS=1 timeout --signal=KILL 10s /etc/notingo/minimal poll",
+            &barrier,
+        )?;
+        println!(
+            "RETIREMENT_STATIC_PASS {iteration} {:.3}s",
+            start.elapsed().as_secs_f64()
+        );
+    }
+    retirement_full_helper(shell)?;
+    for name in [
+        "nanosleep_err",
+        "gettimeofday",
+        "setitimer",
+        "timer_create",
+        "timerfd_clockid",
+        "timerfd_readiness",
+        "nanosleep_bounds",
+    ] {
+        shell.run_cmd_and_expect(&format!("timeout --signal=KILL 20s /etc/notingo/regressions/{name} && echo RETIREMENT_REGRESSION_PASS_{name}"),&format!("RETIREMENT_REGRESSION_PASS_{name}"))?;
+    }
+    if std::env::var("PROBE_RUN_RUNTIME").as_deref() == Ok("1") {
+        let cases =
+            std::fs::read_to_string("src/testcases.txt").map_err(|e| Error::Pty(e.into()))?;
+        let testcase = cases
+            .lines()
+            .find(|line| line.starts_with("runtime "))
+            .expect("Existing runtime selection");
+        let success = Regex::new(r"(?m)^ok\s+runtime\s+").map_err(|e| Error::Pty(e.into()))?;
+        shell.run_cmd_and_expect_regex(
+            &format!("GOFLAGS= go test -short -v -count=1 -timeout=9m {testcase}"),
+            &success,
+        )?;
+        println!("RETIREMENT_RUNTIME_PASS");
+    }
+    Ok(())
+}

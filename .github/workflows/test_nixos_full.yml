@@ -219,7 +219,7 @@ jobs:
             uname -r
             lscpu
             free -h
-            bash test/nixos/tests/development-tools-go/build_and_run_context.sh
+            TIMER_RETIREMENT_CI_EPHEMERAL=1 bash test/nixos/tests/development-tools-go/build_and_run_retirement.sh
       - name: Upload runtime diagnostics
         if: always()
         uses: actions/upload-artifact@v4

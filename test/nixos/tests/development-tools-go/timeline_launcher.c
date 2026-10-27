@@ -15,16 +15,10 @@
 static volatile sig_atomic_t child_pid, timeout_phase, stopped, saved_bytes;
 static void deadline(int signal_number) {
   (void)signal_number;
-  if (!timeout_phase) {
-    saved_bytes = (sig_atomic_t)syscall(SYS_prctl, CONTROL, 2UL, 0UL, 0UL, 0UL);
-    stopped = 1;
-    timeout_phase = 1;
-    kill(child_pid, SIGQUIT);
-    alarm(2);
-  } else {
-    timeout_phase = 2;
-    kill(child_pid, SIGKILL);
-  }
+  saved_bytes = (sig_atomic_t)syscall(SYS_prctl, CONTROL, 2UL, 0UL, 0UL, 0UL);
+  stopped = 1;
+  timeout_phase = 1;
+  kill(child_pid, SIGKILL);
 }
 int main(int argc, char **argv) {
   if (argc != 5)

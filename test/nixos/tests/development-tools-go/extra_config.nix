@@ -5,6 +5,7 @@ let
   linuxGuest = import ./linux_guest.nix { inherit pkgs; };
   sharedHelpers = import ./shared_helpers.nix { inherit pkgs; };
   minimalHelper = import ./minimal_helper.nix { inherit pkgs; };
+  retirementRegressions = import ./retirement_regressions.nix { inherit pkgs; };
   timelineHelpers = import ./timeline_helpers.nix { inherit pkgs; };
 in
 {
@@ -29,6 +30,7 @@ in
     "notingo/tagged20".source = "${timelineHelpers.sleep20}/bin/minimal-cgo";
     "notingo/timeline-launcher".source = "${timelineHelpers.tools}/bin/launcher";
     "notingo/timeline-upload".source = "${timelineHelpers.tools}/bin/upload";
+    "notingo/regressions".source = "${retirementRegressions}/bin";
     "notingo/shared".source = "${sharedHelpers}/bin/original";
     "notingo/clock-probe".source = "${sharedHelpers}/bin/clock-probe";
   }
