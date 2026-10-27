@@ -34,6 +34,7 @@ fn pre_schedule_handler(irq_guard: &DisabledLocalIrqGuard) {
     let Some(task) = Task::current() else {
         return;
     };
+    crate::runtime_timeline::daemon_event(&*task as *const ostd::task::Task as u64, 20);
     let Some(thread_local) = task.as_thread_local() else {
         return;
     };
@@ -52,6 +53,7 @@ fn post_schedule_handler() {
         .add_on_cpu(CpuId::current_racy(), 1);
 
     let task = Task::current().unwrap();
+    crate::runtime_timeline::daemon_event(&*task as *const ostd::task::Task as u64, 19);
     if let Some(posix) = task.as_posix_thread() {
         crate::runtime_timeline::running(posix.tid());
     }

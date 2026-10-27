@@ -6,7 +6,7 @@ import re
 import struct
 
 FIELDS='tid ns_last ns_min ns_max call_seq active entry_tsc wait_requested blocked_current block_tsc wake_tsc enqueue_tsc run_tsc deadline_ns wake_ns callback_tsc ready_tsc ready_kind calls ended calls_blocked calls_no_block switchouts preempts timer_wakes other_wakes runs total_cycles max_cycles max_late_ns max_wake_run_cycles reserved31 eintr bad_time select_tsc wait_attempts total_wake_run_cycles queued_wakes block_events max_select_run_cycles'.split()
-KINDS={1:'enter',2:'wait',3:'block',4:'timer_wake',5:'other_wake',6:'enqueue',7:'selected',8:'run',9:'end',10:'exit',11:'preempt',12:'softirq_begin',13:'softirq_end',14:'timer_collect',15:'timer_batch_end',16:'slow_timer_insert'}
+KINDS={1:'enter',2:'wait',3:'block',4:'timer_wake',5:'other_wake',6:'enqueue',7:'selected',8:'run',9:'end',10:'exit',11:'preempt',12:'softirq_begin',13:'softirq_end',14:'timer_collect',15:'timer_batch_end',16:'slow_timer_insert',17:'daemon_wake_enqueue',18:'daemon_selected',19:'daemon_run',20:'daemon_switchout',21:'daemon_fair_wake',22:'fair_pick_sample',23:'daemon_fair_requeue'}
 def decode(file):
     data=file.read_bytes();header=struct.unpack_from('<16Q',data)
     magic,version,nslots,capacity,ewords,swords,hz,pid,start,stop,total,stored,dropped,collisions,mode,_=header
@@ -56,7 +56,7 @@ def decode(file):
         if 'enqueue' in call and 'run' in call:
             row['wake_run_ms']=(call['run']['tsc']-call['enqueue']['tsc'])*1000/hz
         timeline.append(row)
-    return {'file':str(file),'version':version,'pid':pid,'mode':mode,'tsc_hz':hz,'window_seconds':(stop-start)/hz,'events_total':total,'events_stored':stored,'events_dropped':dropped,'collisions':collisions,'timer_softirq':softirq,'timer_queue':timer_stats,'sysmon_tid':sysmon,'sysmon_stats':next((s for s in slots if s['tid']==sysmon),None),'threads':slots,'sysmon_calls':timeline,'events':events}
+    return {'file':str(file),'version':version,'pid':pid,'mode':mode,'tsc_hz':hz,'window_seconds':(stop-start)/hz,'events_total':total,'events_stored':stored,'events_dropped':dropped,'collisions':collisions,'timer_softirq':softirq,'timer_queue':timer_stats,'softirq_task':struct.unpack_from('<Q',data,38*8)[0] if version==3 else None,'sysmon_tid':sysmon,'sysmon_stats':next((s for s in slots if s['tid']==sysmon),None),'threads':slots,'sysmon_calls':timeline,'events':events}
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('files',nargs='+',type=Path);args=parser.parse_args()
     for file in args.files:

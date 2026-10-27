@@ -9,7 +9,7 @@ use core::{
 
 use ostd::{arch::read_tsc, mm::VmIo};
 
-use crate::prelude::*;
+use crate::{prelude::*, process::posix_thread::AsPosixThread, thread::AsThread};
 
 pub(crate) const CONTROL: i32 = 0x41535454;
 const NSLOTS: usize = 256;
@@ -82,6 +82,8 @@ static TIMER_SCOPE: AtomicU64 = AtomicU64::new(0);
 static TIMER_DUE: AtomicU64 = AtomicU64::new(0);
 static TIMER_AT: AtomicU64 = AtomicU64::new(0);
 
+static DAEMON_TASK: AtomicU64 = AtomicU64::new(0);
+static FAIR_PICKS: AtomicU64 = AtomicU64::new(0);
 static GLOBAL_SLOT: Slot = Slot::new();
 // Gap, inserts, heap maximum, insert maximum, collections, collection maximum,
 // collection total, callback batch maximum, callback batch total, drained,
@@ -101,7 +103,16 @@ pub(crate) fn softirq_begin() -> Option<u64> {
     if last != 0 {
         TIMER_STATS[0].fetch_max(now.saturating_sub(last), Relaxed);
     }
-    emit(&GLOBAL_SLOT, 12, 0, 0, 0);
+    let task = ostd::task::Task::current().unwrap();
+    let pointer = &*task as *const ostd::task::Task as u64;
+    let tid = task
+        .as_posix_thread()
+        .map_or(0, |thread| u64::from(thread.tid()));
+    let in_task = ostd::irq::InterruptLevel::current().is_task_context();
+    if in_task && tid == 0 && task.as_thread().is_some() {
+        DAEMON_TASK.store(pointer, Relaxed);
+    }
+    emit(&GLOBAL_SLOT, 12, u64::from(in_task), pointer, tid);
     Some(now)
 }
 pub(crate) fn softirq_end(start: Option<u64>) {
@@ -117,6 +128,32 @@ pub(crate) fn softirq_end(start: Option<u64>) {
     SOFTIRQ_MAX.fetch_max(elapsed, Relaxed);
     LAST_SOFTIRQ_END.store(read_tsc(), Relaxed);
     emit(&GLOBAL_SLOT, 13, elapsed, 0, 0);
+}
+
+pub(crate) fn daemon_event(task: u64, kind: u64) {
+    if timing_enabled() && DAEMON_TASK.load(Relaxed) == task {
+        emit(&GLOBAL_SLOT, kind, task, 0, 0);
+    }
+}
+pub(crate) fn fair_queued(task: u64, wake: bool, vruntime: u64, minimum: u64) {
+    if timing_enabled() && DAEMON_TASK.load(Relaxed) == task {
+        emit(
+            &GLOBAL_SLOT,
+            if wake { 21 } else { 23 },
+            task,
+            vruntime,
+            minimum,
+        );
+    }
+}
+pub(crate) fn fair_picked(task: u64, vruntime: u64, minimum: u64) {
+    if !timing_enabled() {
+        return;
+    }
+    let sample = FAIR_PICKS.fetch_add(1, Relaxed);
+    if DAEMON_TASK.load(Relaxed) == task || sample % 128 == 0 {
+        emit(&GLOBAL_SLOT, 22, task, vruntime, minimum);
+    }
 }
 
 pub(crate) fn timer_operation_start() -> Option<u64> {
@@ -434,6 +471,8 @@ pub(crate) fn control(
             for event in &EVENTS {
                 event.0[0].store(0, Relaxed);
             }
+            DAEMON_TASK.store(0, Relaxed);
+            FAIR_PICKS.store(0, Relaxed);
             for field in &TIMER_STATS {
                 field.store(0, Relaxed);
             }
@@ -520,6 +559,8 @@ pub(crate) fn control(
             for (i, field) in TIMER_STATS.iter().enumerate() {
                 header[24 + i] = field.load(Relaxed);
             }
+            header[38] = DAEMON_TASK.load(Relaxed);
+            header[39] = FAIR_PICKS.load(Relaxed);
             let space = ctx.user_space();
             space.write_val(arg3 as usize, &header)?;
             let mut address = arg3 as usize + size_of_val(&header);

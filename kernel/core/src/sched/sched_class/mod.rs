@@ -256,6 +256,7 @@ impl Scheduler for ClassScheduler {
 
         thread.sched_attr().set_last_cpu(cpu);
         if flags == EnqueueFlags::Wake {
+            crate::runtime_timeline::daemon_event(Arc::as_ptr(&task) as u64, 17);
             if let Some(posix) = thread.as_posix_thread() {
                 crate::runtime_timeline::enqueued(posix.tid());
             }
@@ -385,6 +386,7 @@ impl LocalRunQueue for PerCpuClassRqSet {
 
     fn try_pick_next(&mut self) -> Option<&Arc<Task>> {
         self.pick_next_entity().and_then(|next| {
+            crate::runtime_timeline::daemon_event(Arc::as_ptr(&next.0) as u64, 18);
             if let Some(posix) = next.1.as_posix_thread() {
                 crate::runtime_timeline::selected(posix.tid());
             }

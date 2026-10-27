@@ -291,6 +291,12 @@ impl SchedClassRq for FairClassRq {
             .fetch_max(vruntime, Ordering::Relaxed)
             .max(vruntime);
 
+        crate::runtime_timeline::fair_queued(
+            Arc::as_ptr(&entity) as u64,
+            flags == Some(EnqueueFlags::Wake),
+            vruntime,
+            self.min_vruntime,
+        );
         self.total_weight += weight;
         self.entities.push(Reverse(FairQueueItem(entity, vruntime)));
     }
@@ -307,6 +313,11 @@ impl SchedClassRq for FairClassRq {
         let Reverse(FairQueueItem(entity, _)) = self.entities.pop()?;
 
         let sched_attr = entity.as_thread().unwrap().sched_attr();
+        crate::runtime_timeline::fair_picked(
+            Arc::as_ptr(&entity) as u64,
+            sched_attr.fair.vruntime.load(Ordering::Relaxed),
+            self.min_vruntime,
+        );
         let (old_weight, _weight) = sched_attr.fair.fetch_weight();
         // Equals to:
         //
