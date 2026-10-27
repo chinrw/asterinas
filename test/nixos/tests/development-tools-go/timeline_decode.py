@@ -56,7 +56,7 @@ def decode(file):
         if 'enqueue' in call and 'run' in call:
             row['wake_run_ms']=(call['run']['tsc']-call['enqueue']['tsc'])*1000/hz
         timeline.append(row)
-    return {'file':str(file),'version':version,'pid':pid,'mode':mode,'tsc_hz':hz,'window_seconds':(stop-start)/hz,'events_total':total,'events_stored':stored,'events_dropped':dropped,'collisions':collisions,'timer_softirq':softirq,'timer_queue':timer_stats,'softirq_task':struct.unpack_from('<Q',data,38*8)[0] if version==3 else None,'sysmon_tid':sysmon,'sysmon_stats':next((s for s in slots if s['tid']==sysmon),None),'threads':slots,'sysmon_calls':timeline,'events':events}
+    return {'file':str(file),'version':version,'pid':pid,'mode':mode,'tsc_hz':hz,'window_seconds':(stop-start)/hz,'events_total':total,'events_stored':stored,'events_dropped':dropped,'collisions':collisions,'timer_softirq':softirq,'timer_queue':timer_stats,'timer_entry_budget':struct.unpack_from('<Q',data,40*8)[0] if version==3 else None,'softirq_task':struct.unpack_from('<Q',data,38*8)[0] if version==3 else None,'sysmon_tid':sysmon,'sysmon_stats':next((s for s in slots if s['tid']==sysmon),None),'threads':slots,'sysmon_calls':timeline,'events':events}
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('files',nargs='+',type=Path);args=parser.parse_args()
     for file in args.files:

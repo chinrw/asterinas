@@ -200,40 +200,57 @@ impl TimerManager {
     ///
     /// If any of the timers have timed out, call the corresponding callback functions.
     pub(crate) fn process_expired_timers(&self) {
+        self.process_expired_timers_with_budget(usize::MAX);
+    }
+
+    /// Processes at most `budget` expired or cancelled entries.
+    ///
+    /// Returns whether expired or cancelled entries remain to be processed.
+    pub(crate) fn process_expired_timers_with_budget(&self, budget: usize) -> bool {
         let diagnostic_start = crate::runtime_timeline::timer_operation_start();
-        let callbacks = {
+        let (callbacks, has_pending) = {
             let mut timeout_list = self.timer_callbacks.disable_irq().lock();
             if timeout_list.is_empty() {
-                return;
+                return false;
             }
 
             let before = timeout_list.len();
+            let mut cancelled = 0;
             let mut callbacks = Vec::new();
             let current_time = self.clock.read_time();
-            while let Some(t) = timeout_list.peek() {
-                if t.is_cancelled() {
-                    // Just ignore the cancelled callback
-                    timeout_list.pop();
-                } else if t.expired_time <= current_time {
-                    callbacks.push(timeout_list.pop().unwrap());
-                } else {
+            for _ in 0..budget {
+                let Some(callback) = timeout_list.peek() else {
+                    break;
+                };
+                if !callback.is_cancelled() && callback.expired_time > current_time {
                     break;
                 }
+                if callback.is_cancelled() {
+                    cancelled += 1;
+                }
+                // Retired entries also consume the budget and are freed outside the heap lock.
+                callbacks.push(timeout_list.pop().unwrap());
             }
+            let has_pending = timeout_list.peek().is_some_and(|callback| {
+                callback.is_cancelled() || callback.expired_time <= current_time
+            });
             crate::runtime_timeline::timer_collected(
                 diagnostic_start,
                 before - timeout_list.len(),
-                callbacks.len(),
+                callbacks.len() - cancelled,
                 self as *const Self as u64,
             );
-            callbacks
+            (callbacks, has_pending)
         };
 
         let diagnostic_start = crate::runtime_timeline::timer_operation_start();
         for callback in callbacks {
-            callback.call();
+            if !callback.is_cancelled() {
+                callback.call();
+            }
         }
         crate::runtime_timeline::timer_batch_done(diagnostic_start, self as *const Self as u64);
+        has_pending
     }
 
     /// Creates an [`Timer`], which will be managed by this `TimerManager`.
@@ -327,5 +344,92 @@ impl Ord for TimerCallback {
         // and the in-order management of `TimerCallback`s currently relies on a maximum heap,
         // so we need the reverse instruction here.
         self.expired_time.cmp(&other.expired_time).reverse()
+    }
+}
+
+#[cfg(ktest)]
+mod tests {
+    use core::sync::atomic::{AtomicU64, AtomicUsize};
+
+    use ostd::prelude::ktest;
+
+    use super::*;
+
+    struct TestClock(AtomicU64);
+
+    impl Clock for TestClock {
+        fn read_time(&self) -> Duration {
+            Duration::from_nanos(self.0.load(Ordering::Relaxed))
+        }
+    }
+
+    #[ktest]
+    fn bounded_batches_preserve_deadlines_and_order() {
+        const BUDGET: usize = 4;
+        const EXPIRED: usize = 2 * BUDGET + 3;
+        let clock = Arc::new(TestClock(AtomicU64::new(0)));
+        let manager = TimerManager::new(clock.clone());
+        let observed = Arc::new(SpinLock::<Vec<usize>>::new(Vec::new()));
+        let mut timers = Vec::new();
+        for deadline in (1..=EXPIRED + 1).rev() {
+            let observed = observed.clone();
+            let timer = manager.create_timer(move |_| observed.lock().push(deadline));
+            timer
+                .lock()
+                .set_timeout(Timeout::When(Duration::from_nanos(deadline as u64)));
+            timers.push(timer);
+        }
+        assert!(!manager.process_expired_timers_with_budget(BUDGET));
+        assert!(observed.lock().is_empty());
+        clock.0.store(EXPIRED as u64, Ordering::Relaxed);
+        assert!(manager.process_expired_timers_with_budget(BUDGET));
+        assert_eq!(observed.lock().len(), BUDGET);
+        assert!(manager.process_expired_timers_with_budget(BUDGET));
+        assert_eq!(observed.lock().len(), 2 * BUDGET);
+        assert!(!manager.process_expired_timers_with_budget(BUDGET));
+        assert_eq!(*observed.lock(), (1..=EXPIRED).collect::<Vec<_>>());
+        clock.0.store((EXPIRED + 1) as u64, Ordering::Relaxed);
+        assert!(!manager.process_expired_timers_with_budget(BUDGET));
+        assert_eq!(*observed.lock(), (1..=EXPIRED + 1).collect::<Vec<_>>());
+    }
+
+    fn check_inactive_prefix(prepare: impl Fn(&Arc<Timer>)) {
+        const BUDGET: usize = 4;
+        const INACTIVE: usize = 2 * BUDGET + 1;
+        let clock = Arc::new(TestClock(AtomicU64::new((INACTIVE + 1) as u64)));
+        let manager = TimerManager::new(clock);
+        for deadline in 1..=INACTIVE {
+            let timer = manager.create_timer(|_| panic!("inactive timer callback ran"));
+            timer
+                .lock()
+                .set_timeout(Timeout::When(Duration::from_nanos(deadline as u64)));
+            prepare(&timer);
+        }
+        let fired = Arc::new(AtomicUsize::new(0));
+        let fired_in_callback = fired.clone();
+        let timer = manager.create_timer(move |_| {
+            fired_in_callback.fetch_add(1, Ordering::Relaxed);
+        });
+        timer
+            .lock()
+            .set_timeout(Timeout::When(Duration::from_nanos((INACTIVE + 1) as u64)));
+        assert!(manager.process_expired_timers_with_budget(BUDGET));
+        assert_eq!(fired.load(Ordering::Relaxed), 0);
+        assert!(manager.process_expired_timers_with_budget(BUDGET));
+        assert_eq!(fired.load(Ordering::Relaxed), 0);
+        assert!(!manager.process_expired_timers_with_budget(BUDGET));
+        assert_eq!(fired.load(Ordering::Relaxed), 1);
+        assert!(!manager.process_expired_timers_with_budget(BUDGET));
+        assert_eq!(fired.load(Ordering::Relaxed), 1);
+    }
+
+    #[ktest]
+    fn cancelled_entries_consume_the_batch_budget() {
+        check_inactive_prefix(|timer| timer.lock().cancel());
+    }
+
+    #[ktest]
+    fn dropped_entries_consume_the_batch_budget() {
+        check_inactive_prefix(|_| {});
     }
 }

@@ -82,6 +82,7 @@ static TIMER_SCOPE: AtomicU64 = AtomicU64::new(0);
 static TIMER_DUE: AtomicU64 = AtomicU64::new(0);
 static TIMER_AT: AtomicU64 = AtomicU64::new(0);
 
+static TIMER_BUDGET: AtomicU64 = AtomicU64::new(64);
 static DAEMON_TASK: AtomicU64 = AtomicU64::new(0);
 static FAIR_PICKS: AtomicU64 = AtomicU64::new(0);
 static GLOBAL_SLOT: Slot = Slot::new();
@@ -128,6 +129,13 @@ pub(crate) fn softirq_end(start: Option<u64>) {
     SOFTIRQ_MAX.fetch_max(elapsed, Relaxed);
     LAST_SOFTIRQ_END.store(read_tsc(), Relaxed);
     emit(&GLOBAL_SLOT, 13, elapsed, 0, 0);
+}
+
+pub(crate) fn timer_budget() -> usize {
+    match TIMER_BUDGET.load(Relaxed) {
+        0 => usize::MAX,
+        value => value as usize,
+    }
 }
 
 pub(crate) fn daemon_event(task: u64, kind: u64) {
@@ -453,6 +461,15 @@ pub(crate) fn control(
     }
     match command {
         0 => return Ok(1),
+        4 => {
+            if WATCH.load(Acquire) != 0 {
+                return_errno!(Errno::EBUSY);
+            }
+            if arg3 != 0 && arg3 != 64 {
+                return_errno!(Errno::EINVAL);
+            }
+            TIMER_BUDGET.store(arg3, Release);
+        }
         1 => {
             if ostd::cpu::num_cpus() != 1 || arg3 == 0 || arg3 > u32::MAX as u64 || arg4 > 2 {
                 return_errno!(Errno::EINVAL);
@@ -561,6 +578,7 @@ pub(crate) fn control(
             }
             header[38] = DAEMON_TASK.load(Relaxed);
             header[39] = FAIR_PICKS.load(Relaxed);
+            header[40] = TIMER_BUDGET.load(Relaxed);
             let space = ctx.user_space();
             space.write_val(arg3 as usize, &header)?;
             let mut address = arg3 as usize + size_of_val(&header);

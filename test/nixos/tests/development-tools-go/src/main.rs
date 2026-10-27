@@ -546,3 +546,87 @@ fn notingo_uninstrumented_timeline_baseline(shell: &mut Session) -> Result<(), E
     }
     Ok(())
 }
+
+#[nixos_test]
+fn notingo_timer_budget_comparison(shell: &mut Session) -> Result<(), Error> {
+    let mut digests = vec![
+        (
+            "minimal".to_string(),
+            std::env::var("PROBE_MINIMAL_SHA256").expect("Minimal checksum"),
+        ),
+        (
+            "shared".to_string(),
+            std::env::var("PROBE_SHARED_SHA256").expect("Shared checksum"),
+        ),
+    ];
+    for line in std::env::var("PROBE_TIMELINE_DIGESTS")
+        .expect("Tagged checksums")
+        .lines()
+    {
+        let fields: Vec<_> = line.split_whitespace().collect();
+        digests.push((fields[0].to_string(), fields[1].to_string()));
+    }
+    for (name, digest) in digests {
+        shell.run_cmd_and_expect(&format!("sha256sum /etc/notingo/{name}"), &digest)?;
+    }
+    let success =
+        Regex::new(r"(?s)BARRIER_OK.*TIMELINE_UPLOAD_OK ").map_err(|e| Error::Pty(e.into()))?;
+    let baseline_required = std::env::var("PROBE_BUDGET_BASELINE_REQUIRED").as_deref() != Ok("0");
+    for (name, budget, mode, binary, repeats, expect_failure) in [
+        ("unbounded-before", 0, 0, "minimal", 3, true),
+        ("bounded-first", 64, 0, "minimal", 20, false),
+        ("bounded-trace", 64, 2, "tagged", 3, false),
+        ("unbounded-trace", 0, 2, "tagged", 3, true),
+        ("bounded-after", 64, 0, "minimal", 20, false),
+    ] {
+        if budget == 64 {
+            shell.run_cmd_and_expect(
+                "/etc/notingo/timeline-launcher budget 64 && sleep 1 && echo BUDGET_SETTLED",
+                "BUDGET_SETTLED",
+            )?;
+        }
+        let mut timed_out = false;
+        for iteration in 1..=repeats {
+            let trial = format!("{name}-{iteration}");
+            let command = format!(
+                "( PROBE_TIMER_BUDGET={budget} /etc/notingo/timeline-launcher {mode} /tmp/{trial}.bin /etc/notingo/{binary} poll; trial_result=$?; /etc/notingo/timeline-upload /tmp/{trial}.bin {trial} || exit $?; exit $trial_result )"
+            );
+            let start = std::time::Instant::now();
+            let result = shell.run_cmd_and_expect_regex(&command, &success);
+            println!(
+                "BUDGET_TRIAL {trial} budget={budget} {:.3}s {result:?}",
+                start.elapsed().as_secs_f64()
+            );
+            match result {
+                Ok(()) => {}
+                Err(Error::NonZeroExit {
+                    exit_status: 124,
+                    output,
+                }) if expect_failure
+                    && !output.contains("BARRIER_OK")
+                    && output.contains("timeout_phase=") =>
+                {
+                    timed_out = true;
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        if expect_failure && baseline_required && !timed_out {
+            return Err(Error::UnexpectedOutput {
+                expected: format!("{name} to reproduce startup timeout"),
+                got: "all baseline calls completed".into(),
+            });
+        }
+    }
+    let ok = Regex::new(r"(?m)^OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    for iteration in 1..=10 {
+        let start = std::time::Instant::now();
+        shell.run_cmd_and_expect_regex("GOMAXPROCS=1 timeout --signal=QUIT --kill-after=2s 10s /etc/notingo/shared NotInGoMetricCgoCallAndCallback",&ok)?;
+        println!(
+            "BUDGET_FULL_HELPER_PASS {iteration} {:.3}s",
+            start.elapsed().as_secs_f64()
+        );
+    }
+    Ok(())
+}

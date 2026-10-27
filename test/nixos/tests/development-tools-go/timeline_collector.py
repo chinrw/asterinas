@@ -9,7 +9,7 @@ class Collector(BaseHTTPRequestHandler):
     def do_POST(self):
         name=self.path.removeprefix('/')
         length=int(self.headers.get('Content-Length','0'))
-        if not re.fullmatch(r'[A-Za-z0-9_-]+\.(bin|child\.log)',name) or not 0<length<16*1024*1024:
+        if not re.fullmatch(r'[A-Za-z0-9_-]+\.(bin|child\.log)',name) or not 0<=length<16*1024*1024 or (length==0 and not name.endswith('.child.log')):
             self.send_error(400);return
         data=self.rfile.read(length)
         if len(data)!=length:self.send_error(400);return

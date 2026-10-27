@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
@@ -15,18 +16,26 @@
 static volatile sig_atomic_t child_pid, timeout_phase, stopped, saved_bytes;
 static void deadline(int signal_number) {
   (void)signal_number;
-  if (!timeout_phase) {
-    saved_bytes = (sig_atomic_t)syscall(SYS_prctl, CONTROL, 2UL, 0UL, 0UL, 0UL);
-    stopped = 1;
-    timeout_phase = 1;
-    kill(child_pid, SIGQUIT);
-    alarm(2);
-  } else {
-    timeout_phase = 2;
-    kill(child_pid, SIGKILL);
+  saved_bytes = (sig_atomic_t)syscall(SYS_prctl, CONTROL, 2UL, 0UL, 0UL, 0UL);
+  stopped = 1;
+  timeout_phase = 1;
+  kill(child_pid, SIGKILL);
+}
+static int configure_budget(const char *value) {
+  if (strcmp(value, "0") && strcmp(value, "64"))
+    return 2;
+  if (prctl(CONTROL, 4UL, strtoul(value, NULL, 10), 0UL, 0UL)) {
+    perror("timer budget control");
+    return 3;
   }
+  return 0;
 }
 int main(int argc, char **argv) {
+  if (argc == 3 && !strcmp(argv[1], "budget"))
+    return configure_budget(argv[2]);
+  const char *budget = getenv("PROBE_TIMER_BUDGET");
+  if (budget && configure_budget(budget))
+    return 18;
   if (argc != 5)
     return 2;
   int mode = atoi(argv[1]);

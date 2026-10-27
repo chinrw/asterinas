@@ -28,7 +28,7 @@ static int upload(const char *file, const char *name) {
     return 1;
   }
   struct stat stat;
-  if (fstat(input, &stat) || stat.st_size <= 0 ||
+  if (fstat(input, &stat) || stat.st_size < 0 ||
       stat.st_size >= 16 * 1024 * 1024) {
     close(input);
     return 2;
