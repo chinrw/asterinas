@@ -6,16 +6,22 @@ import re
 import struct
 
 FIELDS='tid ns_last ns_min ns_max call_seq active entry_tsc wait_requested blocked_current block_tsc wake_tsc enqueue_tsc run_tsc deadline_ns wake_ns callback_tsc ready_tsc ready_kind calls ended calls_blocked calls_no_block switchouts preempts timer_wakes other_wakes runs total_cycles max_cycles max_late_ns max_wake_run_cycles reserved31 eintr bad_time select_tsc wait_attempts total_wake_run_cycles queued_wakes block_events max_select_run_cycles'.split()
-KINDS={1:'enter',2:'wait',3:'block',4:'timer_wake',5:'other_wake',6:'enqueue',7:'selected',8:'run',9:'end',10:'exit',11:'preempt'}
+KINDS={1:'enter',2:'wait',3:'block',4:'timer_wake',5:'other_wake',6:'enqueue',7:'selected',8:'run',9:'end',10:'exit',11:'preempt',12:'softirq_begin',13:'softirq_end',14:'timer_collect',15:'timer_batch_end',16:'slow_timer_insert'}
 def decode(file):
     data=file.read_bytes();header=struct.unpack_from('<16Q',data)
     magic,version,nslots,capacity,ewords,swords,hz,pid,start,stop,total,stored,dropped,collisions,mode,_=header
-    assert magic==0x41535454494d4531 and version in (1,2) and swords==len(FIELDS) and ewords==12
-    header_bytes=128 if version==1 else 192
+    assert magic==0x41535454494d4531 and version in (1,2,3) and swords==len(FIELDS) and ewords==12
+    header_bytes={1:128,2:192,3:384}[version]
     softirq=None
-    if version==2:
+    if version>=2:
         count,cycles,maximum,*_=struct.unpack_from('<8Q',data,128)
         softirq={'calls':count,'total_ms':cycles*1000/hz,'max_ms':maximum*1000/hz}
+    timer_stats=None
+    if version==3:
+        names='max_softirq_gap_cycles inserts max_heap_len max_insert_cycles collections max_collect_cycles total_collect_cycles max_batch_cycles total_batch_cycles drained cancelled max_batch_len dead_callbacks live_callbacks'.split()
+        timer_stats=dict(zip(names,struct.unpack_from('<24Q',data,192)))
+        for name,value in list(timer_stats.items()):
+            if name.endswith('_cycles'):timer_stats[name.removesuffix('_cycles')+'_ms']=value*1000/hz
     assert len(data)==header_bytes+nslots*swords*8+stored*ewords*8
     offset=header_bytes;slots=[]
     for _ in range(nslots):
@@ -50,7 +56,7 @@ def decode(file):
         if 'enqueue' in call and 'run' in call:
             row['wake_run_ms']=(call['run']['tsc']-call['enqueue']['tsc'])*1000/hz
         timeline.append(row)
-    return {'file':str(file),'version':version,'pid':pid,'mode':mode,'tsc_hz':hz,'window_seconds':(stop-start)/hz,'events_total':total,'events_stored':stored,'events_dropped':dropped,'collisions':collisions,'timer_softirq':softirq,'sysmon_tid':sysmon,'sysmon_stats':next((s for s in slots if s['tid']==sysmon),None),'threads':slots,'sysmon_calls':timeline,'events':events}
+    return {'file':str(file),'version':version,'pid':pid,'mode':mode,'tsc_hz':hz,'window_seconds':(stop-start)/hz,'events_total':total,'events_stored':stored,'events_dropped':dropped,'collisions':collisions,'timer_softirq':softirq,'timer_queue':timer_stats,'sysmon_tid':sysmon,'sysmon_stats':next((s for s in slots if s['tid']==sysmon),None),'threads':slots,'sysmon_calls':timeline,'events':events}
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('files',nargs='+',type=Path);args=parser.parse_args()
     for file in args.files:

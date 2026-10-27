@@ -186,22 +186,28 @@ impl TimerManager {
     }
 
     fn insert(&self, timer_callback: Arc<TimerCallback>) {
-        self.timer_callbacks
-            .disable_irq()
-            .lock()
-            .push(timer_callback);
+        let diagnostic_start = crate::runtime_timeline::timer_operation_start();
+        let mut callbacks = self.timer_callbacks.disable_irq().lock();
+        callbacks.push(timer_callback);
+        crate::runtime_timeline::timer_inserted(
+            diagnostic_start,
+            callbacks.len(),
+            self as *const Self as u64,
+        );
     }
 
     /// Checks and processes the managed timers.
     ///
     /// If any of the timers have timed out, call the corresponding callback functions.
     pub(crate) fn process_expired_timers(&self) {
+        let diagnostic_start = crate::runtime_timeline::timer_operation_start();
         let callbacks = {
             let mut timeout_list = self.timer_callbacks.disable_irq().lock();
             if timeout_list.is_empty() {
                 return;
             }
 
+            let before = timeout_list.len();
             let mut callbacks = Vec::new();
             let current_time = self.clock.read_time();
             while let Some(t) = timeout_list.peek() {
@@ -214,12 +220,20 @@ impl TimerManager {
                     break;
                 }
             }
+            crate::runtime_timeline::timer_collected(
+                diagnostic_start,
+                before - timeout_list.len(),
+                callbacks.len(),
+                self as *const Self as u64,
+            );
             callbacks
         };
 
+        let diagnostic_start = crate::runtime_timeline::timer_operation_start();
         for callback in callbacks {
             callback.call();
         }
+        crate::runtime_timeline::timer_batch_done(diagnostic_start, self as *const Self as u64);
     }
 
     /// Creates an [`Timer`], which will be managed by this `TimerManager`.
@@ -261,8 +275,10 @@ impl TimerCallback {
 
     fn call(&self) {
         let Some(timer) = self.timer.upgrade() else {
+            crate::runtime_timeline::timer_callback(false);
             return;
         };
+        crate::runtime_timeline::timer_callback(true);
 
         let mut timer_guard = timer.lock();
 

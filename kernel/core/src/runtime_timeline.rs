@@ -82,12 +82,27 @@ static TIMER_SCOPE: AtomicU64 = AtomicU64::new(0);
 static TIMER_DUE: AtomicU64 = AtomicU64::new(0);
 static TIMER_AT: AtomicU64 = AtomicU64::new(0);
 
+static GLOBAL_SLOT: Slot = Slot::new();
+// Gap, inserts, heap maximum, insert maximum, collections, collection maximum,
+// collection total, callback batch maximum, callback batch total, drained,
+// cancelled, maximum batch, dead callbacks, live callbacks.
+static TIMER_STATS: [AtomicU64; 14] = [const { AtomicU64::new(0) }; 14];
+static LAST_SOFTIRQ_END: AtomicU64 = AtomicU64::new(0);
 static SOFTIRQ_CALLS: AtomicU64 = AtomicU64::new(0);
 static SOFTIRQ_CYCLES: AtomicU64 = AtomicU64::new(0);
 static SOFTIRQ_MAX: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn softirq_begin() -> Option<u64> {
-    timing_enabled().then(read_tsc)
+    if !timing_enabled() {
+        return None;
+    }
+    let now = read_tsc();
+    let last = LAST_SOFTIRQ_END.load(Relaxed);
+    if last != 0 {
+        TIMER_STATS[0].fetch_max(now.saturating_sub(last), Relaxed);
+    }
+    emit(&GLOBAL_SLOT, 12, 0, 0, 0);
+    Some(now)
 }
 pub(crate) fn softirq_end(start: Option<u64>) {
     let Some(start) = start else {
@@ -100,6 +115,51 @@ pub(crate) fn softirq_end(start: Option<u64>) {
     SOFTIRQ_CALLS.fetch_add(1, Relaxed);
     SOFTIRQ_CYCLES.fetch_add(elapsed, Relaxed);
     SOFTIRQ_MAX.fetch_max(elapsed, Relaxed);
+    LAST_SOFTIRQ_END.store(read_tsc(), Relaxed);
+    emit(&GLOBAL_SLOT, 13, elapsed, 0, 0);
+}
+
+pub(crate) fn timer_operation_start() -> Option<u64> {
+    timing_enabled().then(read_tsc)
+}
+pub(crate) fn timer_inserted(start: Option<u64>, len: usize, manager: u64) {
+    let Some(start) = start else {
+        return;
+    };
+    let elapsed = read_tsc().saturating_sub(start);
+    TIMER_STATS[1].fetch_add(1, Relaxed);
+    TIMER_STATS[2].fetch_max(len as u64, Relaxed);
+    TIMER_STATS[3].fetch_max(elapsed, Relaxed);
+    if elapsed > ostd::arch::tsc_freq() / 1000 {
+        emit(&GLOBAL_SLOT, 16, elapsed, len as u64, manager);
+    }
+}
+pub(crate) fn timer_collected(start: Option<u64>, drained: usize, callbacks: usize, manager: u64) {
+    let Some(start) = start else {
+        return;
+    };
+    let elapsed = read_tsc().saturating_sub(start);
+    TIMER_STATS[4].fetch_add(1, Relaxed);
+    TIMER_STATS[5].fetch_max(elapsed, Relaxed);
+    TIMER_STATS[6].fetch_add(elapsed, Relaxed);
+    TIMER_STATS[9].fetch_add(drained as u64, Relaxed);
+    TIMER_STATS[10].fetch_add((drained - callbacks) as u64, Relaxed);
+    TIMER_STATS[11].fetch_max(callbacks as u64, Relaxed);
+    emit(&GLOBAL_SLOT, 14, elapsed, drained as u64, manager);
+}
+pub(crate) fn timer_batch_done(start: Option<u64>, manager: u64) {
+    let Some(start) = start else {
+        return;
+    };
+    let elapsed = read_tsc().saturating_sub(start);
+    TIMER_STATS[7].fetch_max(elapsed, Relaxed);
+    TIMER_STATS[8].fetch_add(elapsed, Relaxed);
+    emit(&GLOBAL_SLOT, 15, elapsed, 0, manager);
+}
+pub(crate) fn timer_callback(live: bool) {
+    if timing_enabled() {
+        TIMER_STATS[if live { 13 } else { 12 }].fetch_add(1, Relaxed);
+    }
 }
 
 fn slot(tid: u32) -> Option<&'static Slot> {
@@ -374,6 +434,10 @@ pub(crate) fn control(
             for event in &EVENTS {
                 event.0[0].store(0, Relaxed);
             }
+            for field in &TIMER_STATS {
+                field.store(0, Relaxed);
+            }
+            LAST_SOFTIRQ_END.store(0, Relaxed);
             SOFTIRQ_CALLS.store(0, Relaxed);
             SOFTIRQ_CYCLES.store(0, Relaxed);
             SOFTIRQ_MAX.store(0, Relaxed);
@@ -396,16 +460,16 @@ pub(crate) fn control(
             }
             let total = NEXT.load(Acquire);
             let stored = total.min(CAPACITY as u64) as usize;
-            let size = 24 * 8 + NSLOTS * WORDS * 8 + stored * EWORDS * 8;
+            let size = 48 * 8 + NSLOTS * WORDS * 8 + stored * EWORDS * 8;
             if command == 2 {
                 return Ok(size as _);
             }
             if arg4 < size as u64 {
                 return_errno!(Errno::ENOBUFS);
             }
-            let header: [u64; 24] = [
+            let mut header: [u64; 48] = [
                 MAGIC,
-                2,
+                3,
                 NSLOTS as u64,
                 CAPACITY as u64,
                 EWORDS as u64,
@@ -428,7 +492,34 @@ pub(crate) fn control(
                 0,
                 0,
                 0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             ];
+            for (i, field) in TIMER_STATS.iter().enumerate() {
+                header[24 + i] = field.load(Relaxed);
+            }
             let space = ctx.user_space();
             space.write_val(arg3 as usize, &header)?;
             let mut address = arg3 as usize + size_of_val(&header);

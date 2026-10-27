@@ -528,3 +528,21 @@ fn notingo_kernel_timeline(shell: &mut Session) -> Result<(), Error> {
         })
     }
 }
+
+#[nixos_test]
+fn notingo_uninstrumented_timeline_baseline(shell: &mut Session) -> Result<(), Error> {
+    let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+    for iteration in 1..=8 {
+        let start = std::time::Instant::now();
+        let result = shell.run_cmd_and_expect_regex(
+            "GOMAXPROCS=1 timeout --signal=QUIT --kill-after=2s 10s /etc/notingo/minimal poll",
+            &barrier,
+        );
+        println!(
+            "UNINSTRUMENTED_BASELINE {iteration} {:.3}s {result:?}",
+            start.elapsed().as_secs_f64()
+        );
+        result?;
+    }
+    Ok(())
+}
