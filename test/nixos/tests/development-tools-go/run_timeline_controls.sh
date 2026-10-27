@@ -11,7 +11,7 @@ trap 'kill "$collector_pid" 2>/dev/null || true' EXIT
 result=0
 PROBE_SHARED_SHA256=$(cat "$repo/target/notingo-native-controls/sha256.txt") PROBE_MINIMAL_SHA256=$(cat "$repo/target/notingo-native-controls/minimal-sha256.txt") PROBE_TIMELINE_DIGESTS=$(cat "$directory/digests.txt") make run_nixos \
  NIXOS_TEST_SUITE=development-tools-go NIXOS_TEST_TIMEOUT=12min \
- NIXOS_TEST_CASE=notingo_timer_budget_comparison > "$directory/driver.log" 2>&1 || result=$?
+ NIXOS_TEST_CASE=notingo_timer_budget_capacity > "$directory/driver.log" 2>&1 || result=$?
 cat "$directory/driver.log"
 if [ -f "$repo/qemu.log" ]; then mv "$repo/qemu.log" "$directory/qemu.log"; fi
 if [ -f "$repo/qemu-serial.log" ]; then mv "$repo/qemu-serial.log" "$directory/qemu-serial.log"; fi

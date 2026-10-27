@@ -11,6 +11,7 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #define CONTROL 0x41535454
 static volatile sig_atomic_t child_pid, timeout_phase, stopped, saved_bytes;
@@ -31,8 +32,17 @@ static int configure_budget(const char *value) {
   return 0;
 }
 int main(int argc, char **argv) {
-  if (argc == 3 && !strcmp(argv[1], "budget"))
-    return configure_budget(argv[2]);
+  if (argc == 3 && !strcmp(argv[1], "budget")) {
+    int result = configure_budget(argv[2]);
+    if (result)
+      return result;
+    struct timespec quiet = {.tv_sec = 1};
+    if (syscall(SYS_nanosleep, &quiet, NULL)) {
+      perror("monotonic budget settle");
+      return 4;
+    }
+    return 0;
+  }
   const char *budget = getenv("PROBE_TIMER_BUDGET");
   if (budget && configure_budget(budget))
     return 18;

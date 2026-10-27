@@ -630,3 +630,84 @@ fn notingo_timer_budget_comparison(shell: &mut Session) -> Result<(), Error> {
     }
     Ok(())
 }
+
+#[nixos_test]
+fn notingo_timer_budget_capacity(shell: &mut Session) -> Result<(), Error> {
+    for (name, variable) in [
+        ("minimal", "PROBE_MINIMAL_SHA256"),
+        ("shared", "PROBE_SHARED_SHA256"),
+    ] {
+        shell.run_cmd_and_expect(
+            &format!("sha256sum /etc/notingo/{name}"),
+            &std::env::var(variable).expect("Helper checksum"),
+        )?;
+    }
+    let success =
+        Regex::new(r"(?s)BARRIER_OK.*TIMELINE_UPLOAD_OK ").map_err(|e| Error::Pty(e.into()))?;
+    let mut failures = Vec::new();
+    let mut control_failed = false;
+    for (name, budget, binary, mode, repeats, settle) in [
+        ("bounded-cold-original", 64, "minimal", 2, 3, false),
+        ("bounded-cold-off", 64, "minimal", 0, 20, false),
+        ("bounded-cold-tagged", 64, "tagged", 2, 3, false),
+        ("unbounded-observe", 0, "tagged", 2, 3, false),
+        ("bounded-settled-original", 64, "minimal", 2, 3, true),
+        ("bounded-settled-off", 64, "minimal", 0, 20, false),
+        ("bounded-settled-tagged", 64, "tagged", 2, 3, false),
+    ] {
+        if settle {
+            shell.run_cmd_and_expect(
+                "/etc/notingo/timeline-launcher budget 64 && echo MONOTONIC_QUEUE_SETTLED",
+                "MONOTONIC_QUEUE_SETTLED",
+            )?;
+        }
+        for iteration in 1..=repeats {
+            let trial = format!("{name}-{iteration}");
+            let command = format!(
+                "( PROBE_TIMER_BUDGET={budget} /etc/notingo/timeline-launcher {mode} /tmp/{trial}.bin /etc/notingo/{binary} poll; trial_result=$?; /etc/notingo/timeline-upload /tmp/{trial}.bin {trial} || exit $?; exit $trial_result )"
+            );
+            let start = std::time::Instant::now();
+            let result = shell.run_cmd_and_expect_regex(&command, &success);
+            println!(
+                "BUDGET_CAPACITY {trial} budget={budget} {:.3}s {result:?}",
+                start.elapsed().as_secs_f64()
+            );
+            match result {
+                Ok(()) => {}
+                Err(
+                    e @ Error::NonZeroExit {
+                        exit_status: 124, ..
+                    },
+                ) => {
+                    if budget == 0 {
+                        control_failed = true;
+                    } else {
+                        failures.push((trial, e));
+                    }
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    let baseline_required = std::env::var("PROBE_BUDGET_BASELINE_REQUIRED").as_deref() != Ok("0");
+    if baseline_required && !control_failed {
+        return Err(Error::UnexpectedOutput {
+            expected: "Unbounded control to time out".into(),
+            got: "All unbounded controls passed".into(),
+        });
+    }
+    if failures.is_empty() {
+        let ok = Regex::new(r"(?m)^OK\s*$").map_err(|e| Error::Pty(e.into()))?;
+        for iteration in 1..=10 {
+            shell.run_cmd_and_expect_regex("GOMAXPROCS=1 timeout --signal=QUIT --kill-after=2s 10s /etc/notingo/shared NotInGoMetricCgoCallAndCallback", &ok)?;
+            println!("BUDGET_FULL_HELPER_PASS {iteration}");
+        }
+        Ok(())
+    } else {
+        Err(Error::Aggregated {
+            summary: "Budget capacity probe retained timeouts".into(),
+            collections: failures,
+        })
+    }
+}
