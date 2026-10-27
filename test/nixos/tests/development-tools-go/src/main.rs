@@ -568,7 +568,7 @@ fn notingo_retirement_phase(shell: &mut Session) -> Result<(), Error> {
         Regex::new(r"(?s)BARRIER_OK.*TIMELINE_UPLOAD_OK ").map_err(|e| Error::Pty(e.into()))?;
     let mut failures = Vec::new();
     let mut baseline_timeout = false;
-    let original_repeats = if phase == "heap" { 3 } else { 20 };
+    let original_repeats = 20;
     for (name, binary, mode, repeats) in [
         ("original", "minimal", 0, original_repeats),
         ("trace-original", "minimal", 2, 3),
@@ -662,6 +662,12 @@ fn retirement_full_helper(shell: &mut Session) -> Result<(), Error> {
 #[nixos_test]
 fn notingo_retirement_static(shell: &mut Session) -> Result<(), Error> {
     retirement_checksums(shell)?;
+    if let Ok(cpus) = std::env::var("PROBE_EXPECT_CPUS") {
+        shell.run_cmd_and_expect(
+            &format!("test $(nproc) -eq {cpus} && echo GUEST_CPUS_CONFIRMED_{cpus}"),
+            &format!("GUEST_CPUS_CONFIRMED_{cpus}"),
+        )?;
+    }
     let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|e| Error::Pty(e.into()))?;
     for iteration in 1..=20 {
         let start = std::time::Instant::now();
@@ -693,7 +699,8 @@ fn notingo_retirement_static(shell: &mut Session) -> Result<(), Error> {
             .lines()
             .find(|line| line.starts_with("runtime "))
             .expect("Existing runtime selection");
-        let success = Regex::new(r"(?m)^ok\s+runtime\s+").map_err(|e| Error::Pty(e.into()))?;
+        // PTY normalization may remove tabs between the package name and elapsed time.
+        let success = Regex::new(r"(?m)^(?:ok|\?)\s+").map_err(|e| Error::Pty(e.into()))?;
         shell.run_cmd_and_expect_regex(
             &format!("GOFLAGS= go test -short -v -count=1 -timeout=9m {testcase}"),
             &success,

@@ -22,7 +22,9 @@ collector=$!
 trap 'kill "$collector" 2>/dev/null || true' EXIT
 files=(kernel/core/src/lib.rs kernel/core/src/sched/sched_class/mod.rs kernel/core/src/sched/sched_class/fair.rs kernel/core/src/thread/mod.rs kernel/core/src/syscall/prctl.rs kernel/core/src/syscall/nanosleep.rs kernel/core/src/time/core/timer.rs kernel/core/src/time/softirq.rs kernel/core/src/time/clocks/system_wide.rs)
 result=0
-for phase in heap map-lazy eager static; do
+phases="heap map-lazy eager static"
+if [ "${RETIREMENT_CONFIRM_ONLY:-0}" = 1 ]; then phases="heap static"; fi
+for phase in $phases; do
     mkdir -p "$directory/retirement/$phase"
     echo "RETIREMENT_PHASE_BEGIN $phase"
     for file in "${files[@]}"; do
@@ -58,6 +60,8 @@ for phase in heap map-lazy eager static; do
     export PROBE_RETIREMENT_PHASE=$phase
     export PROBE_BASELINE_REQUIRED=1
     export PROBE_RUN_RUNTIME=1
+    export PROBE_EXPECT_CPUS=1
+    if [ "${RETIREMENT_CONFIRM_ONLY:-0}" = 1 ]; then export PROBE_RUN_RUNTIME=0; fi
     case_name=notingo_retirement_phase
     if [ "$phase" = static ]; then case_name=notingo_retirement_static; fi
     phase_result=0
@@ -70,7 +74,7 @@ for phase in heap map-lazy eager static; do
     if [ "$phase" = static ]; then
         printf '%s\n' "$phase_result" > "$directory/retirement/static-status.txt"
         smp_result=0
-        PROBE_RUN_RUNTIME=0 SMP=4 make run_nixos NIXOS_TEST_SUITE=development-tools-go NIXOS_TEST_TIMEOUT=12min NIXOS_TEST_CASE=notingo_retirement_static > "$directory/retirement/static/smp-driver.log" 2>&1 || smp_result=$?
+        PROBE_RUN_RUNTIME=0 PROBE_EXPECT_CPUS=4 SMP=4 make run_nixos NIXOS_TEST_SUITE=development-tools-go NIXOS_TEST_TIMEOUT=12min NIXOS_TEST_CASE=notingo_retirement_static > "$directory/retirement/static/smp-driver.log" 2>&1 || smp_result=$?
         cat "$directory/retirement/static/smp-driver.log"
         if [ -f qemu.log ]; then mv qemu.log "$directory/retirement/static/smp-qemu.log"; fi
         if [ -f qemu-serial.log ]; then mv qemu-serial.log "$directory/retirement/static/smp-qemu-serial.log"; fi
