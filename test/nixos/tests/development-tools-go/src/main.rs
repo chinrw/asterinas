@@ -507,6 +507,9 @@ fn notingo_host_sample(shell: &mut Session) -> Result<(), Error> {
     let _ = finished_tx.send(());
     let _ = watchdog.join();
 
+    if let Ok(marker) = std::env::var("PROBE_HOST_MARKER") {
+        let _ = std::fs::write(marker, if result.is_ok() { "PASS" } else { "FAIL" });
+    }
     println!("HOST_SAMPLE name={name} seconds={elapsed:.6}");
     result
 }
