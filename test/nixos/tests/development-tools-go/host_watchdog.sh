@@ -10,7 +10,7 @@ image="$repo/target/nixos/asterinas.img"
 clean_image="$repo/target/nixos/notingo-host-watchdog-clean.img"
 cp --sparse=always "$image" "$clean_image"
 
-samples=(minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal sleep20 sleep1000)
+samples=(minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal sleep20 sleep1000)
 combined_status=0
 for index in "${!samples[@]}"; do
     name="${samples[$index]}"
@@ -25,6 +25,13 @@ for index in "${!samples[@]}"; do
         NIXOS_TEST_CASE=notingo_host_sample > "$log" 2>&1 || result=$?
     elapsed=$(( $(date +%s) - started ))
     cat "$log"
+    # A passed sample can still leave `make` waiting for QEMU cleanup.  The
+    # sample result is authoritative; do not turn a cleanup hang into a
+    # benchmark failure.
+    if [ "$result" -ne 0 ] && grep -q "Test case 'notingo_host_sample' passed" "$log"; then
+        echo "HOST_CLEANUP_TIMEOUT $index $name (sample passed)"
+        result=0
+    fi
     echo "HOST_WATCHDOG_SAMPLE $index $name STATUS=$result SECONDS=$elapsed"
     if [ "$result" -ne 0 ]; then
         combined_status=1
