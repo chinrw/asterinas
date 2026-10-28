@@ -25,10 +25,12 @@ for index in "${!samples[@]}"; do
     name="${samples[$index]}"
     cp --sparse=always "$clean_image" "$image"
     log="$repo/target/notingo-native-controls/host-watchdog-$index-$name.log"
+    marker="$repo/target/notingo-native-controls/host-marker-$index-$name"
     mkdir -p "$(dirname "$log")"
+    rm -f "$marker"
     started=$(date +%s)
 
-    PROBE_HOST_SAMPLE="$name" make run_nixos \
+    PROBE_HOST_MARKER="$marker" PROBE_HOST_SAMPLE="$name" make run_nixos \
         NIXOS_TEST_SUITE=development-tools-go \
         NIXOS_TEST_TIMEOUT=60s \
         NIXOS_TEST_CASE=notingo_host_sample > "$log" 2>&1 &
@@ -36,6 +38,14 @@ for index in "${!samples[@]}"; do
 
     outcome=timeout
     for _ in $(seq 1 900); do
+        if [ -f "$marker" ]; then
+            if [ "$(cat "$marker")" = "PASS" ]; then
+                outcome=pass
+            else
+                outcome=fail
+            fi
+            break
+        fi
         if grep -q "Test case 'notingo_host_sample' passed" "$log"; then
             outcome=pass
             break
@@ -63,6 +73,7 @@ for index in "${!samples[@]}"; do
     pkill -9 -f "qemu-system-x86_64.*asterinas.img" 2>/dev/null || true
     pkill -9 -f "test-development-tools-go --qemu-cmd" 2>/dev/null || true
     wait "$driver_pid" 2>/dev/null || true
+    rm -f "$marker"
 
     elapsed=$(( $(date +%s) - started ))
     cat "$log"
