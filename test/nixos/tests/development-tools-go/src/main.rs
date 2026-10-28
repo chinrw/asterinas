@@ -709,3 +709,22 @@ fn notingo_retirement_static(shell: &mut Session) -> Result<(), Error> {
     }
     Ok(())
 }
+
+#[nixos_test]
+fn notingo_retirement_integration(shell: &mut Session) -> Result<(), Error> {
+    let cpus = std::env::var("PROBE_EXPECT_CPUS").expect("Explicit guest CPU count");
+    shell.run_cmd_and_expect(
+        &format!("test $(nproc) -eq {cpus} && echo INTEGRATION_CPUS_{cpus}"),
+        &format!("INTEGRATION_CPUS_{cpus}"),
+    )?;
+    for (mode, marker) in [
+        ("stress", "TIMER_STRESS_PASS"),
+        ("teardown", "TIMER_TEARDOWN_PASS"),
+        ("burst", "TIMER_BURST_PASS"),
+    ] {
+        shell.run_cmd_and_expect(&format!("timeout --signal=KILL 120s /etc/notingo/regressions/timer_integration {mode} {cpus}"), marker)?;
+        println!("RETIREMENT_INTEGRATION_PASS {mode} cpus={cpus}");
+    }
+    // Confirm original Go progress after exercising shared timer queues and teardown.
+    notingo_retirement_static(shell)
+}

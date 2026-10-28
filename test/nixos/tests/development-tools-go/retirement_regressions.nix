@@ -10,4 +10,5 @@ pkgs.runCommand "timer-retirement-regressions" { nativeBuildInputs = [ pkgs.gcc 
     gcc -O2 -pthread "${source}/time/$file.c" -lrt -o "$out/bin/$name"
   done
   gcc -O2 -pthread ${./retirement_nanosleep_bounds.c} -o "$out/bin/nanosleep_bounds"
+  gcc -O2 -Wall -Wextra -Werror -pthread ${./retirement_integration.c} -lrt -o "$out/bin/timer_integration"
 ''
