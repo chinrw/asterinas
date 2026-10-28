@@ -483,13 +483,31 @@ fn notingo_runtime_package(shell: &mut Session) -> Result<(), Error> {
 fn notingo_host_sample(shell: &mut Session) -> Result<(), Error> {
     let name = std::env::var("PROBE_HOST_SAMPLE").expect("PROBE_HOST_SAMPLE is not set");
     let barrier = Regex::new(r"(?m)^BARRIER_OK\s*$").map_err(|err| Error::Pty(err.into()))?;
+
+    // Per-sample host deadline.  rexpect's global timeout covers boot/login;
+    // this watchdog starts only when the sample is launched.  If the guest
+    // stops scheduling, the host kills QEMU instead of waiting for the guest
+    // to run its own timeout.  Three seconds is the benchmark's SLA.
+    let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+    let watchdog = std::thread::spawn(move || {
+        if finished_rx
+            .recv_timeout(std::time::Duration::from_secs(3))
+            .is_err()
+        {
+            let _ = std::process::Command::new("pkill")
+                .args(["-9", "-f", "qemu-system-x86_64"])
+                .status();
+        }
+    });
+
     let started = std::time::Instant::now();
     let result =
         shell.run_cmd_and_expect_regex(&format!("GOMAXPROCS=1 /etc/notingo/{name} poll"), &barrier);
-    println!(
-        "HOST_SAMPLE name={name} seconds={:.6}",
-        started.elapsed().as_secs_f64()
-    );
+    let elapsed = started.elapsed().as_secs_f64();
+    let _ = finished_tx.send(());
+    let _ = watchdog.join();
+
+    println!("HOST_SAMPLE name={name} seconds={elapsed:.6}");
     result
 }
 
