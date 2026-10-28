@@ -33,6 +33,7 @@ cp target/osdk/asterinas-run-base/Cargo.lock "$out/Cargo.lock"
 sha256sum target/osdk/asterinas/asterinas-osdk-bin target/osdk/iso_root/boot/asterinas-osdk-bin > "$out/kernel-sha256.txt"
 export PROBE_MINIMAL_SHA256=$(cat target/notingo-native-controls/minimal-sha256.txt)
 export PROBE_SHARED_SHA256=$(cat target/notingo-native-controls/sha256.txt)
+export PROBE_INTEGRATION_SHA256=$(sha256sum "$package/bin/timer_integration" | cut -d " " -f 1)
 export PROBE_RUN_RUNTIME=0
 result=0
 for cpus in 1 4; do

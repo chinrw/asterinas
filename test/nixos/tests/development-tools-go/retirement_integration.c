@@ -27,7 +27,8 @@
   } while (0)
 #define WORKERS 4
 #define ROUNDS 2000
-static int cpus[WORKERS], workers;
+static int workers;
+static cpu_set_t available;
 static uint64_t now_ns(void) {
   struct timespec ts;
   CHECK(clock_gettime(CLOCK_MONOTONIC, &ts) == 0);
@@ -38,11 +39,10 @@ static struct timespec time_value(uint64_t ns) {
                            .tv_nsec = ns % 1000000000};
 }
 static void configure_cpus(int requested) {
-  cpu_set_t available;
   CHECK(sched_getaffinity(0, sizeof(available), &available) == 0);
   for (int cpu = 0; cpu < CPU_SETSIZE && workers < WORKERS; cpu++)
     if (CPU_ISSET(cpu, &available))
-      cpus[workers++] = cpu;
+      workers++;
   CHECK(workers > 0 && requested <= workers);
   if (requested)
     workers = requested;
@@ -64,31 +64,58 @@ static void arm_fd(int fd, uint64_t expires, uint64_t interval, int flags) {
                              .it_interval = time_value(interval)};
   CHECK(timerfd_settime(fd, flags, &value, NULL) == 0);
 }
-static timer_t posix_timer(clockid_t clock) {
+static int posix_timer(clockid_t clock) {
   struct sigevent event = {.sigev_notify = SIGEV_NONE};
-  timer_t timer;
-  CHECK(timer_create(clock, &event, &timer) == 0);
+  int timer;
+  CHECK(syscall(SYS_timer_create, clock, &event, &timer) == 0);
   return timer;
 }
-static void arm_posix(timer_t timer, uint64_t expires) {
+static void arm_posix(int timer, uint64_t expires) {
   struct itimerspec value = {.it_value = time_value(expires)};
-  CHECK(timer_settime(timer, 0, &value, NULL) == 0);
+  CHECK(syscall(SYS_timer_settime, timer, 0, &value, NULL) == 0);
 }
 static pthread_barrier_t start;
 static atomic_int active, finished;
 static atomic_ulong overlaps, reads;
 static atomic_int observed_cpus[CPU_SETSIZE];
-static int shared_fd;
+static int shared_fd, probe;
+static uint64_t begin, last, max_gap, progress;
+struct WorkerArgument {
+  int index;
+  atomic_int ready;
+};
+static void sample_probe(void) {
+  uint64_t ticks;
+  ssize_t bytes = read(probe, &ticks, sizeof(ticks));
+  CHECK(bytes == sizeof(ticks) ||
+        (bytes < 0 && (errno == EAGAIN || errno == EINTR)));
+  uint64_t current = now_ns();
+  CHECK(current - begin < 90000000000ULL);
+  if (bytes == sizeof(ticks)) {
+    CHECK(ticks > 0);
+    if (current - last > max_gap)
+      max_gap = current - last;
+    last = current;
+    progress += ticks;
+  }
+}
 static void *worker(void *argument) {
-  int index = (int)(intptr_t)argument;
+  struct WorkerArgument *arg = argument;
+  int index = arg->index;
   unsigned actual_cpu = pin_current_cpu();
-  atomic_store(&observed_cpus[actual_cpu], 1);
+  if (index && atomic_exchange(&observed_cpus[actual_cpu], 1)) {
+    atomic_store(&arg->ready, -1);
+    return NULL;
+  }
   int fd = dup(shared_fd);
   CHECK(fd >= 0);
   atomic_fetch_add(&active, 1);
+  atomic_store(&arg->ready, 1);
   int result = pthread_barrier_wait(&start);
   CHECK(result == 0 || result == PTHREAD_BARRIER_SERIAL_THREAD);
   for (int round = 0; round < ROUNDS; round++) {
+    if (!index && round % 16 == 0)
+      sample_probe();
     if (atomic_load(&active) > 1)
       atomic_fetch_add(&overlaps, 1);
     if (index % 3 == 0) {
@@ -110,10 +137,10 @@ static void *worker(void *argument) {
     CHECK(temporary >= 0);
     arm_fd(temporary, round % 2 ? 1000 : 10000000000ULL, 0, 0);
     CHECK(close(temporary) == 0);
-    timer_t timer =
+    int timer =
         posix_timer(round % 8 ? CLOCK_MONOTONIC : CLOCK_PROCESS_CPUTIME_ID);
     arm_posix(timer, round % 2 ? 1000 : 10000000000ULL);
-    CHECK(timer_delete(timer) == 0);
+    CHECK(syscall(SYS_timer_delete, timer) == 0);
   }
   CHECK(close(fd) == 0);
   printf("TIMER_WORKER cpu=%d rounds=%d\n", actual_cpu, ROUNDS);
@@ -125,31 +152,50 @@ static void stress(void) {
   pthread_t threads[WORKERS];
   CHECK(pthread_barrier_init(&start, NULL, workers) == 0);
   shared_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-  int probe = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+  probe = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
   CHECK(shared_fd >= 0 && probe >= 0);
   arm_fd(probe, 1000000, 1000000, 0);
-  uint64_t begin = now_ns(), last = begin, max_gap = 0, progress = 0;
-  for (int i = 0; i < workers; i++)
-    CHECK(pthread_create(&threads[i], NULL, worker, (void *)(intptr_t)i) == 0);
-  while (atomic_load(&finished) < workers || progress == 0) {
-    uint64_t ticks;
-    ssize_t bytes = read(probe, &ticks, sizeof(ticks));
-    CHECK(bytes == sizeof(ticks) ||
-          (bytes < 0 && (errno == EAGAIN || errno == EINTR)));
-    uint64_t current = now_ns();
-    CHECK(current - begin < 90000000000ULL);
-    if (bytes == sizeof(ticks)) {
-      CHECK(ticks > 0);
-      if (current - last > max_gap)
-        max_gap = current - last;
-      last = current;
-      progress += ticks;
+  begin = last = now_ns();
+  atomic_store(&observed_cpus[pin_current_cpu()], 1);
+  pthread_attr_t attributes;
+  CHECK(pthread_attr_init(&attributes) == 0);
+  CHECK(pthread_attr_setaffinity_np(&attributes, sizeof(available),
+                                    &available) == 0);
+  int accepted = 0;
+  for (int attempt = 0; accepted < workers - 1 && attempt < 64; attempt++) {
+    struct WorkerArgument arg = {.index = accepted + 1};
+    cpu_set_t target;
+    CPU_ZERO(&target);
+    for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+      if (CPU_ISSET(cpu, &available) && !atomic_load(&observed_cpus[cpu])) {
+        CPU_SET(cpu, &target);
+        break;
+      }
     }
+    CHECK(pthread_attr_setaffinity_np(&attributes, sizeof(target), &target) ==
+          0);
+    pthread_t candidate;
+    CHECK(pthread_create(&candidate, &attributes, worker, &arg) == 0);
+    while (!atomic_load(&arg.ready)) {
+      CHECK(now_ns() - begin < 90000000000ULL);
+      sched_yield();
+    }
+    if (atomic_load(&arg.ready) > 0)
+      threads[accepted++] = candidate;
+    else
+      CHECK(pthread_join(candidate, NULL) == 0);
+  }
+  CHECK(accepted == workers - 1);
+  CHECK(pthread_attr_destroy(&attributes) == 0);
+  struct WorkerArgument main_arg = {.index = 0};
+  worker(&main_arg);
+  while (atomic_load(&finished) < workers || progress == 0) {
+    sample_probe();
     struct timespec pause = time_value(1000000);
     while (nanosleep(&pause, &pause) && errno == EINTR) {
     }
   }
-  for (int i = 0; i < workers; i++)
+  for (int i = 0; i < accepted; i++)
     CHECK(pthread_join(threads[i], NULL) == 0);
   CHECK(workers == 1 || atomic_load(&overlaps) > 0);
   int distinct = 0;
@@ -175,7 +221,7 @@ static void teardown(void) {
       if (!children[i]) {
         (void)pin_current_cpu();
         for (int j = 0; j < 64; j++) {
-          timer_t timer =
+          int timer =
               posix_timer(j % 8 ? CLOCK_MONOTONIC : CLOCK_PROCESS_CPUTIME_ID);
           arm_posix(timer, j % 2 ? 1000 : 10000000000ULL);
           if (j < 16) {

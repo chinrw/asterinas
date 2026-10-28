@@ -712,6 +712,10 @@ fn notingo_retirement_static(shell: &mut Session) -> Result<(), Error> {
 
 #[nixos_test]
 fn notingo_retirement_integration(shell: &mut Session) -> Result<(), Error> {
+    shell.run_cmd_and_expect(
+        "sha256sum /etc/notingo/regressions/timer_integration",
+        &std::env::var("PROBE_INTEGRATION_SHA256").expect("Integration binary checksum"),
+    )?;
     let cpus = std::env::var("PROBE_EXPECT_CPUS").expect("Explicit guest CPU count");
     shell.run_cmd_and_expect(
         &format!("test $(nproc) -eq {cpus} && echo INTEGRATION_CPUS_{cpus}"),
