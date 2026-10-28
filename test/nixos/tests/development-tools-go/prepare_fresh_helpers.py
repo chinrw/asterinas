@@ -30,7 +30,7 @@ for name,path in helpers.items():
     begin=time.monotonic()
     result=subprocess.run([str(path),'poll'],env=env,capture_output=True,text=True,timeout=5)
     elapsed=time.monotonic()-begin
-    row={'helper':name,'sha256':digests[name],'seconds':elapsed,'exit_code':result.returncode,'passed':result.returncode==0 and result.stdout.strip()=='BARRIER_OK' and elapsed<=3}
+    row={'helper':name,'sha256':digests[name],'seconds':elapsed,'exit_code':result.returncode,'passed':result.returncode==0 and (result.stdout+result.stderr).strip()=='BARRIER_OK' and elapsed<=3}
     rows.append(row)
     (out/f'native-{name}.log').write_text(result.stdout+result.stderr)
     print('FRESH_NATIVE '+json.dumps(row),flush=True)
