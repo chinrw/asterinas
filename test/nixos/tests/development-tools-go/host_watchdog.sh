@@ -10,7 +10,7 @@ image="$repo/target/nixos/asterinas.img"
 clean_image="$repo/target/nixos/notingo-host-watchdog-clean.img"
 cp --sparse=always "$image" "$clean_image"
 
-samples=(minimal minimal minimal minimal minimal sleep20 sleep1000)
+samples=(minimal minimal minimal minimal minimal minimal minimal minimal minimal minimal sleep20 sleep1000)
 combined_status=0
 for index in "${!samples[@]}"; do
     name="${samples[$index]}"
