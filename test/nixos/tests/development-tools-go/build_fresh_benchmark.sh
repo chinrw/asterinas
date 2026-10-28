@@ -16,6 +16,8 @@ mkdir -p "$out"
 git -c safe.directory="$repo" rev-parse HEAD > "$out/harness-head.txt"
 lscpu > "$out/host-cpu.txt"
 free -b > "$out/host-memory.txt"
+cargo build --manifest-path test/nixos/Cargo.toml -p test-development-tools-go
+python3 "$suite/prepare_fresh_helpers.py"
 for variant in base retirement; do
     mkdir -p "$out/$variant"
     ref=$base
@@ -35,6 +37,4 @@ for variant in base retirement; do
     echo "FRESH_BUILD_READY $variant"
 done
 cmp "$out/base/Cargo.lock" "$out/retirement/Cargo.lock"
-cargo build --manifest-path test/nixos/Cargo.toml -p test-development-tools-go
-python3 "$suite/prepare_fresh_helpers.py"
 python3 "$suite/fresh_benchmark.py"
