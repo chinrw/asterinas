@@ -7,8 +7,8 @@ repo=$(cd "$suite/../../../.." && pwd)
 cd "$repo"
 git -c safe.directory="$repo" diff --quiet
 git -c safe.directory="$repo" diff --cached --quiet
-base=b6c7d55ce6552b4aa85d0b6d866f50cb9ce62600
-fixed=567d337dc90852bfe89788ff7da726c421e7b596
+base=449721d9ce02adfe7c6d2a618e044b218867615b
+fixed=cba4d13d80f45828be80138f403db758d0ef68b5
 git -c safe.directory="$repo" fetch --no-tags --depth=1 origin "$base"
 git -c safe.directory="$repo" fetch --no-tags --depth=1 origin "$fixed"
 out="$repo/target/notingo-native-controls/fresh-benchmark"
@@ -17,6 +17,7 @@ git -c safe.directory="$repo" rev-parse HEAD > "$out/harness-head.txt"
 lscpu > "$out/host-cpu.txt"
 free -b > "$out/host-memory.txt"
 cargo build --manifest-path test/nixos/Cargo.toml -p test-development-tools-go
+cp test/nixos/Cargo.lock "$out/host-Cargo.lock"
 python3 "$suite/prepare_fresh_helpers.py"
 for variant in base retirement; do
     mkdir -p "$out/$variant"
