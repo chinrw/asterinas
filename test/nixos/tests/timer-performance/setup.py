@@ -15,10 +15,10 @@ worker_processes 1;
 pid /var/tmp/timer-perf/nginx.pid;
 error_log /var/tmp/timer-perf/nginx-error.log;
 events { worker_connections 512; }
-http { access_log off; server { listen 8080; root /var/tmp/timer-perf; } }
+http { access_log off; server { listen 10.0.2.15:8080; root /var/tmp/timer-perf; } }
 ''')
-    subprocess.run(['nginx','-c',str(root/'nginx.conf')],check=True)
-    subprocess.run(['redis-server','--bind','0.0.0.0','--port','6379',
+    subprocess.run(['nginx','-e',str(root/'nginx-error.log'),'-c',str(root/'nginx.conf')],check=True)
+    subprocess.run(['redis-server','--bind','10.0.2.15','--port','6379',
                     '--protected-mode','no','--save','','--appendonly','no',
                     '--daemonize','yes','--pidfile',str(root/'redis.pid'),
                     '--logfile',str(root/'redis.log')],check=True)
@@ -26,7 +26,7 @@ http { access_log off; server { listen 8080; root /var/tmp/timer-perf; } }
 elif sys.argv[1] == 'stop':
     pids=[int((root/name).read_text()) for name in ['nginx.pid','redis.pid']]
     subprocess.run(['nginx','-c',str(root/'nginx.conf'),'-s','quit'],check=True)
-    subprocess.run(['redis-cli','-p','6379','shutdown','nosave'],check=True)
+    subprocess.run(['redis-cli','-h','10.0.2.15','-p','6379','shutdown','nosave'],check=True)
     for pid in pids:
         for _ in range(100):
             try:

@@ -44,3 +44,21 @@ for variant in base retirement; do
 done
 cmp "$out/base/Cargo.lock" "$out/retirement/Cargo.lock"
 python3 "$suite/paired.py"
+if [ "$PERF_PILOT" != 1 ]; then
+    mv target/osdk/linux-bzimage-setup target/osdk/linux-bzimage-setup-before-perf-ktest
+    (
+        cd kernel/core
+        CONSOLE=ttyS0 OVMF=on QEMU_DISPLAY=none SMP=1 MEM=4G \
+            cargo osdk test timer_lifecycle_regressions \
+            --initramfs="$repo/test/initramfs/build/initramfs.cpio.gz" \
+            --grub-mkrescue=/usr/bin/grub-mkrescue --grub-boot-protocol=linux \
+            --kcmd-args=earlycon --kcmd-args=console=ttyS0 --qemu-args="-accel kvm"
+    ) > "$out/targeted-ktest.log" 2>&1
+    python3 - "$out/targeted-ktest.log" <<'PY'
+from pathlib import Path
+import re,sys
+text=re.sub(r'\x1b\[[0-9;]*m','',Path(sys.argv[1]).read_text())
+assert re.search(r'test aster_core::time::core::timer::tests::timer_lifecycle_regressions \.\.\. ok',text)
+assert '1 passed; 0 failed;' in text
+PY
+fi
