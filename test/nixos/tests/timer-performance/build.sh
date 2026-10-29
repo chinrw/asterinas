@@ -17,8 +17,11 @@ git -c safe.directory="$repo" rev-parse HEAD > "$out/harness-head.txt"
 lscpu > "$out/host-cpu.txt"
 free -b > "$out/host-memory.txt"
 getconf CLK_TCK > "$out/host-clk-tck.txt"
+printf 'PERF_NETDEV=%s\nPERF_CPUS=%s\nVHOST=%s\n' "$PERF_NETDEV" "$PERF_CPUS" "$VHOST" > "$out/transport.txt"
 printf 'RELEASE_LTO=%s\nSMP=%s\nMEM=%s\nNETDEV=%s\nPERF_PILOT=%s\n' "${RELEASE_LTO:-0}" "$SMP" "$MEM" "$NETDEV" "$PERF_PILOT" > "$out/build-environment.txt"
-cargo build --manifest-path test/nixos/Cargo.toml -p test-timer-performance
+cp "$suite/host.lock" test/nixos/Cargo.lock
+cargo build --locked --manifest-path test/nixos/Cargo.toml -p test-timer-performance
+cmp "$suite/host.lock" test/nixos/Cargo.lock
 cp test/nixos/Cargo.lock "$out/host-Cargo.lock"
 nix-build --no-out-link "$suite/host.nix" > "$out/host-clients-path"
 export PERF_HOST_CLIENTS
@@ -39,6 +42,7 @@ for variant in base retirement; do
     make nixos NIXOS_TEST_SUITE=timer-performance NIXOS_DISK_SIZE_IN_MB=8192 > "$out/$variant/build.log" 2>&1
     cp --reflink=auto --sparse=always target/nixos/asterinas.img "$out/$variant/clean.img"
     cp target/osdk/asterinas-run-base/Cargo.lock "$out/$variant/Cargo.lock"
+    cmp "$suite/kernel.lock" "$out/$variant/Cargo.lock"
     sha256sum target/osdk/asterinas/asterinas-osdk-bin target/osdk/iso_root/boot/asterinas-osdk-bin "$out/$variant/clean.img" > "$out/$variant/artifact.sha256"
     echo "PERF_BUILD_READY $variant"
 done

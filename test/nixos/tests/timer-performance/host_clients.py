@@ -17,6 +17,7 @@ TOOLS = Path(os.environ['PERF_HOST_CLIENTS'])/'bin'
 PILOT = os.environ.get('PERF_PILOT') == '1'
 HTTP_PORT = int(os.environ['NGINX_PORT'])
 REDIS_PORT = int(os.environ['REDIS_PORT'])
+CLIENT_HOST = os.environ.get('PERF_CLIENT_HOST', '127.0.0.1')
 
 def atomic_json(path, data):
     temporary = path.with_suffix('.tmp')
@@ -27,12 +28,12 @@ def ready():
     last = None
     for _ in range(100):
         try:
-            connection = http.client.HTTPConnection('127.0.0.1', HTTP_PORT, timeout=1)
+            connection = http.client.HTTPConnection(CLIENT_HOST, HTTP_PORT, timeout=1)
             connection.request('GET','/index.html')
             response = connection.getresponse()
             assert response.status == 200 and response.read() == b'timer-perf\n'
             connection.close()
-            with socket.create_connection(('127.0.0.1', REDIS_PORT),timeout=1) as sock:
+            with socket.create_connection((CLIENT_HOST, REDIS_PORT),timeout=1) as sock:
                 sock.sendall(b'*1\r\n$4\r\nPING\r\n')
                 assert sock.recv(64) == b'+PONG\r\n'
             return
@@ -47,7 +48,7 @@ async def fixed_rate(service, rate, seconds, destination):
     records = []
     port = HTTP_PORT if service == 'nginx' else REDIS_PORT
     async def worker():
-        reader, writer = await asyncio.wait_for(asyncio.open_connection('127.0.0.1', port),3)
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(CLIENT_HOST, port),3)
         try:
             while True:
                 job = await queue.get()
@@ -125,10 +126,10 @@ def main(service, mode):
     n = (1000 if PILOT else 10000) if service == 'nginx' else (10000 if PILOT else 100000)
     if service == 'nginx':
         binary=TOOLS/'ab'
-        command=[str(binary),'-n',str(n),'-c','20',f'http://127.0.0.1:{HTTP_PORT}/index.html']
+        command=[str(binary),'-n',str(n),'-c','20',f'http://{CLIENT_HOST}:{HTTP_PORT}/index.html']
     else:
         binary=TOOLS/'redis-benchmark'
-        command=[str(binary),'-h','127.0.0.1','-p',str(REDIS_PORT),'-n',str(n),'-c','20','-t','set,get']
+        command=[str(binary),'-h',CLIENT_HOST,'-p',str(REDIS_PORT),'-n',str(n),'-c','20','-t','set,get']
     start=time.monotonic_ns()
     run=subprocess.run(command,capture_output=True,text=True,timeout=90)
     elapsed=time.monotonic_ns()-start
@@ -137,7 +138,7 @@ def main(service, mode):
     assert run.returncode == 0, (service,run.returncode,raw[-1000:])
     result={'service':service,'mode':mode,'command':command,'exit_code':run.returncode,
             'host_elapsed_ns':elapsed,'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),
-            'endpoint':'closed-loop capacity at concurrency 20'}
+            'endpoint':'closed-loop capacity at concurrency 20','client_host':CLIENT_HOST}
     if service == 'nginx':
         def number(label):
             match=re.search(r'(?m)^'+re.escape(label)+r':\s*([0-9.]+)',raw)
@@ -155,7 +156,7 @@ def main(service, mode):
         assert not re.search(r'(?im)^Error:|connection refused|error from server',raw)
         result.update(requests_each=n,set_rps=float(rates[0]),get_rps=float(rates[1]))
     atomic_json(OUT/f'{service}-{mode}.json',result)
-    subprocess.run([str(TOOLS/'redis-cli'),'-h','127.0.0.1','-p',str(REDIS_PORT),
+    subprocess.run([str(TOOLS/'redis-cli'),'-h',CLIENT_HOST,'-p',str(REDIS_PORT),
                     'SET','fixed-perf-key','abc'],check=True,capture_output=True)
     fixed=asyncio.run(fixed_rate(service,200 if service=='nginx' else 1000,1 if PILOT else 5,OUT/f'{service}-{mode}-fixed.json'))
     atomic_json(OUT/f'{service}-{mode}-fixed.json',fixed)

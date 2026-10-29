@@ -36,7 +36,7 @@ jobs:
           run: |
             set -e
             export TIMER_BENCHMARK_EPHEMERAL=1
-            export ENABLE_KVM=1 SMP=4 MEM=8G NETDEV=user QEMU_DISPLAY=none RELEASE_LTO=1
+            export ENABLE_KVM=1 SMP=4 MEM=8G NETDEV=tap VHOST=on PERF_NETDEV=tap PERF_CPUS=4 QEMU_DISPLAY=none RELEASE_LTO=1
             export PERF_PILOT=${{ inputs.pilot && '1' || '0' }}
             bash test/nixos/tests/timer-performance/build.sh
       - name: Upload records without publishing benchmark results

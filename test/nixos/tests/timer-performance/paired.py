@@ -33,10 +33,15 @@ def sample(item, helper_hash):
     expected_image=(OUT/item['variant']/'artifact.sha256').read_text().splitlines()[2].split()[0]
     assert image_hash==expected_image,'copied image identity mismatch'
     (directory/'image-sha256.txt').write_text(image_hash+'\n')
-    nginx,redis=free_ports()
+    transport=os.environ.get('PERF_NETDEV','user')
+    assert transport in {'user','tap'}
+    nginx,redis=free_ports() if transport=='user' else (8080,6379)
+    client_host='127.0.0.1' if transport=='user' else '10.0.2.15'
+    original_interfaces={p.name for p in Path('/sys/class/net').iterdir()}
+    (directory/'network-before.json').write_text(json.dumps({'interfaces':sorted(original_interfaces),'routes':subprocess.check_output(['ip','-j','route'],text=True)},indent=2)+'\n')
     owner=directory/'qemu.owner'
     exit_file=directory/'driver.exit'
-    environment=dict(os.environ,SMP=str(item['cpus']),MEM='8G',NETDEV='user',QEMU_DISPLAY='none',
+    environment=dict(os.environ,SMP=str(item['cpus']),MEM='8G',NETDEV=transport,QEMU_DISPLAY='none',PERF_CLIENT_HOST=client_host,
         NGINX_PORT=str(nginx),REDIS_PORT=str(redis),PERF_SAMPLE_DIR=str(directory),PERF_BLOCK=str(item['block']),
         PERF_HELPER_SHA256=helper_hash,PROBE_QEMU_OWNER=str(owner),PROBE_SAMPLE_ID=str(item['id']),
         PROBE_QEMU_CONTROL=str(SUITE/'owned_qemu.py'),QEMU_BIN=str(SUITE/'owned_qemu.py'),
@@ -67,6 +72,15 @@ def sample(item, helper_hash):
             if process.poll() is None:os.killpg(process.pid,signal.SIGKILL)
             process.wait(timeout=5)
             record['cleanup_ok']=cleanup
+    if transport=='tap':
+        for _ in range(300):
+            remaining={p.name for p in Path('/sys/class/net').iterdir()}-original_interfaces
+            if not remaining:break
+            time.sleep(.01)
+        record['remaining_interfaces']=sorted(remaining)
+        record['cleanup_ok']=record['cleanup_ok'] and not remaining
+    record['transport']=transport
+    record['client_host']=client_host
     record['host_elapsed_s']=time.monotonic()-started
     record['host_loadavg']=Path('/proc/loadavg').read_text().strip()
     for name in ['qemu.log','qemu-serial.log']:
@@ -93,7 +107,9 @@ def main():
     rng=random.Random(20261029)
     pilot=os.environ.get('PERF_PILOT')=='1'
     plan=[]
-    for cpus in [1,4]:
+    cpu_settings=[int(x) for x in os.environ.get('PERF_CPUS','1,4').split(',')]
+    assert cpu_settings and set(cpu_settings)<={1,4} and len(cpu_settings)==len(set(cpu_settings))
+    for cpus in cpu_settings:
         for block in range(1 if pilot else 5):
             variants=['base','retirement'];rng.shuffle(variants)
             for variant in variants:plan.append({'id':len(plan),'cpus':cpus,'block':block,'variant':variant,'pilot':pilot})
