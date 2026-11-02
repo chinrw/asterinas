@@ -39,7 +39,7 @@ jobs:
             set -e
             export TIMER_BENCHMARK_EPHEMERAL=1
             export ENABLE_KVM=1 SMP=4 MEM=8G NETDEV=tap VHOST=on PERF_NETDEV=tap PERF_CPUS=4 QEMU_DISPLAY=none RELEASE_LTO=1
-            export TAIL_TRACE=1 TAIL_REQUIRE_SCHEDSTATS=1 PERF_BLOCKS=0,2,4
+            export TAIL_TRACE=1 TAIL_REQUIRE_SCHEDSTATS=1 TAIL_QMP=1 TAIL_REDIS_SECONDS=30 PERF_BLOCKS=0
             export PERF_PILOT=${{ inputs.pilot && '1' || '0' }}
             bash test/nixos/tests/timer-performance/build.sh
       - name: Upload records without publishing benchmark results
@@ -50,6 +50,7 @@ jobs:
           path: |
             target/timer-performance/
             !target/timer-performance/**/*.img
+            !target/timer-performance/**/*.qmp
             target/osdk/asterinas/asterinas-osdk-bin
           retention-days: 14
           if-no-files-found: ignore

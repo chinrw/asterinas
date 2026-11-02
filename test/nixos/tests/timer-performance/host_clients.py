@@ -47,6 +47,7 @@ async def fixed_rate(service, rate, seconds, destination):
     """Include client-side queue delay by timing from each planned arrival."""
     queue = asyncio.Queue()
     records = []
+    active = {}
     port = HTTP_PORT if service == 'nginx' else REDIS_PORT
     payload = (b'GET /index.html HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n' if service=='nginx'
                else b'*2\r\n$3\r\nGET\r\n$14\r\nfixed-perf-key\r\n')
@@ -61,6 +62,7 @@ async def fixed_rate(service, rate, seconds, destination):
                     break
                 number, scheduled = job
                 started = time.monotonic_ns()
+                active[connection_id] = {"id":number,"started_ns":started,"local_port":local_port}
                 response_bytes = None
                 async def request():
                     nonlocal response_bytes
@@ -84,6 +86,7 @@ async def fixed_rate(service, rate, seconds, destination):
                 except Exception as exc:
                     error = f'{type(exc).__name__}: {exc}'
                 finished = time.monotonic_ns()
+                active.pop(connection_id,None)
                 records.append({'id':number,'scheduled_ns':scheduled,'started_ns':started,
                                 'finished_ns':finished,'latency_ns':finished-scheduled,
                                 'client_queue_ns':started-scheduled,'error':error,
@@ -95,6 +98,17 @@ async def fixed_rate(service, rate, seconds, destination):
         finally:
             writer.close()
             await writer.wait_closed()
+    async def watch_slow():
+        while True:
+            await asyncio.sleep(.005)
+            now=time.monotonic_ns()
+            delayed=[job for job in active.values() if now-job['started_ns']>=20_000_000]
+            if delayed:
+                prefix=destination.stem.removesuffix('-fixed')
+                atomic_json(destination.with_name(prefix+'-slow-trigger.json'),
+                            {'detected_ns':now,'threshold_ns':20_000_000,'requests':delayed})
+                return
+    slow_watch=asyncio.create_task(watch_slow()) if os.environ.get('TAIL_QMP')=='1' else None
     workers = [asyncio.create_task(worker(i)) for i in range(20)]
     start = time.monotonic_ns()+100_000_000
     total = rate*seconds
@@ -114,6 +128,9 @@ async def fixed_rate(service, rate, seconds, destination):
         failure=f'{type(exc).__name__}: {exc}'
         raise
     finally:
+        if slow_watch is not None:
+            slow_watch.cancel()
+            await asyncio.gather(slow_watch,return_exceptions=True)
         for task in workers:
             if not task.done(): task.cancel()
         await asyncio.gather(*workers,return_exceptions=True)
@@ -169,7 +186,7 @@ def run_case(service, mode):
     subprocess.run([str(TOOLS/'redis-cli'),'-h',CLIENT_HOST,'-p',str(REDIS_PORT),
                     'SET','fixed-perf-key','abc'],check=True,capture_output=True)
     with network_trace(service, mode, CLIENT_HOST, HTTP_PORT if service=='nginx' else REDIS_PORT, TOOLS) as capture:
-        fixed=asyncio.run(fixed_rate(service,200 if service=='nginx' else 1000,1 if PILOT else 5,OUT/f'{service}-{mode}-fixed.json'))
+        fixed=asyncio.run(fixed_rate(service,200 if service=='nginx' else 1000,1 if PILOT else (int(os.environ.get('TAIL_REDIS_SECONDS','5')) if service=='redis' else 5),OUT/f'{service}-{mode}-fixed.json'))
         if capture is not None: capture['requests']=fixed['records']
     atomic_json(OUT/f'{service}-{mode}-fixed.json',fixed)
     print('PERF_HOST_CASE '+json.dumps({**result,'fixed_p99_ns':fixed['p99_ns']}),flush=True)

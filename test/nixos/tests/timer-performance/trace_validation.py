@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0
 """Require complete observation windows as well as complete request records."""
 import json
+import os
 from tail_observe import tcpdump_drops
 from packet_coverage import stream_coverage
 
@@ -13,6 +14,15 @@ def validate_traces(directory, cases=None):
         timeline=[json.loads(x) for x in (directory/f'{key}-host-timeline.jsonl').read_text().splitlines()]
         assert timeline[0]['type']=='clock_start' and timeline[-1]['type']=='clock_end'
         assert timeline[-1]['stop_requested'] and timeline[-1]['samples']>0
+        if os.environ.get('TAIL_QMP')=='1':
+            assert timeline[0]['qmp_enabled']
+            args=json.loads((directory/'qemu.argv.json').read_text())
+            cpus=int(args[args.index('-smp')+1])
+            assert {cpu['cpu-index'] for cpu in timeline[0]['cpu_map']}==set(range(cpus))
+            for event in timeline:
+                if event['type']=='guest_snapshot':
+                    snap=event['snapshot']
+                    assert snap['intrusive'] and snap['resumed_ns']>=snap['stop_requested_ns']
         assert timeline[0]['mono_before_ns']<=min(r['scheduled_ns'] for r in data['records'])
         assert timeline[-1]['mono_after_ns']>=max(r['finished_ns'] for r in data['records'])
         samples=[r for r in timeline if r['type']=='sample']

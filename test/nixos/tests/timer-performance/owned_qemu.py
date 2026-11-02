@@ -42,5 +42,10 @@ if __name__ == "__main__":
         temporary = owner.with_suffix(".tmp")
         temporary.write_text(f"{pid} {start_ticks(pid)} {sample}\n")
         temporary.replace(owner)
-        owner.with_suffix(".argv.json").write_text(json.dumps(sys.argv[1:], indent=2)+"\n")
-        os.execvp("qemu-system-x86_64", ["qemu-system-x86_64", *sys.argv[1:]])
+        arguments=sys.argv[1:]
+        if os.environ.get("TAIL_QMP")=="1":
+            qmp=owner.with_suffix(".qmp")
+            assert len(str(qmp).encode())<104
+            arguments += ["-qmp",f"unix:{qmp},server=on,wait=off","-name","guest=timer-tail,debug-threads=on"]
+        owner.with_suffix(".argv.json").write_text(json.dumps(arguments,indent=2)+"\n")
+        os.execvp("qemu-system-x86_64",["qemu-system-x86_64",*arguments])

@@ -26,8 +26,8 @@ def clock_pair():
     return {'mono_before_ns':before, 'realtime_ns':wall, 'mono_after_ns':time.monotonic_ns()}
 
 
-def proc_info(pid):
-    root = Path('/proc')/str(pid)
+def proc_info(pid, task_owner=None):
+    root = Path('/proc')/str(pid) if task_owner is None else Path('/proc')/str(task_owner)/'task'/str(pid)
     stat = (root/'stat').read_text().rsplit(') ',1)[1].split()
     return {'pid':pid, 'comm':(root/'comm').read_text().strip(), 'state':stat[0],
             'start_ticks':int(stat[19]), 'cpu':int(stat[36]),
@@ -43,9 +43,16 @@ def watch(output, stop, ready, owner, client):
         assert schedstats=='1', 'scheduler wait accounting is disabled'
     deadline = time.monotonic()+300
     count = 0
+    qmp=None;cpus=[];snapshot_done=False
+    trigger=Path(output.replace('-host-timeline.jsonl','-slow-trigger.json'))
+    if os.environ.get('TAIL_QMP')=='1':
+        from qmp_snapshot import Qmp
+        qmp=Qmp(Path(owner).with_suffix('.qmp'))
+        cpus=qmp.call('query-cpus-fast')
+        assert all((Path('/proc')/str(qemu)/'task'/str(c['thread-id'])).exists() for c in cpus)
     with Path(output).open('w') as stream:
         stream.write(json.dumps({'type':'clock_start', **clock_pair(), 'qemu':qemu, 'client':client,
-                                 'sched_schedstats':schedstats})+'\n')
+                                 'sched_schedstats':schedstats,'cpu_map':cpus,'qmp_enabled':qmp is not None})+'\n')
         Path(ready).write_text('ready\n')
         while not Path(stop).exists() and time.monotonic()<deadline:
             before = time.monotonic_ns()
@@ -54,12 +61,12 @@ def watch(output, stop, ready, owner, client):
                 assert proc_info(qemu)['start_ticks']==start
                 for tid in (Path('/proc')/str(qemu)/'task').iterdir():
                     try:
-                        tasks.append(proc_info(int(tid.name)))
-                    except FileNotFoundError:
+                        tasks.append(proc_info(int(tid.name),task_owner=qemu))
+                    except (FileNotFoundError, ProcessLookupError):
                         pass
                 client_info = proc_info(client)
                 assert client_info['start_ticks']==client_start
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
                 break
             row = {'type':'sample', 'mono_ns':before, 'qemu_tasks':tasks, 'client':client_info}
             if count % 10 == 0:
@@ -72,10 +79,28 @@ def watch(output, stop, ready, owner, client):
                 row['host_cpu_stat']=[line for line in Path('/proc/stat').read_text().splitlines() if line.startswith('cpu')]
             row['sample_finished_ns']=time.monotonic_ns()
             stream.write(json.dumps(row)+'\n')
+            if qmp is not None and not snapshot_done and trigger.exists():
+                from qmp_snapshot import snapshot
+                host_stacks=[]
+                for cpu in cpus:
+                    tid=cpu['thread-id']
+                    task_root=Path('/proc')/str(qemu)/'task'/str(tid)
+                    state={'cpu_index':cpu['cpu-index'],'thread_id':tid,'read_start_ns':time.monotonic_ns()}
+                    for name in ['stack','syscall','wchan']:
+                        try:state[name]=(task_root/name).read_text()
+                        except OSError as error:state[name]={'unavailable':str(error)}
+                    state['read_end_ns']=time.monotonic_ns()
+                    host_stacks.append(state)
+                event={'type':'guest_snapshot','trigger':json.loads(trigger.read_text()),
+                       'host_stacks':host_stacks,'snapshot':snapshot(qmp,cpus)}
+                stream.write(json.dumps(event)+'\n')
+                snapshot_done=True
             count+=1
             time.sleep(max(0,.01-(time.monotonic_ns()-before)/1e9))
         stream.write(json.dumps({'type':'clock_end', **clock_pair(), 'samples':count,
-                                 'stop_requested':Path(stop).exists()})+'\n')
+                                 'stop_requested':Path(stop).exists(),'snapshot_done':snapshot_done,
+                                 'trigger_present':trigger.exists()})+'\n')
+    if qmp is not None:qmp.close()
 
 
 @contextlib.contextmanager

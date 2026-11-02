@@ -51,6 +51,7 @@ for variant in base retirement; do
     make nixos NIXOS_TEST_SUITE=timer-performance NIXOS_DISK_SIZE_IN_MB=8192 > "$out/$variant/build.log" 2>&1
     cp --reflink=auto --sparse=always target/nixos/asterinas.img "$out/$variant/clean.img"
     cp target/osdk/asterinas-run-base/Cargo.lock "$out/$variant/Cargo.lock"
+    cp target/osdk/asterinas/asterinas-osdk-bin "$out/$variant/kernel.elf"
     cmp "$suite/kernel.lock" "$out/$variant/Cargo.lock"
     sha256sum target/osdk/asterinas/asterinas-osdk-bin target/osdk/iso_root/boot/asterinas-osdk-bin "$out/$variant/clean.img" > "$out/$variant/artifact.sha256"
     echo "PERF_BUILD_READY $variant"
