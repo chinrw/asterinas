@@ -23,13 +23,16 @@ jobs:
       CARGO_BUILD_JOBS: '3'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Record source and build patched suite
         shell: bash
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git rev-parse HEAD | tee .validation/head.txt
-          git rev-parse HEAD^ | tee .validation/fix-head.txt
+          git merge-base --is-ancestor 078037cadb0cbc1feee1b82be7e0fc2272fdc758 HEAD
+          git rev-parse 078037cad | tee .validation/fix-head.txt
           sha256sum test/initramfs/nix/conformance/xfstests-exclusions.patch > .validation/patch.sha256
           timeout --kill-after=15s 20m nix-build test/initramfs/nix -A conformance.xfstests \
             --arg enableConformanceTest true --argstr conformanceTestSuite xfstests \
