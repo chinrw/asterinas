@@ -4,5 +4,5 @@ let
 in
 pkgs.symlinkJoin {
   name = "timer-perf-host-clients";
-  paths = [ pkgs.apacheHttpd pkgs.redis ];
+  paths = [ pkgs.apacheHttpd pkgs.redis pkgs.tcpdump ];
 }

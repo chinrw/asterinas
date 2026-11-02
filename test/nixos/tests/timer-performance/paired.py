@@ -109,8 +109,10 @@ def main():
     plan=[]
     cpu_settings=[int(x) for x in os.environ.get('PERF_CPUS','1,4').split(',')]
     assert cpu_settings and set(cpu_settings)<={1,4} and len(cpu_settings)==len(set(cpu_settings))
+    blocks=[0] if pilot else [int(x) for x in os.environ.get('PERF_BLOCKS','0,1,2,3,4').split(',')]
+    assert blocks and len(blocks)==len(set(blocks)) and min(blocks)>=0
     for cpus in cpu_settings:
-        for block in range(1 if pilot else 5):
+        for block in blocks:
             variants=['base','retirement'];rng.shuffle(variants)
             for variant in variants:plan.append({'id':len(plan),'cpus':cpus,'block':block,'variant':variant,'pilot':pilot})
     (OUT/'plan.json').write_text(json.dumps({'seed':20261029,'samples':plan},indent=2)+'\n')
@@ -118,7 +120,7 @@ def main():
     for item in plan:
         row=sample(item,digest);rows.append(row)
         with (OUT/'samples.jsonl').open('a') as stream:stream.write(json.dumps(row)+'\n')
-        if not row['complete']:break
+        if not row['cleanup_ok']:break
     complete=len(rows)==len(plan) and all(r['complete'] and r['cleanup_ok'] for r in rows)
     candidate_rows=[r for r in rows if r['variant']=='retirement']
     fixed_go=all(r.get('go',{}).get('outcome')=='pass' for r in candidate_rows) if candidate_rows else None

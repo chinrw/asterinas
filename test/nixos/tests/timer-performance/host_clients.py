@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import time
+from tail_observe import case_trace, network_trace
 
 OUT = Path(os.environ['PERF_SAMPLE_DIR'])
 TOOLS = Path(os.environ['PERF_HOST_CLIENTS'])/'bin'
@@ -47,8 +48,11 @@ async def fixed_rate(service, rate, seconds, destination):
     queue = asyncio.Queue()
     records = []
     port = HTTP_PORT if service == 'nginx' else REDIS_PORT
-    async def worker():
+    payload = (b'GET /index.html HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n' if service=='nginx'
+               else b'*2\r\n$3\r\nGET\r\n$14\r\nfixed-perf-key\r\n')
+    async def worker(connection_id):
         reader, writer = await asyncio.wait_for(asyncio.open_connection(CLIENT_HOST, port),3)
+        local_port = writer.get_extra_info('sockname')[1]
         try:
             while True:
                 job = await queue.get()
@@ -57,19 +61,23 @@ async def fixed_rate(service, rate, seconds, destination):
                     break
                 number, scheduled = job
                 started = time.monotonic_ns()
+                response_bytes = None
                 async def request():
+                    nonlocal response_bytes
                     if service == 'nginx':
-                        writer.write(b'GET /index.html HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n')
+                        writer.write(payload)
                         await writer.drain()
                         headers = await reader.readuntil(b'\r\n\r\n')
                         assert headers.splitlines()[0].split()[1] == b'200'
                         length = re.search(rb'(?im)^content-length:\s*(\d+)',headers)
                         assert length and int(length[1]) == 11
                         assert await reader.readexactly(11) == b'timer-perf\n'
+                        response_bytes = len(headers)+11
                     else:
-                        writer.write(b'*2\r\n$3\r\nGET\r\n$14\r\nfixed-perf-key\r\n')
+                        writer.write(payload)
                         await writer.drain()
                         assert await reader.readexactly(9) == b'$3\r\nabc\r\n'
+                        response_bytes = 9
                 error = None
                 try:
                     await asyncio.wait_for(request(),5)
@@ -78,14 +86,16 @@ async def fixed_rate(service, rate, seconds, destination):
                 finished = time.monotonic_ns()
                 records.append({'id':number,'scheduled_ns':scheduled,'started_ns':started,
                                 'finished_ns':finished,'latency_ns':finished-scheduled,
-                                'client_queue_ns':started-scheduled,'error':error})
+                                'client_queue_ns':started-scheduled,'error':error,
+                                'connection_id':connection_id,'local_port':local_port,
+                                'request_bytes':len(payload),'response_bytes':response_bytes})
                 queue.task_done()
                 if error:
                     raise RuntimeError(error)
         finally:
             writer.close()
             await writer.wait_closed()
-    workers = [asyncio.create_task(worker()) for _ in range(20)]
+    workers = [asyncio.create_task(worker(i)) for i in range(20)]
     start = time.monotonic_ns()+100_000_000
     total = rate*seconds
     failure = None
@@ -118,7 +128,7 @@ async def fixed_rate(service, rate, seconds, destination):
             'p99_ns':values[(len(values)*99-1)//100],'max_ns':values[-1],
             'max_client_queue_ns':max(r['client_queue_ns'] for r in records),'records':records}
 
-def main(service, mode):
+def run_case(service, mode):
     ready()
     if service == 'ready':
         print('PERF_HOST_READY')
@@ -158,9 +168,17 @@ def main(service, mode):
     atomic_json(OUT/f'{service}-{mode}.json',result)
     subprocess.run([str(TOOLS/'redis-cli'),'-h',CLIENT_HOST,'-p',str(REDIS_PORT),
                     'SET','fixed-perf-key','abc'],check=True,capture_output=True)
-    fixed=asyncio.run(fixed_rate(service,200 if service=='nginx' else 1000,1 if PILOT else 5,OUT/f'{service}-{mode}-fixed.json'))
+    with network_trace(service, mode, CLIENT_HOST, HTTP_PORT if service=='nginx' else REDIS_PORT, TOOLS) as capture:
+        fixed=asyncio.run(fixed_rate(service,200 if service=='nginx' else 1000,1 if PILOT else 5,OUT/f'{service}-{mode}-fixed.json'))
+        if capture is not None: capture['requests']=fixed['records']
     atomic_json(OUT/f'{service}-{mode}-fixed.json',fixed)
     print('PERF_HOST_CASE '+json.dumps({**result,'fixed_p99_ns':fixed['p99_ns']}),flush=True)
+
+def main(service, mode):
+    if service=='ready':
+        return run_case(service,mode)
+    with case_trace(service,mode):
+        return run_case(service,mode)
 
 if __name__ == '__main__':
     main(*sys.argv[1:])

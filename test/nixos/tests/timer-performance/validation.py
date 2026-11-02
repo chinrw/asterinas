@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0
 """Fail closed on incomplete plans, mismatched identities, or malformed results."""
 import json
+import os
 from pathlib import Path
 import re
 
@@ -70,5 +71,8 @@ def validate_performance(directory,item):
                 assert row['error'] is None
                 assert row['scheduled_ns']<=row['started_ns']<=row['finished_ns']
                 assert row['latency_ns']==row['finished_ns']-row['scheduled_ns']
+    if os.environ.get('TAIL_TRACE')=='1':
+        from trace_validation import validate_traces
+        validate_traces(directory)
     return {'phases':len(phases),'micro_records':len(micros),'load_records':len(loads),
             'probe_records':3,'wake_records':3,'service_cases':6,'fixed_rate_cases':6}

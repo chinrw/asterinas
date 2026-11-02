@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
-name: Timer lifecycle performance comparison
+name: Timer tail timeline diagnosis
 on:
   workflow_dispatch:
     inputs:
@@ -26,6 +26,8 @@ jobs:
           remove_dotnet: true
           remove_haskell: true
           remove_tool_cache: true
+      - name: Enable scheduler wait accounting
+        run: sudo sysctl -w kernel.sched_schedstats=1
       - uses: actions/checkout@v4
       - name: Build matched kernels and compare workloads
         timeout-minutes: 170
@@ -37,6 +39,7 @@ jobs:
             set -e
             export TIMER_BENCHMARK_EPHEMERAL=1
             export ENABLE_KVM=1 SMP=4 MEM=8G NETDEV=tap VHOST=on PERF_NETDEV=tap PERF_CPUS=4 QEMU_DISPLAY=none RELEASE_LTO=1
+            export TAIL_TRACE=1 TAIL_REQUIRE_SCHEDSTATS=1 PERF_BLOCKS=0,2,4
             export PERF_PILOT=${{ inputs.pilot && '1' || '0' }}
             bash test/nixos/tests/timer-performance/build.sh
       - name: Upload records without publishing benchmark results
@@ -48,5 +51,5 @@ jobs:
             target/timer-performance/
             !target/timer-performance/**/*.img
             target/osdk/asterinas/asterinas-osdk-bin
-          retention-days: 7
+          retention-days: 14
           if-no-files-found: ignore
