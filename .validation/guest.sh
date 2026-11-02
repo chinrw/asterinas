@@ -56,14 +56,19 @@ rc=0
 cat "$work/wrapper-missing.log"
 test "$rc" -eq 1
 grep -q 'Cannot use Bash process substitution' "$work/wrapper-missing.log"
-! mountpoint -q "$TEST_DIR"
-! mountpoint -q "$SCRATCH_MNT"
+for mnt in "$TEST_DIR" "$SCRATCH_MNT"; do
+    if mountpoint -q "$mnt"; then
+        echo "Preflight left a filesystem mounted at $mnt" >&2
+        exit 1
+    fi
+done
 echo WRAPPER_PREFLIGHT_PASS
 . /opt/xfstests/tmpfs/prepare.sh
 
 # Every upstream invocation above forces -n and an empty environment selector.
 # These checks still prepare isolated tmpfs mounts but never run test bodies.
-test ! -e /dev/fd && test ! -L /dev/fd
+test ! -e /dev/fd
+test ! -L /dev/fd
 run baseline-missing success "$baseline" -E tmpfs/run_list/block.list
 selection "$work/baseline-missing.log" allowed allowed
 grep -q '/dev/fd/' "$work/baseline-missing.log"
@@ -112,11 +117,17 @@ run baseline-error success "$baseline" -E "$work/producer-error.list"
 selection "$work/baseline-error.log" allowed allowed
 run fixed-error failure "$fixed" -E "$work/producer-error.list"
 grep -q 'Failed to read exclusion file:' "$work/fixed-error.log"
-! grep -q '^generic/' "$work/fixed-error.log"
+if grep -q '^generic/' "$work/fixed-error.log"; then
+    echo "A failed exclusion load reached test selection" >&2
+    exit 1
+fi
 run baseline-partial success "$baseline" -E "$work/producer-partial.list"
 selection "$work/baseline-partial.log" blocked allowed
 run fixed-partial failure "$fixed" -E "$work/producer-partial.list"
 grep -q 'Failed to read exclusion file:' "$work/fixed-partial.log"
-! grep -q '^generic/' "$work/fixed-partial.log"
+if grep -q '^generic/' "$work/fixed-partial.log"; then
+    echo "A failed exclusion load reached test selection" >&2
+    exit 1
+fi
 echo LOADER_PRODUCER_FAILURES_PASS
 echo XFSTESTS_LOADER_VALIDATION_PASS
