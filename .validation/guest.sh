@@ -45,8 +45,11 @@ echo INIT_FD_PASS
 ./run_xfstests.sh -n generic/001 > "$work/wrapper-linked.log" 2>&1
 cat "$work/wrapper-linked.log"
 grep -Eq '^generic/001[[:space:]]*$' "$work/wrapper-linked.log"
-umount "$TEST_DIR"
-umount "$SCRATCH_MNT"
+for mnt in "$TEST_DIR" "$SCRATCH_MNT"; do
+    if mountpoint -q "$mnt"; then
+        umount "$mnt"
+    fi
+done
 rm /dev/fd
 rc=0
 ./run_xfstests.sh -n generic/001 > "$work/wrapper-missing.log" 2>&1 || rc=$?
