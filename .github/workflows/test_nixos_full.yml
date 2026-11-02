@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     steps:
-      - name: Require EPYC 7763
+      - name: Require an EPYC host and record its model
         run: |
           lscpu
-          grep -Eq '^model name[[:space:]]*:.*AMD EPYC 7763' /proc/cpuinfo
+          grep -Eq '^model name[[:space:]]*:.*AMD EPYC ' /proc/cpuinfo
       - uses: endersonmenezes/free-disk-space@v3
         with:
           rm_cmd: rmz
