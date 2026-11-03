@@ -49,7 +49,8 @@ source=OUT/'retirement'
 helper_hash=(OUT/'helper-sha256.txt').read_text().strip()
 assert helper_hash=='4c3b4b19275bda043431f531e703f996145bae2f399c756a64d7cbde735817a3'
 linux=OUT/'linux';linux.mkdir()
-(linux/'clean.img').symlink_to(source/'clean.img')
+# Host-side artifact collection must also be able to resolve this excluded image.
+(linux/'clean.img').symlink_to('../retirement/clean.img')
 image_line=(source/'artifact.sha256').read_text().splitlines()[2]
 kernel_hash=hashlib.sha256(Path(boot,'kernel').read_bytes()).hexdigest()
 initrd_hash=hashlib.sha256(Path(boot,'initrd').read_bytes()).hexdigest()
