@@ -20,6 +20,7 @@ fn phase(shell: &mut Session, name: &str, command: &str, expected: &str) -> Resu
     let regex = Regex::new(expected).unwrap();
     let result = shell.run_cmd_and_expect_regex(
         &format!("echo PERF_BEGIN_{name}; {command} && echo PERF_END_{name}"), &regex);
+    if let Err(error) = &result { eprintln!("CONTROL_PHASE_ERROR {name}: {error:?}"); }
     let elapsed = started.elapsed().as_nanos();
     let after = qemu_ticks();
     let mut file = fs::OpenOptions::new().create(true).append(true).open(dir.join("phases.jsonl")).unwrap();
@@ -31,7 +32,7 @@ fn client(name: &str, mode: &str) -> Result<(), Error> {
     let suite = env::current_dir().unwrap();
     let started = Instant::now();
     let before = qemu_ticks();
-    let result = Command::new("python3").arg(suite.join("host_clients.py"))
+    let result = Command::new("python3").arg(if name == "history_redis" { PathBuf::from(env::var("HISTORY_CLIENT_SCRIPT").unwrap()) } else { suite.join("host_clients.py") })
         .args([name, mode]).status().map_err(|e| Error::Pty(e.into()))?;
     let dir = PathBuf::from(env::var("PERF_SAMPLE_DIR").unwrap());
     let mut file = fs::OpenOptions::new().create(true).append(true).open(dir.join("phases.jsonl")).unwrap();
@@ -228,4 +229,42 @@ fn notingo_host_sample(shell: &mut Session) -> Result<(), Error> {
             got: format!("{outcome}: {result:?}"),
         })
     }
+}
+
+#[nixos_test]
+fn http_history(shell: &mut Session) -> Result<(), Error> {
+    if env::var("HISTORY_OS").unwrap() == "linux" {
+        // Avoid applying ONLCR in both the guest console and the host PTY.
+        shell.run_cmd("stty -onlcr")?;
+    }
+    let dir = PathBuf::from(env::var("PERF_SAMPLE_DIR").unwrap());
+    let cpu = env::var("SMP").unwrap();
+    let digest = env::var("PERF_HELPER_SHA256").unwrap();
+    phase(shell,"identity",&format!("echo CONTROL_KERNEL $(uname -srm) && ulimit -n 8192 && test $(nproc) -eq {cpu} && sha256sum /etc/timer-perf/timer-perf"),&format!(r"(?m)^{digest}\s+"))?;
+    phase(shell,"control_logging","systemctl log-level crit && test $(systemctl log-level) = crit && echo CONTROL_LOGGING_CRIT",r"(?m)^CONTROL_LOGGING_CRIT\s*$")?;
+    let linux = env::var("HISTORY_OS").unwrap() == "linux";
+    if linux {
+        phase(shell,"linux_control_setup",&env::var("HISTORY_LINUX_SETUP").unwrap(),r"(?m)^LINUX_CONTROL_NETWORK \{")?;
+    }
+    start_batch_probe(shell)?;
+    phase(shell,"services_start","python3 /etc/timer-perf/setup.py start",r"(?m)^PERF_SERVICES_STARTED\s*$")?;
+    client("ready","none")?;
+    let churn = env::var("TAIL_HISTORY_CHURN").unwrap_or_default() == "1";
+    if churn {
+        phase(shell,"load_start_churn_history","/etc/timer-perf/timer-perf load churn 5000 120 >/var/tmp/timer-load-churn_history.log 2>&1 & echo $! >/var/tmp/timer-load-churn_history.pid; for i in $(seq 1 100); do grep -q '^PERF_LOAD_STARTED ' /var/tmp/timer-load-churn_history.log && break; sleep 0.05; done; kill -0 $(cat /var/tmp/timer-load-churn_history.pid) && cat /var/tmp/timer-load-churn_history.log",r"(?m)^PERF_LOAD_STARTED \{")?;
+        phase(shell,"begin_churn_history","/etc/timer-perf/timer-perf stamp churn_history_begin >/var/tmp/churn_history.begin && cat /var/tmp/churn_history.begin",r"(?m)^PERF_STAMP \{")?;
+    }
+    client("history_redis","none")?;
+    if churn {
+        phase(shell,"end_churn_history","/etc/timer-perf/timer-perf stamp churn_history_end >/var/tmp/churn_history.end && cat /var/tmp/churn_history.end",r"(?m)^PERF_STAMP \{")?;
+        phase(shell,"load_stop_churn_history","kill -TERM $(cat /var/tmp/timer-load-churn_history.pid) && wait $(cat /var/tmp/timer-load-churn_history.pid) && cat /var/tmp/timer-load-churn_history.log && python3 /etc/timer-perf/loadcheck.py churn_history",r"(?m)^PERF_LOAD_VALIDATED \{")?;
+    }
+    phase(shell,"services_stop","python3 /etc/timer-perf/setup.py stop",r"(?m)^PERF_SERVICES_STOPPED\s*$")?;
+    if linux {
+        phase(shell,"linux_control_check",&env::var("HISTORY_LINUX_CHECK").unwrap(),r"(?m)^LINUX_CONTROL_NETWORK \{")?;
+    }
+    export_batch_probe(shell)?;
+    fs::write(dir.join("complete.tmp"),"complete\n").unwrap();
+    fs::rename(dir.join("complete.tmp"),dir.join("complete")).unwrap();
+    notingo_host_sample(shell)
 }

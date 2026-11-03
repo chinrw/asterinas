@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Select the paired workload or the profiler capability check
+        description: Select the diagnostic workload
         type: choice
-        options: [performance, perf-capability]
+        options: [performance, perf-capability, linux-control]
         default: performance
       pilot:
         description: Run a short pair before the full comparison
@@ -16,7 +16,7 @@ permissions:
   contents: read
 jobs:
   performance:
-    if: github.repository == 'chinrw/asterinas' && inputs.mode != 'perf-capability'
+    if: github.repository == 'chinrw/asterinas' && inputs.mode == 'performance'
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     steps:
@@ -93,3 +93,56 @@ jobs:
             perf-selected.txt
           if-no-files-found: warn
           retention-days: 7
+
+  linux_control:
+    if: github.repository == 'chinrw/asterinas' && inputs.mode == 'linux-control'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    steps:
+      - name: Require an AMD EPYC diagnostic runner
+        run: |
+          lscpu
+          grep -Eq '^model name[[:space:]]*:.*AMD EPYC ' /proc/cpuinfo
+      - uses: endersonmenezes/free-disk-space@v3
+        with:
+          rm_cmd: rmz
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+      - name: Enable scheduler wait accounting on the ephemeral runner
+        run: sudo sysctl -w kernel.sched_schedstats=1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build one plain repair and compare fresh Asterinas and Linux guests
+        timeout-minutes: 45
+        uses: maus007/docker-run-action-fork@v1
+        with:
+          image: asterinas/kernel-dev:0.19.0-20261012
+          options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
+          run: |
+            set -euo pipefail
+            export TIMER_BENCHMARK_EPHEMERAL=1
+            export ENABLE_KVM=1 SMP=4 MEM=8G NETDEV=tap VHOST=on PERF_NETDEV=tap PERF_CPUS=4 QEMU_DISPLAY=none RELEASE_LTO=1
+            export OVMF=on MAKEFLAGS='OVMF=on' PERF_PILOT=0
+            export TAIL_PERF=0 TAIL_BATCH_BUILD=0 TAIL_BATCH=0
+            export TAIL_TRACE=1 TAIL_REQUIRE_SCHEDSTATS=1 TAIL_QMP=map
+            export TAIL_HISTORY_CHURN=1 TAIL_HTTP_HISTORY=10000 TAIL_REDIS_SECONDS=20
+            bash test/nixos/tests/timer-performance/build-linux-control.sh
+      - name: Preserve the diagnostic records
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: timer-linux-control-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            target/timer-linux-control/
+            !target/timer-linux-control/**/*.img
+            !target/timer-linux-control/**/*.qcow2
+            !target/timer-linux-control/**/*.qmp
+            !target/timer-linux-control/**/*.sock
+            !target/timer-linux-control/tmp/**
+          retention-days: 14
+          if-no-files-found: warn
