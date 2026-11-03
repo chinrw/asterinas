@@ -8,7 +8,7 @@ import re
 import struct
 
 MAGIC=0x4153544241544348
-HWORDS,EWORDS,CAPACITY=32,20,128
+HWORDS,EWORDS,CAPACITY=32,34,128
 STAT_NAMES=['calls','queue_max','total_cycles','max_total_cycles','max_wait_cycles','max_collect_cycles',
             'max_callback_cycles','cancelled','selected_expired','dead_at_call','invoked',
             'max_invoked_collection_lateness_ns','bad_tsc_batches','migrated_batches']
@@ -17,11 +17,14 @@ EVENT_NAMES=['commit','epoch','manager','entry_cpu','start_tsc','before_queue_ts
              'selected_expired','dead_at_call','invoked','invoked_collection_lateness_ns','clock_kind','exit_cpu','flags']
 
 
+DETAIL_STAGES=['clock_read','cancelled_pop_and_drop','selected_pop','vector_push','callback_timer_lock','callback_periodic_rearm','registered_callback']
+EVENT_NAMES += [name+'_'+kind+'_cycles' for name in DETAIL_STAGES for kind in ['sum','max']]
+
 def decode(data):
     assert len(data)==(HWORDS+EWORDS*CAPACITY)*8
     words=struct.unpack('<'+'Q'*(len(data)//8),data)
     h=words[:HWORDS]
-    assert h[:5]==(MAGIC,1,HWORDS,EWORDS,CAPACITY)
+    assert h[:5]==(MAGIC,2,HWORDS,EWORDS,CAPACITY)
     freq=h[5]
     assert freq>0 and h[6]>0 and h[7]>0 and h[8]>0
     assert h[9]<=h[10]<=h[11]
@@ -44,17 +47,22 @@ def decode(data):
         assert e['start_tsc']>=h[9] and e['end_tsc']<=h[11]
         times=v[4:10]
         valid=all(a<=b for a,b in zip(times,times[1:]))
-        assert bool(e['flags']&1)==(not valid)
-        if valid:
+        assert valid or e['flags']&1
+        for name in DETAIL_STAGES:
+            assert e[name+'_max_cycles']<=e[name+'_sum_cycles']
+        if valid and not e['flags']&1:
             e.update(total_ns=(e['end_tsc']-e['start_tsc'])*1_000_000_000/freq,
                      wait_ns=(e['acquired_tsc']-e['before_queue_tsc'])*1_000_000_000/freq,
                      collect_ns=(e['collected_tsc']-e['acquired_tsc'])*1_000_000_000/freq,
                      unlock_gap_ns=(e['callback_start_tsc']-e['collected_tsc'])*1_000_000_000/freq,
                      callback_ns=(e['end_tsc']-e['callback_start_tsc'])*1_000_000_000/freq)
+            e['detail_ns']={name:{kind:e[name+'_'+kind+'_cycles']*1_000_000_000/freq for kind in ['sum','max']} for name in DETAIL_STAGES}
         events.append(e)
+    assert stats['bad_tsc_batches']>=sum(bool(e['flags']&1) for e in events)
+    assert stats['migrated_batches']>=sum(bool(e['flags']&4) for e in events)
     assert all(x==0 for x in words[HWORDS+h[13]*EWORDS:])
     durations={k.replace('_cycles','_ns'):v*1_000_000_000/freq for k,v in stats.items() if k.endswith('_cycles')}
-    return {'version':1,'frequency':freq,'epoch':h[6],'case_id':h[7],'owner_pid':h[8],
+    return {'version':2,'frequency':freq,'epoch':h[6],'case_id':h[7],'owner_pid':h[8],
             'start_tsc':h[9],'freeze_tsc':h[10],'quiescent_tsc':h[11],
             'event_attempts':h[12],'stored_events':h[13],'dropped_events':h[14],
             'active_at_readiness_check':h[15],'threshold_ns':h[16],
@@ -74,13 +82,13 @@ def extract(directory):
     chunks={}
     for match in re.finditer(r'(?m)^TAIL_BATCH_CHUNK (\d+) (\d+) (\d+) ([A-Za-z0-9+/=]+)\r?$',log):
         case,index,total=map(int,match.group(1,2,3))
-        assert total==27 and 1<=index<=total
+        assert total==46 and 1<=index<=total
         parts=chunks.setdefault(case,{})
         assert index not in parts
         parts[index]=match[4]
     for case,parts in chunks.items():
-        assert case not in found and set(parts)==set(range(1,28))
-        data=base64.b64decode(''.join(parts[i] for i in range(1,28)),validate=True)
+        assert case not in found and set(parts)==set(range(1,47))
+        data=base64.b64decode(''.join(parts[i] for i in range(1,47)),validate=True)
         result=decode(data);assert result['case_id']==case
         found[case]=(data,result)
     return found

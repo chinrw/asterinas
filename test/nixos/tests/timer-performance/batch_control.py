@@ -23,12 +23,12 @@ def call(command,case_id=0,timeout=5):
     with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
         sock.settimeout(timeout);sock.connect((host,9998))
         before=time.monotonic_ns()
-        sock.send(REQUEST.pack(MAGIC,1,command,nonce,case_id))
+        sock.send(REQUEST.pack(MAGIC,2,command,nonce,case_id))
         packet=sock.recv(REPLY.size+1)
         after=time.monotonic_ns()
     assert len(packet)==REPLY.size, 'invalid batch-control reply length'
     words=REPLY.unpack(packet)
-    assert words[:5]==(MAGIC,1,command,nonce,case_id), 'batch-control reply identity mismatch'
+    assert words[:5]==(MAGIC,2,command,nonce,case_id), 'batch-control reply identity mismatch'
     result=dict(zip(['magic','version','command','nonce','case_id','status_errno','tsc_before','tsc_after',
                      'frequency','epoch','dump_bytes','busy_retries'],words))
     result.update(host_before_ns=before,host_after_ns=after,rtt_ns=after-before)
@@ -77,7 +77,7 @@ def batch_window(service,mode):
                 result['clock_after']=calibrate()
                 assert result['freeze']['epoch']==result['start']['epoch']
                 assert result['freeze']['frequency']==result['clock_before']['frequency']==result['clock_after']['frequency']
-                assert result['freeze']['dump_bytes']==20736
+                assert result['freeze']['dump_bytes']==35072
                 before,after=result['clock_before'],result['clock_after']
                 low=max(before['offset_lower_ns'],after['offset_lower_ns'])
                 high=min(before['offset_upper_ns'],after['offset_upper_ns'])

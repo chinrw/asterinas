@@ -60,7 +60,7 @@ fn export_batch_probe(shell: &mut Session) -> Result<(), Error> {
     if env::var("TAIL_BATCH_BUILD").unwrap_or_default() != "1" {
         return Ok(());
     }
-    let command = r#"for f in /var/tmp/timer-batch-*.bin; do [ -f "$f" ] || continue; test $(stat -c%s "$f") -eq 20736 || exit 1; name=${f##*/}; id=${name#timer-batch-}; id=${id%.bin}; i=0; base64 -w1024 "$f" | while IFS= read -r line; do i=$((i+1)); printf 'TAIL_BATCH_CHUNK %s %s 27 %s\n' "$id" "$i" "$line"; sleep 0.02; done; done; echo TAIL_BATCH_EXPORT_DONE"#;
+    let command = r#"for f in /var/tmp/timer-batch-*.bin; do [ -f "$f" ] || continue; test $(stat -c%s "$f") -eq 35072 || exit 1; name=${f##*/}; id=${name#timer-batch-}; id=${id%.bin}; i=0; base64 -w1024 "$f" | while IFS= read -r line; do i=$((i+1)); printf 'TAIL_BATCH_CHUNK %s %s 46 %s\n' "$id" "$i" "$line"; sleep 0.02; done; done; echo TAIL_BATCH_EXPORT_DONE"#;
     phase(shell, "batch_export", command, r"(?m)^TAIL_BATCH_EXPORT_DONE\s*$")
 }
 

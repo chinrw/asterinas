@@ -15,9 +15,9 @@ use crate::prelude::*;
 
 pub(crate) const CONTROL: i32 = 0x41534250;
 const MAGIC: u64 = 0x4153544241544348;
-const VERSION: u64 = 1;
+const VERSION: u64 = 2;
 const CAPACITY: usize = 128;
-const EWORDS: usize = 20;
+const EWORDS: usize = 34;
 const HWORDS: usize = 32;
 const BLOB_WORDS: usize = HWORDS + CAPACITY * EWORDS;
 // Calls, queue maximum, total/max elapsed, wait maximum, collection maximum,
@@ -52,6 +52,7 @@ struct Control {
 
 pub(crate) struct Batch {
     data: [u64; EWORDS],
+    last_tsc: u64,
 }
 impl Batch {
     pub(crate) fn begin(manager: u64) -> Option<Self> {
@@ -70,16 +71,40 @@ impl Batch {
         data[2] = manager;
         data[3] = u32::from(ostd::cpu::CpuId::current_racy()) as u64;
         data[4] = read_tsc();
-        Some(Self { data })
+        Some(Self { last_tsc: data[4], data })
+    }
+    // Detail indices map to event word pairs 20 + 2 * stage and 21 + 2 * stage.
+    // These methods are called only through an admitted batch.
+    fn timestamp(&mut self) -> u64 {
+        let now = read_tsc();
+        if now < self.last_tsc {
+            self.data[19] |= 1;
+        }
+        self.last_tsc = now;
+        now
+    }
+    pub(crate) fn detail_start(&mut self) -> u64 {
+        self.timestamp()
+    }
+    pub(crate) fn detail_end(&mut self, stage: usize, start: u64) {
+        let end = self.timestamp();
+        if end < start {
+            self.data[19] |= 1;
+            return;
+        }
+        let elapsed = end - start;
+        let index = 20 + 2 * stage;
+        self.data[index] = self.data[index].saturating_add(elapsed);
+        self.data[index + 1] = self.data[index + 1].max(elapsed);
     }
     pub(crate) fn set_kind(&mut self, kind: u64) {
         self.data[17] = kind;
     }
     pub(crate) fn before_queue(&mut self) {
-        self.data[5] = read_tsc();
+        self.data[5] = self.timestamp();
     }
     pub(crate) fn acquired(&mut self, len: usize) {
-        self.data[6] = read_tsc();
+        self.data[6] = self.timestamp();
         self.data[10] = len as u64;
     }
     pub(crate) fn cancelled(&mut self) {
@@ -98,16 +123,16 @@ impl Batch {
         }
     }
     pub(crate) fn collected(&mut self, len: usize) {
-        self.data[7] = read_tsc();
+        self.data[7] = self.timestamp();
         self.data[11] = len as u64;
     }
     pub(crate) fn callbacks(&mut self) {
-        self.data[8] = read_tsc();
+        self.data[8] = self.timestamp();
     }
 }
 impl Drop for Batch {
     fn drop(&mut self) {
-        self.data[9] = read_tsc();
+        self.data[9] = self.timestamp();
         // An empty queue skips callbacks. Equal stage boundaries retain its wait.
         if self.data[7] == 0 {
             self.data[7] = self.data[9];
@@ -117,7 +142,8 @@ impl Drop for Batch {
             self.data[19] |= 2;
         }
         self.data[18] = u32::from(ostd::cpu::CpuId::current_racy()) as u64;
-        let valid = self.data[4..10].windows(2).all(|x| x[0] <= x[1]);
+        let valid = self.data[19] & 1 == 0
+            && self.data[4..10].windows(2).all(|x| x[0] <= x[1]);
         let migrated = self.data[3] != self.data[18];
         STATS[0].fetch_add(1, Relaxed);
         STATS[1].fetch_max(self.data[10], Relaxed);

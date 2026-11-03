@@ -18,9 +18,9 @@
 
 #define CONTROL 0x41534250
 #define MAGIC UINT64_C(0x4153544241544348)
-#define VERSION 1
+#define VERSION 2
 #define HWORDS 32
-#define EWORDS 20
+#define EWORDS 34
 #define CAPACITY 128
 #define BLOB_WORDS (HWORDS + EWORDS * CAPACITY)
 #define BLOB_BYTES (BLOB_WORDS * sizeof(uint64_t))

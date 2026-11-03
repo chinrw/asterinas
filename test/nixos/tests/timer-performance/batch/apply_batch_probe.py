@@ -51,12 +51,36 @@ def apply(root):
             else '                    callbacks.push(timeout_list.pop_first().unwrap().1);')
     body = once(body, push, f'''                    if let Some(batch) = batch.as_mut() {{ batch.selected(); }}
 {push}''')
+    body = once(body, '            let current_time = self.clock.read_time();', """            let detail_start = batch.as_mut().map(|batch| batch.detail_start());
+            let current_time = self.clock.read_time();
+            if let (Some(batch), Some(start)) = (batch.as_mut(), detail_start) {
+                batch.detail_end(0, start);
+            }""")
+    cancelled_pop = ('                    timeout_list.pop();' if variant == 'heap'
+                     else '                    timeout_list.pop_first();')
+    body = once(body, cancelled_pop, f"""                    let detail_start = batch.as_mut().map(|batch| batch.detail_start());
+{cancelled_pop}
+                    if let (Some(batch), Some(start)) = (batch.as_mut(), detail_start) {{
+                        batch.detail_end(1, start);
+                    }}""")
+    selected_pop = ('timeout_list.pop().unwrap()' if variant == 'heap'
+                    else 'timeout_list.pop_first().unwrap().1')
+    body = once(body, push, f"""                    let detail_start = batch.as_mut().map(|batch| batch.detail_start());
+                    let selected = {selected_pop};
+                    if let (Some(batch), Some(start)) = (batch.as_mut(), detail_start) {{
+                        batch.detail_end(2, start);
+                    }}
+                    let detail_start = batch.as_mut().map(|batch| batch.detail_start());
+                    callbacks.push(selected);
+                    if let (Some(batch), Some(start)) = (batch.as_mut(), detail_start) {{
+                        batch.detail_end(3, start);
+                    }}""")
     body = once(body, '            callbacks\n        };', '''            if let Some(batch) = batch.as_mut() { batch.collected(timeout_list.len()); }
             (callbacks, current_time)
         };''')
     body = once(body, '        for callback in callbacks {', '''        if let Some(batch) = batch.as_mut() { batch.callbacks(); }
         for callback in callbacks {''')
-    body = once(body, '            callback.call();', """            let outcome = callback.call();
+    body = once(body, '            callback.call();', """            let outcome = callback.call(batch.as_mut());
             if let Some(batch) = batch.as_mut() {
                 let late = if outcome == 2 {
                     current_time.saturating_sub(callback.expired_time)
@@ -65,16 +89,31 @@ def apply(root):
                 batch.outcome(outcome, late);
             }""")
     instrumented = text[:start] + body + text[end:]
+    instrumented = instrumented.replace('callback.call();', 'callback.call(None);')
     call_start = instrumented.index('    fn call(&self) {')
     call_end = instrumented.index('\n    }', call_start) + len('\n    }')
     call = instrumented[call_start:call_end]
-    call = once(call, '    fn call(&self) {', '    fn call(&self) -> u8 {')
+    call = once(call, '    fn call(&self) {', '    fn call(&self, mut batch: Option<&mut crate::batch_probe::Batch>) -> u8 {')
     call = once(call, 'let Some(timer) = self.timer.upgrade() else {\n            return;',
                 'let Some(timer) = self.timer.upgrade() else {\n            return 0;')
     call = once(call, '// The callback is cancelled.\n            return;',
                 '// The callback is cancelled.\n            return 1;')
-    call = once(call, '        (timer.registered_callback)(timer_guard);',
-                '        (timer.registered_callback)(timer_guard);\n        2')
+    call = once(call, '        let mut timer_guard = timer.lock();', """        let detail_start = batch.as_mut().map(|batch| batch.detail_start());
+        let mut timer_guard = timer.lock();
+        if let (Some(batch), Some(start)) = (batch.as_mut(), detail_start) {
+            batch.detail_end(4, start);
+        }""")
+    call = once(call, '            timer_guard.set_timeout(Timeout::After(interval));', """            let detail_start = batch.as_mut().map(|batch| batch.detail_start());
+            timer_guard.set_timeout(Timeout::After(interval));
+            if let (Some(batch), Some(start)) = (batch.as_mut(), detail_start) {
+                batch.detail_end(5, start);
+            }""")
+    call = once(call, '        (timer.registered_callback)(timer_guard);', """        let detail_start = batch.as_mut().map(|batch| batch.detail_start());
+        (timer.registered_callback)(timer_guard);
+        if let (Some(batch), Some(start)) = (batch.as_mut(), detail_start) {
+            batch.detail_end(6, start);
+        }
+        2""")
     instrumented = instrumented[:call_start] + call + instrumented[call_end:]
     lib = root/'kernel/core/src/lib.rs'
     lib_text = once(lib.read_text(), 'pub mod context;', 'mod batch_probe;\n\npub mod context;')
