@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from tail_observe import case_trace, network_trace
+from batch_control import batch_window
 
 OUT = Path(os.environ['PERF_SAMPLE_DIR'])
 TOOLS = Path(os.environ['PERF_HOST_CLIENTS'])/'bin'
@@ -185,7 +186,7 @@ def run_case(service, mode):
     atomic_json(OUT/f'{service}-{mode}.json',result)
     subprocess.run([str(TOOLS/'redis-cli'),'-h',CLIENT_HOST,'-p',str(REDIS_PORT),
                     'SET','fixed-perf-key','abc'],check=True,capture_output=True)
-    with network_trace(service, mode, CLIENT_HOST, HTTP_PORT if service=='nginx' else REDIS_PORT, TOOLS) as capture:
+    with batch_window(service, mode), network_trace(service, mode, CLIENT_HOST, HTTP_PORT if service=='nginx' else REDIS_PORT, TOOLS) as capture:
         fixed=asyncio.run(fixed_rate(service,200 if service=='nginx' else 1000,1 if PILOT else (int(os.environ.get('TAIL_REDIS_SECONDS','5')) if service=='redis' else 5),OUT/f'{service}-{mode}-fixed.json'))
         if capture is not None: capture['requests']=fixed['records']
     atomic_json(OUT/f'{service}-{mode}-fixed.json',fixed)

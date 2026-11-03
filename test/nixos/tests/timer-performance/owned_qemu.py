@@ -43,7 +43,7 @@ if __name__ == "__main__":
         temporary.write_text(f"{pid} {start_ticks(pid)} {sample}\n")
         temporary.replace(owner)
         arguments=sys.argv[1:]
-        if os.environ.get("TAIL_QMP")=="1":
+        if os.environ.get("TAIL_QMP") in {"1", "map"}:
             qmp=owner.with_suffix(".qmp")
             assert len(str(qmp).encode())<104
             arguments += ["-qmp",f"unix:{qmp},server=on,wait=off","-name","guest=timer-tail,debug-threads=on"]

@@ -35,15 +35,31 @@ for arch in x86_64 riscv64 loongarch64 aarch64; do
     cp "osdk/src/base_crate/$arch.ld.template" "$base_crate/$arch.ld"
 done
 cp "$suite/kernel.lock" "$base_crate/Cargo.lock"
+restore_plain() {
+    local ref=$1 path
+    if [ -f kernel/core/src/batch_probe.rs ]; then
+        cmp "$suite/batch/batch_probe.rs" kernel/core/src/batch_probe.rs
+        rm kernel/core/src/batch_probe.rs
+    fi
+    for path in kernel/core/src/lib.rs kernel/core/src/syscall/prctl.rs kernel/core/src/time/core/timer.rs; do
+        git -c safe.directory="$repo" show "$ref:$path" > "$path"
+    done
+}
 for variant in base retirement; do
     mkdir -p "$out/$variant"
     ref=$base
     if [ "$variant" = retirement ]; then ref=$fixed; fi
-    git -c safe.directory="$repo" show "$ref:kernel/core/src/time/core/timer.rs" > kernel/core/src/time/core/timer.rs
-    touch kernel/core/src/time/core/timer.rs
+    restore_plain "$ref"
     git -c safe.directory="$repo" diff "$base" -- kernel ostd > "$out/$variant/kernel-source.patch"
     git -c safe.directory="$repo" diff --exit-code "$ref" -- kernel ostd
     sha256sum kernel/core/src/time/core/timer.rs > "$out/$variant/timer-source.sha256"
+    if [ "${TAIL_BATCH_BUILD:-0}" = 1 ]; then
+        python3 "$suite/batch/apply_batch_probe.py" "$repo"
+        git -c safe.directory="$repo" diff "$ref" -- kernel ostd > "$out/$variant/batch-source.patch"
+        mkdir -p "$out/$variant/batch-source"
+        cp kernel/core/src/{lib.rs,batch_probe.rs,syscall/prctl.rs,time/core/timer.rs} "$out/$variant/batch-source/"
+        sha256sum "$out/$variant/batch-source/"* > "$out/$variant/batch-source.sha256"
+    fi
     if [ -d target/osdk/linux-bzimage-setup ]; then
         mv target/osdk/linux-bzimage-setup "target/osdk/linux-bzimage-setup-before-perf-$variant"
     fi
@@ -57,5 +73,7 @@ for variant in base retirement; do
     echo "PERF_BUILD_READY $variant"
 done
 cmp "$out/base/Cargo.lock" "$out/retirement/Cargo.lock"
+restore_plain "$fixed"
+git -c safe.directory="$repo" diff --exit-code "$fixed" -- kernel ostd
 python3 "$suite/paired.py"
 # This diagnostic campaign does not repeat the previously verified ktest.

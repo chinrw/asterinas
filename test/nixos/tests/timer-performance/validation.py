@@ -23,6 +23,7 @@ def validate_go(go,item,owner):
 def validate_performance(directory,item):
     phases=[json.loads(line) for line in (directory/'phases.jsonl').read_text().splitlines()]
     expected={'identity','services_start','services_stop','client_ready_none'}
+    if os.environ.get('TAIL_BATCH_BUILD')=='1': expected|={'batch_server_start','batch_export'}
     populations=[64] if item['pilot'] else [1,64,1024,4096]
     expected|={f'micro_{n}_{mode}' for n in populations for mode in ['cancel','drop','rearm','expiry']}
     for mode in ['none','churn','expiry']:
@@ -74,5 +75,8 @@ def validate_performance(directory,item):
     if os.environ.get('TAIL_TRACE')=='1':
         from trace_validation import validate_traces
         validate_traces(directory)
+    if os.environ.get('TAIL_BATCH_BUILD')=='1':
+        from batch_validation import validate_batches
+        validate_batches(directory, item.get('batch_enabled',False))
     return {'phases':len(phases),'micro_records':len(micros),'load_records':len(loads),
             'probe_records':3,'wake_records':3,'service_cases':6,'fixed_rate_cases':6}

@@ -43,7 +43,7 @@ def sample(item, helper_hash):
     exit_file=directory/'driver.exit'
     environment=dict(os.environ,SMP=str(item['cpus']),MEM='8G',NETDEV=transport,QEMU_DISPLAY='none',PERF_CLIENT_HOST=client_host,
         NGINX_PORT=str(nginx),REDIS_PORT=str(redis),PERF_SAMPLE_DIR=str(directory),PERF_BLOCK=str(item['block']),
-        PERF_HELPER_SHA256=helper_hash,PROBE_QEMU_OWNER=str(owner),PROBE_SAMPLE_ID=str(item['id']),
+        PERF_HELPER_SHA256=helper_hash,TAIL_BATCH=str(int(item.get('batch_enabled',False))),PROBE_QEMU_OWNER=str(owner),PROBE_SAMPLE_ID=str(item['id']),
         PROBE_QEMU_CONTROL=str(SUITE/'owned_qemu.py'),QEMU_BIN=str(SUITE/'owned_qemu.py'),
         PROBE_HOST_SAMPLE='minimal',PROBE_HOST_MARKER=str(directory/'go.json'),
         PROBE_HELPER_SHA256='1a6b8c133239c4b7792709d25bb4bb4b5eded497e79f1d36e2a62066df9a623d')
@@ -104,6 +104,12 @@ def main():
     binary=Path(built)/'bin/timer-perf'
     digest=hashlib.sha256(binary.read_bytes()).hexdigest()
     (OUT/'helper-sha256.txt').write_text(digest+'\n')
+    if os.environ.get('TAIL_BATCH_BUILD')=='1':
+        expr='import ./test/nixos/tests/timer-performance/batch/batch_probe.nix { pkgs=import ./distro/nixpkgs.nix {}; }'
+        built=subprocess.check_output(['nix-build','--no-out-link','--expr',expr],cwd=REPO,text=True).strip().splitlines()[-1]
+        probe_hash=hashlib.sha256((Path(built)/'bin/timer-batch-probe').read_bytes()).hexdigest()
+        os.environ['PERF_BATCH_HELPER_SHA256']=probe_hash
+        (OUT/'batch-helper-sha256.txt').write_text(probe_hash+'\n')
     rng=random.Random(20261029)
     pilot=os.environ.get('PERF_PILOT')=='1'
     plan=[]
@@ -111,10 +117,14 @@ def main():
     assert cpu_settings and set(cpu_settings)<={1,4} and len(cpu_settings)==len(set(cpu_settings))
     blocks=[0] if pilot else [int(x) for x in os.environ.get('PERF_BLOCKS','0,1,2,3,4').split(',')]
     assert blocks and len(blocks)==len(set(blocks)) and min(blocks)>=0
-    for cpus in cpu_settings:
-        for block in blocks:
-            variants=['base','retirement'];rng.shuffle(variants)
-            for variant in variants:plan.append({'id':len(plan),'cpus':cpus,'block':block,'variant':variant,'pilot':pilot})
+    states=[False,True] if os.environ.get('TAIL_BATCH_BUILD')=='1' else [False]
+    for enabled in states:
+        for cpus in cpu_settings:
+            for block in blocks if enabled or len(states)==1 else [0]:
+                variants=['base','retirement'];rng.shuffle(variants)
+                for variant in variants:
+                    plan.append({'id':len(plan),'cpus':cpus,'block':block,'variant':variant,
+                                 'pilot':pilot,'batch_enabled':enabled})
     (OUT/'plan.json').write_text(json.dumps({'seed':20261029,'samples':plan},indent=2)+'\n')
     rows=[]
     for item in plan:

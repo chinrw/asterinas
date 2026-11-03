@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     steps:
-      - name: Require an EPYC host and record its model
+      - name: Require the original EPYC 7763 model
         run: |
           lscpu
-          grep -Eq '^model name[[:space:]]*:.*AMD EPYC ' /proc/cpuinfo
+          grep -Eq '^model name[[:space:]]*:.*AMD EPYC 7763 ' /proc/cpuinfo
       - uses: endersonmenezes/free-disk-space@v3
         with:
           rm_cmd: rmz
@@ -39,7 +39,7 @@ jobs:
             set -e
             export TIMER_BENCHMARK_EPHEMERAL=1
             export ENABLE_KVM=1 SMP=4 MEM=8G NETDEV=tap VHOST=on PERF_NETDEV=tap PERF_CPUS=4 QEMU_DISPLAY=none RELEASE_LTO=1
-            export TAIL_TRACE=1 TAIL_REQUIRE_SCHEDSTATS=1 TAIL_QMP=1 TAIL_REDIS_SECONDS=30 PERF_BLOCKS=0
+            export TAIL_TRACE=1 TAIL_REQUIRE_SCHEDSTATS=1 TAIL_QMP=map TAIL_REDIS_SECONDS=5 PERF_BLOCKS=0,2,4 TAIL_BATCH_BUILD=1
             export PERF_PILOT=${{ inputs.pilot && '1' || '0' }}
             bash test/nixos/tests/timer-performance/build.sh
       - name: Upload records without publishing benchmark results

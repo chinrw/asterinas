@@ -42,6 +42,28 @@ fn client(name: &str, mode: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn start_batch_probe(shell: &mut Session) -> Result<(), Error> {
+    if env::var("TAIL_BATCH_BUILD").unwrap_or_default() != "1" {
+        return Ok(());
+    }
+    let path = env::var("TAIL_BATCH_PROBE_PATH")
+        .unwrap_or_else(|_| "/etc/timer-perf/timer-batch-probe".into());
+    assert!(matches!(path.as_str(), "/etc/timer-perf/timer-batch-probe" | "/opt/timer-batch-probe"));
+    let threshold = env::var("TAIL_BATCH_THRESHOLD_NS")
+        .unwrap_or_else(|_| "0".into()).parse::<u64>().unwrap();
+    let hash = env::var("PERF_BATCH_HELPER_SHA256").unwrap();
+    let command = format!("test $(sha256sum {path} | cut -d ' ' -f 1) = {hash} && {{ {path} --threshold-ns {threshold} >/var/tmp/timer-batch-daemon.log 2>&1 & echo $! >/var/tmp/timer-batch-daemon.pid; for i in $(seq 1 100); do grep -q '^TIMER_BATCH_READY ' /var/tmp/timer-batch-daemon.log && break; sleep 0.05; done; kill -0 $(cat /var/tmp/timer-batch-daemon.pid) && cat /var/tmp/timer-batch-daemon.log; }}");
+    phase(shell, "batch_server_start", &command, r"(?m)^TIMER_BATCH_READY ")
+}
+
+fn export_batch_probe(shell: &mut Session) -> Result<(), Error> {
+    if env::var("TAIL_BATCH_BUILD").unwrap_or_default() != "1" {
+        return Ok(());
+    }
+    let command = r#"for f in /var/tmp/timer-batch-*.bin; do [ -f "$f" ] || continue; name=${f##*/}; id=${name#timer-batch-}; id=${id%.bin}; printf 'TAIL_BATCH_DATA %s ' "$id"; base64 -w0 "$f"; printf '\n'; done; echo TAIL_BATCH_EXPORT_DONE"#;
+    phase(shell, "batch_export", command, r"(?m)^TAIL_BATCH_EXPORT_DONE\s*$")
+}
+
 #[nixos_test]
 fn lifecycle_performance(shell: &mut Session) -> Result<(), Error> {
     let pilot = env::var("PERF_PILOT").unwrap_or_default() == "1";
@@ -49,6 +71,7 @@ fn lifecycle_performance(shell: &mut Session) -> Result<(), Error> {
     let cpu = env::var("SMP").unwrap();
     let digest = env::var("PERF_HELPER_SHA256").unwrap();
     phase(shell,"identity",&format!("ulimit -n 8192 && test $(nproc) -eq {cpu} && sha256sum /etc/timer-perf/timer-perf && cat /proc/mounts"),&format!(r"(?m)^{digest}\s+"))?;
+    start_batch_probe(shell)?;
     for n in if pilot { vec![64] } else { vec![1, 64, 1024, 4096] } {
         for mode in ["cancel","drop","rearm","expiry"] {
             phase(shell,&format!("micro_{n}_{mode}"),&format!("/etc/timer-perf/timer-perf micro {n} {mode}"),r"(?m)^PERF_MICRO \{")?;
@@ -80,6 +103,7 @@ fn lifecycle_performance(shell: &mut Session) -> Result<(), Error> {
         }
     }
     phase(shell,"services_stop","python3 /etc/timer-perf/setup.py stop",r"(?m)^PERF_SERVICES_STOPPED\s*$")?;
+    export_batch_probe(shell)?;
     fs::write(dir.join("complete.tmp"),"complete\n").unwrap();
     fs::rename(dir.join("complete.tmp"),dir.join("complete")).unwrap();
     notingo_host_sample(shell)

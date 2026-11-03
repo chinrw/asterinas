@@ -45,14 +45,14 @@ def watch(output, stop, ready, owner, client):
     count = 0
     qmp=None;cpus=[];snapshot_done=False
     trigger=Path(output.replace('-host-timeline.jsonl','-slow-trigger.json'))
-    if os.environ.get('TAIL_QMP')=='1':
+    if os.environ.get('TAIL_QMP') in {'1', 'map'}:
         from qmp_snapshot import Qmp
         qmp=Qmp(Path(owner).with_suffix('.qmp'))
         cpus=qmp.call('query-cpus-fast')
         assert all((Path('/proc')/str(qemu)/'task'/str(c['thread-id'])).exists() for c in cpus)
     with Path(output).open('w') as stream:
         stream.write(json.dumps({'type':'clock_start', **clock_pair(), 'qemu':qemu, 'client':client,
-                                 'sched_schedstats':schedstats,'cpu_map':cpus,'qmp_enabled':qmp is not None})+'\n')
+                                 'sched_schedstats':schedstats,'cpu_map':cpus,'qmp_enabled':qmp is not None,'qmp_mode':os.environ.get('TAIL_QMP','0')})+'\n')
         Path(ready).write_text('ready\n')
         while not Path(stop).exists() and time.monotonic()<deadline:
             before = time.monotonic_ns()
@@ -79,7 +79,7 @@ def watch(output, stop, ready, owner, client):
                 row['host_cpu_stat']=[line for line in Path('/proc/stat').read_text().splitlines() if line.startswith('cpu')]
             row['sample_finished_ns']=time.monotonic_ns()
             stream.write(json.dumps(row)+'\n')
-            if qmp is not None and not snapshot_done and trigger.exists():
+            if os.environ.get('TAIL_QMP')=='1' and qmp is not None and not snapshot_done and trigger.exists():
                 from qmp_snapshot import snapshot
                 host_stacks=[]
                 for cpu in cpus:

@@ -14,8 +14,11 @@ def validate_traces(directory, cases=None):
         timeline=[json.loads(x) for x in (directory/f'{key}-host-timeline.jsonl').read_text().splitlines()]
         assert timeline[0]['type']=='clock_start' and timeline[-1]['type']=='clock_end'
         assert timeline[-1]['stop_requested'] and timeline[-1]['samples']>0
-        if os.environ.get('TAIL_QMP')=='1':
+        if os.environ.get('TAIL_QMP') in {'1', 'map'}:
             assert timeline[0]['qmp_enabled']
+            if os.environ.get('TAIL_QMP')=='map':
+                assert timeline[0]['qmp_mode']=='map'
+                assert not any(e['type']=='guest_snapshot' for e in timeline)
             args=json.loads((directory/'qemu.argv.json').read_text())
             cpus=int(args[args.index('-smp')+1])
             assert {cpu['cpu-index'] for cpu in timeline[0]['cpu_map']}==set(range(cpus))
