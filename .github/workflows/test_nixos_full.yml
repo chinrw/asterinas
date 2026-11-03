@@ -20,10 +20,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     steps:
-      - name: Require the original EPYC 7763 model
+      - name: Require an AMD EPYC diagnostic runner
         run: |
           lscpu
-          grep -Eq '^model name[[:space:]]*:.*AMD EPYC 7763 ' /proc/cpuinfo
+          grep -Eq '^model name[[:space:]]*:.*AMD EPYC ' /proc/cpuinfo
       - uses: endersonmenezes/free-disk-space@v3
         with:
           rm_cmd: rmz
