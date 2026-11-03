@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 # Guest instruction-sampling capability
 
-Run the manual `perf_capability.yml` workflow in `chinrw/asterinas` to check whether this runner can capture a KVM guest's instruction pointer. This host-tool check uses a one-vCPU, 64 MiB fixture and does not build or modify Asterinas.
+Run the manual `test_nixos_full.yml` workflow with `mode=perf-capability` in `chinrw/asterinas` to check whether this runner can capture a KVM guest's instruction pointer. This host-tool check uses a one-vCPU, 64 MiB fixture and does not build or modify Asterinas.
 
 The boot sector normalizes CS, writes a readiness marker through port 0xe9, disables interrupts and loops at a known address. The probe requires that marker before recording. It separately records software `cpu-clock` and, if hardware counting is available, `cycles`. An event establishes capability only if the binary perf data contains at least three guest-context samples at the exact loop RIP and the owned QEMU remains alive. Host-only samples and successful command exits are insufficient.
 
