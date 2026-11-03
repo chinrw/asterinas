@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: MPL-2.0
+name: Fork perf KVM capability
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install host diagnostic tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends linux-tools-generic qemu-system-x86
+          dpkg-query -W linux-tools-common linux-tools-generic qemu-system-x86 > tool-packages.txt
+          find -L /usr/lib/linux-tools -type f -name perf | sort -V > perf-candidates.txt
+          test -s perf-candidates.txt
+      - name: Probe owned KVM guest
+        shell: bash
+        run: |
+          task_perf_bin=$(readlink -f "$(tail -n 1 perf-candidates.txt)")
+          printf '%s\n' "$task_perf_bin" > perf-selected.txt
+          sudo env TAIL_PERF_BIN="$task_perf_bin" python3 test/nixos/tests/timer-performance/perf_capability.py --out "$PWD/perf-capability-result"
+      - name: Preserve evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: perf-capability-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            perf-capability-result/
+            tool-packages.txt
+            perf-candidates.txt
+            perf-selected.txt
+          if-no-files-found: warn
+          retention-days: 7
