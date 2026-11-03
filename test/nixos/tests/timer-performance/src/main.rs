@@ -231,8 +231,30 @@ fn notingo_host_sample(shell: &mut Session) -> Result<(), Error> {
     }
 }
 
+fn wait_for_host_affinity() -> Result<(), Error> {
+    if env::var("PINNING_CONTROL").unwrap_or_default() != "1" {
+        return Ok(());
+    }
+    let directory = PathBuf::from(env::var("PERF_SAMPLE_DIR").unwrap());
+    let started = Instant::now();
+    while started.elapsed() < std::time::Duration::from_secs(35) {
+        if directory.join("affinity-failed").exists() {
+            break;
+        }
+        if directory.join("affinity-ready").exists() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    Err(Error::UnexpectedOutput {
+        expected: "owned vCPU affinity setup before workload identity".into(),
+        got: "affinity setup failed or exceeded 35 seconds".into(),
+    })
+}
+
 #[nixos_test]
 fn http_history(shell: &mut Session) -> Result<(), Error> {
+    wait_for_host_affinity()?;
     if env::var("HISTORY_OS").unwrap() == "linux" {
         // Avoid applying ONLCR in both the guest console and the host PTY.
         shell.run_cmd("stty -onlcr")?;
