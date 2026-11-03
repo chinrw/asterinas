@@ -137,7 +137,7 @@ def main():
             run(argv, out, name)
         (out / 'perf_event_paranoid').write_text(Path('/proc/sys/kernel/perf_event_paranoid').read_text())
         argv = [qemu, '-accel', 'kvm', '-cpu', 'host', '-smp', '1', '-m', '64M',
-                '-drive', f'file={boot},format=raw,readonly=on,if=ide', '-boot', 'c',
+                '-drive', f'file={boot},format=raw,snapshot=on,if=ide', '-boot', 'c',
                 '-nic', 'none', '-display', 'none', '-serial', 'none', '-monitor', 'none',
                 '-debugcon', f'file:{out / "debugcon.log"}',
                 '-global', 'isa-debugcon.iobase=0xe9', '-no-reboot', '-no-shutdown']
