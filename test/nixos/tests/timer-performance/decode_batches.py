@@ -71,6 +71,18 @@ def extract(directory):
         data=base64.b64decode(match[2],validate=True)
         result=decode(data);assert result['case_id']==case
         found[case]=(data,result)
+    chunks={}
+    for match in re.finditer(r'(?m)^TAIL_BATCH_CHUNK (\d+) (\d+) (\d+) ([A-Za-z0-9+/=]+)\r?$',log):
+        case,index,total=map(int,match.group(1,2,3))
+        assert total==27 and 1<=index<=total
+        parts=chunks.setdefault(case,{})
+        assert index not in parts
+        parts[index]=match[4]
+    for case,parts in chunks.items():
+        assert case not in found and set(parts)==set(range(1,28))
+        data=base64.b64decode(''.join(parts[i] for i in range(1,28)),validate=True)
+        result=decode(data);assert result['case_id']==case
+        found[case]=(data,result)
     return found
 
 
