@@ -28,6 +28,17 @@ cp test/nixos/Cargo.lock "$out/host-Cargo.lock"
 nix-build --no-out-link "$suite/host.nix" > "$out/host-clients-path"
 export PERF_HOST_CLIENTS
 PERF_HOST_CLIENTS=$(tail -1 "$out/host-clients-path")
+export TAIL_PERF_BIN="$PERF_HOST_CLIENTS/bin/perf"
+if [ "${TAIL_PERF:-0}" = 1 ]; then
+    "$TAIL_PERF_BIN" --version > "$out/perf-version.txt"
+    python3 "$suite/perf_capability.py" --out "$out/perf-capability"
+    python3 - "$out/perf-capability/result.json" <<'CHECK_PERF'
+import json,sys
+result=json.load(open(sys.argv[1]))
+assert result.get('events',{}).get('cpu-clock',{}).get('guest_ip_verified'),result
+CHECK_PERF
+fi
+printf 'TAIL_PERF=%s\nTAIL_PERF_BIN=%s\n' "${TAIL_PERF:-0}" "$TAIL_PERF_BIN" >> "$out/build-environment.txt"
 # Seed every generated input so OSDK preserves the frozen dependency lock.
 base_crate=target/osdk/asterinas-run-base
 mkdir -p "$base_crate/src"

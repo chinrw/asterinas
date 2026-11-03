@@ -10,6 +10,8 @@ import socket
 import subprocess
 import time
 from validation import validate_go, validate_performance
+from guest_profile import GuestProfile
+from profile_validation import validate_guest_profile
 
 SUITE=Path(__file__).resolve().parent
 REPO=SUITE.parents[3]
@@ -47,12 +49,19 @@ def sample(item, helper_hash):
         PROBE_QEMU_CONTROL=str(SUITE/'owned_qemu.py'),QEMU_BIN=str(SUITE/'owned_qemu.py'),
         PROBE_HOST_SAMPLE='minimal',PROBE_HOST_MARKER=str(directory/'go.json'),
         PROBE_HELPER_SHA256='1a6b8c133239c4b7792709d25bb4bb4b5eded497e79f1d36e2a62066df9a623d')
+    profile=GuestProfile(directory,os.environ['TAIL_PERF_BIN']) if item.get('perf_enabled',False) else None
+    environment['TAIL_PERF']=str(int(item.get('perf_enabled',False)))
     command=['bash','-c','make run_nixos NIXOS_TEST_SUITE=timer-performance NIXOS_TEST_CASE=lifecycle_performance NIXOS_TEST_TIMEOUT=150s; result=$?; printf "%s\\n" "$result" > "$1"; exec sleep 86400','perf-supervisor',str(exit_file)]
     started=time.monotonic();record={**item,'complete':False,'reason':'outer_timeout'}
     with (directory/'driver.log').open('w') as log:
         process=subprocess.Popen(command,cwd=REPO,env=environment,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         try:
             while time.monotonic()-started<900:
+                if profile is not None:
+                    try:
+                        profile.poll_start(owner)
+                    except Exception as error:
+                        record.setdefault('profiler_errors',[]).append(f'{type(error).__name__}: {error}')
                 if (directory/'complete').exists() and (directory/'go.json').exists():
                     go=json.loads((directory/'go.json').read_text())
                     validate_go(go,item,owner)
@@ -64,14 +73,21 @@ def sample(item, helper_hash):
         except Exception as error:
             record.update(complete=False,reason='validation_exception',error=f'{type(error).__name__}: {error}')
         finally:
-            cleanup=True
-            if owner.exists():
-                result=subprocess.run(['python3',str(SUITE/'owned_qemu.py'),'--stop',str(owner)],capture_output=True,text=True)
-                (directory/'cleanup.log').write_text(result.stdout+result.stderr)
-                cleanup=result.returncode==0
-            if process.poll() is None:os.killpg(process.pid,signal.SIGKILL)
-            process.wait(timeout=5)
-            record['cleanup_ok']=cleanup
+            try:
+                if profile is not None:
+                    try:
+                        record['guest_profile']=profile.stop()
+                    except Exception as error:
+                        record.setdefault('profiler_errors',[]).append(f'{type(error).__name__}: {error}')
+            finally:
+                cleanup=True
+                if owner.exists():
+                    result=subprocess.run(['python3',str(SUITE/'owned_qemu.py'),'--stop',str(owner)],capture_output=True,text=True)
+                    (directory/'cleanup.log').write_text(result.stdout+result.stderr)
+                    cleanup=result.returncode==0
+                if process.poll() is None:os.killpg(process.pid,signal.SIGKILL)
+                process.wait(timeout=5)
+                record['cleanup_ok']=cleanup
     if transport=='tap':
         for _ in range(300):
             remaining={p.name for p in Path('/sys/class/net').iterdir()}-original_interfaces
@@ -91,6 +107,13 @@ def sample(item, helper_hash):
             record['validated_inventory']=validate_performance(directory,item)
         except Exception as error:
             record.update(complete=False,reason='performance_validation',error=f'{type(error).__name__}: {error}')
+    if profile is not None and record['complete']:
+        try:
+            record['profile_validation']=validate_guest_profile(directory,OUT/item['variant']/'kernel.elf')
+            if not record['profile_validation']['valid'] or record.get('profiler_errors'):
+                record.update(complete=False,reason='profile_validation')
+        except Exception as error:
+            record.update(complete=False,reason='profile_validation',profile_error=f'{type(error).__name__}: {error}')
     (directory/'record.json').write_text(json.dumps(record,indent=2)+'\n')
     print('PERF_SAMPLE '+json.dumps(record),flush=True)
     if not record['cleanup_ok']:raise RuntimeError('cleanup failed; refusing next guest')
@@ -124,7 +147,8 @@ def main():
                 variants=['base','retirement'];rng.shuffle(variants)
                 for variant in variants:
                     plan.append({'id':len(plan),'cpus':cpus,'block':block,'variant':variant,
-                                 'pilot':pilot,'batch_enabled':enabled})
+                                 'pilot':pilot,'batch_enabled':enabled,
+                                 'perf_enabled':os.environ.get('TAIL_PERF')=='1' and enabled})
     (OUT/'plan.json').write_text(json.dumps({'seed':20261029,'samples':plan},indent=2)+'\n')
     rows=[]
     for item in plan:

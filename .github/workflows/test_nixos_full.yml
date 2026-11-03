@@ -44,7 +44,7 @@ jobs:
             set -e
             export TIMER_BENCHMARK_EPHEMERAL=1
             export ENABLE_KVM=1 SMP=4 MEM=8G NETDEV=tap VHOST=on PERF_NETDEV=tap PERF_CPUS=4 QEMU_DISPLAY=none RELEASE_LTO=1
-            export TAIL_TRACE=1 TAIL_REQUIRE_SCHEDSTATS=1 TAIL_QMP=map TAIL_REDIS_SECONDS=5 PERF_BLOCKS=0,2,4 TAIL_BATCH_BUILD=1
+            export TAIL_PERF=1 TAIL_TRACE=1 TAIL_REQUIRE_SCHEDSTATS=1 TAIL_QMP=map TAIL_REDIS_SECONDS=5 PERF_BLOCKS=0,2,4 TAIL_BATCH_BUILD=1
             export PERF_PILOT=${{ inputs.pilot && '1' || '0' }}
             bash test/nixos/tests/timer-performance/build.sh
       - name: Upload records without publishing benchmark results
