@@ -176,7 +176,7 @@ def main():
                             raise RuntimeError('Owned QEMU exited before event recording')
                         event_result['record_exit'] = run([
                             perf, 'kvm', '--host', '--guest', 'record',
-                            '-e', event, '-F', '99', '-p', str(proc.pid),
+                            '-e', event, '-F', '99', '--clockid', 'mono', '--sample-cpu', '-p', str(proc.pid),
                             '-o', str(data_path), '--', 'sleep', '7'],
                             out, event + '-record', timeout=12)
                         event_result['qemu_alive_after_record'] = proc.poll() is None
@@ -201,6 +201,10 @@ def main():
         result['error'] = f'{type(error).__name__}: {error}'
     finally:
         (out / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+        # Perf creates private files; make only this owned fixture evidence readable.
+        for path in out.rglob('*'):
+            if path.is_file() and not path.is_symlink():
+                path.chmod(path.stat().st_mode | 0o444)
     print(json.dumps(result, indent=2))
     return 0 if result['guest_ip_verified'] else 1
 
