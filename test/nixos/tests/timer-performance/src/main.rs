@@ -42,6 +42,27 @@ fn client(name: &str, mode: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn wait_for_guest_profile() -> Result<(), Error> {
+    if env::var("TAIL_PERF").unwrap_or_default() != "1" {
+        return Ok(());
+    }
+    let directory = PathBuf::from(env::var("PERF_SAMPLE_DIR").unwrap());
+    let started = Instant::now();
+    while started.elapsed() < std::time::Duration::from_secs(35) {
+        if directory.join("guest-perf-failed").exists() {
+            break;
+        }
+        if directory.join("guest-perf-ready").exists() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    Err(Error::UnexpectedOutput {
+        expected: "owned QMP vCPU profiler ready before micro workloads".into(),
+        got: "profiler readiness failed or exceeded 35 seconds".into(),
+    })
+}
+
 fn start_batch_probe(shell: &mut Session) -> Result<(), Error> {
     if env::var("TAIL_BATCH_BUILD").unwrap_or_default() != "1" {
         return Ok(());
@@ -71,6 +92,7 @@ fn lifecycle_performance(shell: &mut Session) -> Result<(), Error> {
     let cpu = env::var("SMP").unwrap();
     let digest = env::var("PERF_HELPER_SHA256").unwrap();
     phase(shell,"identity",&format!("ulimit -n 8192 && test $(nproc) -eq {cpu} && sha256sum /etc/timer-perf/timer-perf && cat /proc/mounts"),&format!(r"(?m)^{digest}\s+"))?;
+    wait_for_guest_profile()?;
     start_batch_probe(shell)?;
     for n in if pilot { vec![64] } else { vec![1, 64, 1024, 4096] } {
         for mode in ["cancel","drop","rearm","expiry"] {

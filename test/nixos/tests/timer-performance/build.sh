@@ -37,6 +37,7 @@ import json,sys
 result=json.load(open(sys.argv[1]))
 assert result.get('events',{}).get('cpu-clock',{}).get('guest_ip_verified'),result
 CHECK_PERF
+    python3 "$suite/vcpu_profile_fixture.py" --out "$out/vcpu-profile-fixture"
 fi
 printf 'TAIL_PERF=%s\nTAIL_PERF_BIN=%s\n' "${TAIL_PERF:-0}" "$TAIL_PERF_BIN" >> "$out/build-environment.txt"
 # Seed every generated input so OSDK preserves the frozen dependency lock.

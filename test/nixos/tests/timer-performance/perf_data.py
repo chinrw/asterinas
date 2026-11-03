@@ -25,6 +25,7 @@ def parse(path):
     flags = struct.unpack_from('<Q', data, attr_offset + 40)[0]
     clockid = struct.unpack_from('<i', data, attr_offset + 92)[0]
     result = {'sample_type': hex(sample_type), 'clockid': clockid,
+              'inherit': bool(flags & (1 << 1)),
               'use_clockid': bool(flags & (1 << 25)), 'samples': [],
               'lost_records': 0, 'lost_events': 0, 'lost_sample_records': 0,
               'lost_samples': 0}

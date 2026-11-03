@@ -49,7 +49,7 @@ def sample(item, helper_hash):
         PROBE_QEMU_CONTROL=str(SUITE/'owned_qemu.py'),QEMU_BIN=str(SUITE/'owned_qemu.py'),
         PROBE_HOST_SAMPLE='minimal',PROBE_HOST_MARKER=str(directory/'go.json'),
         PROBE_HELPER_SHA256='1a6b8c133239c4b7792709d25bb4bb4b5eded497e79f1d36e2a62066df9a623d')
-    profile=GuestProfile(directory,os.environ['TAIL_PERF_BIN']) if item.get('perf_enabled',False) else None
+    profile=GuestProfile(directory,os.environ['TAIL_PERF_BIN'],expected_cpus=item['cpus']) if item.get('perf_enabled',False) else None
     environment['TAIL_PERF']=str(int(item.get('perf_enabled',False)))
     command=['bash','-c','make run_nixos NIXOS_TEST_SUITE=timer-performance NIXOS_TEST_CASE=lifecycle_performance NIXOS_TEST_TIMEOUT=150s; result=$?; printf "%s\\n" "$result" > "$1"; exec sleep 86400','perf-supervisor',str(exit_file)]
     started=time.monotonic();record={**item,'complete':False,'reason':'outer_timeout'}
