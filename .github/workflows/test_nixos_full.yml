@@ -124,7 +124,7 @@ jobs:
           image: asterinas/kernel-dev:0.19.0-20261012
           options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
           run: |
-            set -euo pipefail
+            set -eu
             export TIMER_BENCHMARK_EPHEMERAL=1
             export ENABLE_KVM=1 SMP=4 MEM=8G NETDEV=tap VHOST=on PERF_NETDEV=tap PERF_CPUS=4 QEMU_DISPLAY=none RELEASE_LTO=1
             export OVMF=on MAKEFLAGS='OVMF=on' PERF_PILOT=0
