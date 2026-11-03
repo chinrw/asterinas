@@ -20,7 +20,7 @@ def validate_batches(directory, enabled):
         assert b['epoch']==c['start']['epoch']==c['freeze']['epoch']
         assert b['frequency']==c['start']['frequency']==c['freeze']['frequency']
         assert b['complete_observation'] and b['stats']['calls']>0 and b['threshold_ns']==5_000_000
-        assert c['freeze']['dump_bytes']==35072
+        assert c['freeze']['dump_bytes']==51584
         fixed=json.loads(path.with_name(c['case']+'-fixed.json').read_text())
         assert c['start']['host_after_ns']<=min(r['scheduled_ns'] for r in fixed['records'])
         assert c['freeze']['host_before_ns']>=max(r['finished_ns'] for r in fixed['records'])

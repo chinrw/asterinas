@@ -1,0 +1,19 @@
+{
+  "timer_variants": {
+    "base": {
+      "ref": "e0d8b839f95f608c8a7e9c8942e01614a3b3b260",
+      "sha256": "5d336540c27cfaed372e9d891ccd4eda4b8b587f059a5620fea4b8f1133feb4b"
+    },
+    "retirement": {
+      "ref": "64848d3e0a23ff0903f4be485fb7750c1709a575",
+      "sha256": "3bc1d7207d0fb040962a525bebefc1c14f9f053dc1d864627d085e0bd394a0ba"
+    }
+  },
+  "common": {
+    "osdk/deps/heap-allocator/src/allocator.rs": "0f1e4d395e3fe8c36f8304b891bb87799387c099e351e67fb82098a36bb13a7b",
+    "osdk/deps/heap-allocator/src/lib.rs": "29f6ba3cb3d516d20882a88c43ec8b0d6f31471be525291c1b168e2d6998e4d8",
+    "osdk/deps/heap-allocator/Cargo.toml": "50ff2790cff95e93b91d9ac61e91e89d7d8236a073dd34afd234da0b3d6a8c68",
+    "kernel/core/src/lib.rs": "12b2be29a26eb03ab60fff0f133ac0470c13a25a084c14e10a5b824a7536d136",
+    "kernel/core/src/syscall/prctl.rs": "05cc746a23aff92f5ff5f834c011c1b3a08d94ba916d92b2cebfcf83ed16b89a"
+  }
+}

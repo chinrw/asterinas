@@ -18,11 +18,16 @@
 
 #define CONTROL 0x41534250
 #define MAGIC UINT64_C(0x4153544241544348)
-#define VERSION 2
+#define VERSION 3
 #define HWORDS 32
 #define EWORDS 34
 #define CAPACITY 128
-#define BLOB_WORDS (HWORDS + EWORDS * CAPACITY)
+#define TIMER_WORDS (HWORDS + EWORDS * CAPACITY)
+#define HEAP_MAGIC UINT64_C(0x4153544845415044)
+#define HEAP_HWORDS 16
+#define HEAP_EWORDS 16
+#define HEAP_CAPACITY 128
+#define BLOB_WORDS (TIMER_WORDS + HEAP_HWORDS + HEAP_EWORDS * HEAP_CAPACITY)
 #define BLOB_BYTES (BLOB_WORDS * sizeof(uint64_t))
 
 static uint64_t info[8];
@@ -125,6 +130,10 @@ static int freeze_dump(uint64_t case_id, uint64_t *retries)
         blob[2] != HWORDS || blob[3] != EWORDS || blob[4] != CAPACITY ||
         blob[7] != case_id || blob[8] != (uint64_t)getpid() || blob[15] != 0 ||
         blob[16] != (threshold_ns ? threshold_ns : UINT64_C(5000000)))
+        return EPROTO;
+    if (blob[TIMER_WORDS] != HEAP_MAGIC || blob[TIMER_WORDS + 1] != VERSION ||
+        blob[TIMER_WORDS + 2] != HEAP_HWORDS || blob[TIMER_WORDS + 3] != HEAP_EWORDS ||
+        blob[TIMER_WORDS + 4] != HEAP_CAPACITY)
         return EPROTO;
     return write_dump(case_id);
 }

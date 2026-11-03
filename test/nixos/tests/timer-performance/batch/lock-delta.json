@@ -1,0 +1,14 @@
+{
+  "original_sha256": "e8588a8b8146949e286f1f9ae5636685b82f5ed2ec0721fe9194d226ff23b750",
+  "diagnostic_sha256": "09ed3eb00c7920af02891ba3fd64ea5366671b72fe2c4fa163d04ba6c48da8be",
+  "only_change": "Add existing spin dependency edge to osdk-heap-allocator; no package/version/checksum or other dependency changes.",
+  "spin_package": {
+    "name": "spin",
+    "version": "0.9.9",
+    "source": "registry+https://github.com/rust-lang/crates.io-index",
+    "checksum": "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e",
+    "dependencies": [
+      "lock_api"
+    ]
+  }
+}

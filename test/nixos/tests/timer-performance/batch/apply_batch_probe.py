@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
-"""Inject the same observer into either exact frozen timer source, without committing."""
+"""Inject v3 into exact frozen timer and heap sources, without committing."""
 import argparse
 import hashlib
 from pathlib import Path
@@ -17,6 +17,116 @@ def once(text, old, new):
     return text.replace(old, new, 1)
 
 
+PRISTINE = {'osdk/deps/heap-allocator/src/allocator.rs': '0f1e4d395e3fe8c36f8304b891bb87799387c099e351e67fb82098a36bb13a7b',
+ 'osdk/deps/heap-allocator/src/lib.rs': '29f6ba3cb3d516d20882a88c43ec8b0d6f31471be525291c1b168e2d6998e4d8',
+ 'osdk/deps/heap-allocator/Cargo.toml': '50ff2790cff95e93b91d9ac61e91e89d7d8236a073dd34afd234da0b3d6a8c68',
+ 'kernel/core/src/lib.rs': '12b2be29a26eb03ab60fff0f133ac0470c13a25a084c14e10a5b824a7536d136',
+ 'kernel/core/src/syscall/prctl.rs': '05cc746a23aff92f5ff5f834c011c1b3a08d94ba916d92b2cebfcf83ed16b89a'}
+
+
+def instrument_allocator(text):
+    text = once(text, """        let size_class = CommonSizeClass::from_size(SLOT_SIZE).unwrap();
+        let mut global_pool = GLOBAL_POOL.lock();
+        for _ in 0..OBJ_CACHE_EXPECTED_SIZE / SLOT_SIZE {
+            if let Ok(slot) = global_pool.alloc(size_class) {
+                self.list.push(slot);
+                self.list_size += SLOT_SIZE;
+            } else {
+                break;
+            }
+        }
+
+        if let Ok(new_slot) = global_pool.alloc(size_class) {
+            Ok(new_slot)
+        } else if let Some(popped) = self.list.pop() {
+            self.list_size -= SLOT_SIZE;
+            Ok(popped)
+        } else {
+            Err(AllocError)
+        }""", """        let size_class = CommonSizeClass::from_size(SLOT_SIZE).unwrap();
+        let mut heap_probe = crate::timer_heap_probe::Scope::begin(0, SLOT_SIZE, self.list_size);
+        if let Some(probe) = heap_probe.as_mut() {
+            probe.before_lock();
+        }
+        let mut global_pool = GLOBAL_POOL.lock();
+        if let Some(probe) = heap_probe.as_mut() {
+            probe.acquired();
+        }
+        let mut attempted = 0;
+        let result = (|| {
+            for _ in 0..OBJ_CACHE_EXPECTED_SIZE / SLOT_SIZE {
+                attempted += 1;
+                if let Ok(slot) = global_pool.alloc(size_class) {
+                    self.list.push(slot);
+                    self.list_size += SLOT_SIZE;
+                } else {
+                    break;
+                }
+            }
+
+            attempted += 1;
+            if let Ok(new_slot) = global_pool.alloc(size_class) {
+                Ok(new_slot)
+            } else if let Some(popped) = self.list.pop() {
+                self.list_size -= SLOT_SIZE;
+                Ok(popped)
+            } else {
+                Err(AllocError)
+            }
+        })();
+        if let Some(probe) = heap_probe.as_mut() {
+            probe.before_release(self.list_size, attempted, result.is_err());
+        }
+        drop(global_pool);
+        if let Some(probe) = heap_probe.as_mut() {
+            probe.released();
+        }
+        if let Some(probe) = heap_probe {
+            probe.finish();
+        }
+        result""")
+    return once(text, """        let mut global_pool = GLOBAL_POOL.lock();
+        global_pool.dealloc(slot, class)?;
+        for _ in 0..(self.list_size - OBJ_CACHE_EXPECTED_SIZE) / SLOT_SIZE {
+            let slot = self.list.pop().expect("The cache size should be ample");
+            global_pool.dealloc(slot, class)?;
+            self.list_size -= SLOT_SIZE;
+        }
+
+        Ok(())""", """        let mut heap_probe = crate::timer_heap_probe::Scope::begin(1, SLOT_SIZE, self.list_size);
+        if let Some(probe) = heap_probe.as_mut() {
+            probe.before_lock();
+        }
+        let mut global_pool = GLOBAL_POOL.lock();
+        if let Some(probe) = heap_probe.as_mut() {
+            probe.acquired();
+        }
+        let mut attempted = 0;
+        let result = (|| {
+            attempted += 1;
+            global_pool.dealloc(slot, class)?;
+            for _ in 0..(self.list_size - OBJ_CACHE_EXPECTED_SIZE) / SLOT_SIZE {
+                let slot = self.list.pop().expect("The cache size should be ample");
+                attempted += 1;
+                global_pool.dealloc(slot, class)?;
+                self.list_size -= SLOT_SIZE;
+            }
+
+            Ok(())
+        })();
+        if let Some(probe) = heap_probe.as_mut() {
+            probe.before_release(self.list_size, attempted, result.is_err());
+        }
+        drop(global_pool);
+        if let Some(probe) = heap_probe.as_mut() {
+            probe.released();
+        }
+        if let Some(probe) = heap_probe {
+            probe.finish();
+        }
+        result""")
+
+
 def apply(root):
     timer = root/'kernel/core/src/time/core/timer.rs'
     original = timer.read_bytes()
@@ -24,6 +134,21 @@ def apply(root):
     if digest not in HASHES:
         raise ValueError(f'timer source is not an exact frozen variant: {digest}')
     variant = HASHES[digest]
+    for path, expected in PRISTINE.items():
+        actual = hashlib.sha256((root/path).read_bytes()).hexdigest()
+        if actual != expected:
+            raise ValueError(f'not a pristine diagnostic input: {path}: {actual}')
+    allocator = root/'osdk/deps/heap-allocator/src/allocator.rs'
+    allocator_text = instrument_allocator(allocator.read_text())
+    allocator_lib = root/'osdk/deps/heap-allocator/src/lib.rs'
+    allocator_lib_text = once(allocator_lib.read_text(), 'mod allocator;',
+                              'pub mod timer_heap_probe;\n\nmod allocator;')
+    allocator_cargo = root/'osdk/deps/heap-allocator/Cargo.toml'
+    allocator_cargo_text = once(allocator_cargo.read_text(), 'ostd.workspace = true',
+                                'ostd.workspace = true\nspin.workspace = true')
+    allocator_module = root/'osdk/deps/heap-allocator/src/timer_heap_probe.rs'
+    if allocator_module.exists():
+        raise ValueError('heap probe already exists; restore pristine inputs first')
     text = original.decode()
     start = text.index('    pub(crate) fn process_expired_timers(&self) {')
     end = text.index('    /// Creates an [`Timer`]', start)
@@ -128,6 +253,11 @@ def apply(root):
         raise ValueError('batch probe already exists; restore plain diagnostic inputs first')
     # Resolve and validate every anchor before the first write.
     source = Path(__file__).with_name('batch_probe.rs').read_bytes()
+    allocator_source = Path(__file__).with_name('timer_heap_probe.rs').read_bytes()
+    allocator_module.write_bytes(allocator_source)
+    allocator.write_text(allocator_text)
+    allocator_lib.write_text(allocator_lib_text)
+    allocator_cargo.write_text(allocator_cargo_text)
     target.write_bytes(source)
     timer.write_text(instrumented)
     lib.write_text(lib_text)
