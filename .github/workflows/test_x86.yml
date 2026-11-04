@@ -68,6 +68,13 @@ jobs:
     container:
       image: asterinas/kernel-dev:0.19.0-20261012
       options: -v /dev:/dev --privileged
+      volumes:
+        # Map the following directories on the host into the container so that
+        # the container can remove them to save some precious disk space (~16GB),
+        # which is quite limited on free-tier Github runners.
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
     strategy:
       fail-fast: false
       matrix:
@@ -77,6 +84,9 @@ jobs:
           - { variant: 'multiboot2-smp4-rootfs', boot_protocol: 'multiboot', smp: 4, rootfs_boot: true }
           - { variant: 'pvh-smp4-rootfs', boot_protocol: 'pvh', smp: 4, rootfs_boot: true}
     steps:
+      - name: Free disk space
+        # Remove unused packages from the host to save disk space.
+        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
       - uses: actions/checkout@v4
       - name: Run boot test (${{ matrix.variant }})
         uses: ./.github/actions/test
