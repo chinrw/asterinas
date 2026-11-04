@@ -7,6 +7,7 @@ use alloc::{
     vec::Vec,
 };
 use core::{
+    ops::Bound,
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
@@ -225,12 +226,14 @@ impl TimerManager {
 
             let mut callbacks = Vec::new();
             let current_time = self.clock.read_time();
-            while let Some(((expired_time, _), timer_callback)) = timeout_list.first_key_value() {
+            let mut cursor = timeout_list.lower_bound_mut::<TimerCallbackKey>(Bound::Unbounded);
+            // Removing an entry leaves the cursor before the next remaining entry.
+            while let Some(((expired_time, _), timer_callback)) = cursor.peek_next() {
                 if timer_callback.is_cancelled() {
                     // Just ignore the cancelled callback
-                    timeout_list.pop_first();
+                    cursor.remove_next();
                 } else if *expired_time <= current_time {
-                    callbacks.push(timeout_list.pop_first().unwrap().1);
+                    callbacks.push(cursor.remove_next().unwrap().1);
                 } else {
                     break;
                 }
@@ -495,5 +498,90 @@ mod tests {
         equal_deadlines_keep_distinct_callbacks();
         periodic_callbacks_survive_rearm_and_stop_on_retirement();
         periodic_callback_can_cancel_its_new_timeout();
+    }
+
+    #[ktest]
+    fn timer_collection_preserves_deadlines_and_clock_snapshot() {
+        struct CountingClock {
+            now: AtomicU64,
+            reads: AtomicUsize,
+        }
+
+        impl Clock for CountingClock {
+            fn read_time(&self) -> Duration {
+                self.reads.fetch_add(1, Ordering::Relaxed);
+                Duration::from_nanos(self.now.load(Ordering::Relaxed))
+            }
+        }
+
+        let clock = Arc::new(CountingClock {
+            now: AtomicU64::new(0),
+            reads: AtomicUsize::new(0),
+        });
+        let manager = TimerManager::new(clock.clone());
+        manager.process_expired_timers();
+        assert_eq!(clock.reads.load(Ordering::Relaxed), 0);
+
+        let cancelled = manager.create_timer(|_| panic!("cancelled future timer fired"));
+        let cancelled_callback = {
+            let mut guard = cancelled.lock();
+            guard.set_timeout(Timeout::When(Duration::from_nanos(10)));
+            guard.inner.timer_callback.upgrade().unwrap()
+        };
+        // Model a cancel that has marked its generation and is waiting for the queue lock.
+        cancelled_callback.cancel();
+        let fired = Arc::new(AtomicUsize::new(0));
+        let observed = fired.clone();
+        let future = manager.create_timer(move |_| {
+            observed.fetch_add(1, Ordering::Relaxed);
+        });
+        future
+            .lock()
+            .set_timeout(Timeout::When(Duration::from_nanos(20)));
+        manager.process_expired_timers();
+        assert_eq!(pending(&manager), 1);
+        assert_eq!(fired.load(Ordering::Relaxed), 0);
+        assert_eq!(clock.reads.load(Ordering::Relaxed), 1);
+
+        let mut timers = Vec::new();
+        let mut due_live = 0;
+        let mut all_live = 1;
+        let mut later_entries = 0;
+        for index in 0..1024 {
+            let deadline = [5, 15, 25][index % 3];
+            let observed = fired.clone();
+            let timer = manager.create_timer(move |_| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            });
+            {
+                let mut guard = timer.lock();
+                guard.set_timeout(Timeout::When(Duration::from_nanos(deadline)));
+                if index % 7 == 0 {
+                    guard.inner.timer_callback.upgrade().unwrap().cancel();
+                } else {
+                    all_live += 1;
+                    if deadline <= 15 {
+                        due_live += 1;
+                    }
+                }
+            }
+            if deadline == 25 {
+                later_entries += 1;
+            }
+            timers.push(timer);
+        }
+        clock.now.store(15, Ordering::Relaxed);
+        manager.process_expired_timers();
+        assert_eq!(fired.load(Ordering::Relaxed), due_live);
+        assert_eq!(pending(&manager), 1 + later_entries);
+        assert_eq!(clock.reads.load(Ordering::Relaxed), 2);
+
+        clock.now.store(30, Ordering::Relaxed);
+        manager.process_expired_timers();
+        assert_eq!(fired.load(Ordering::Relaxed), all_live);
+        assert_eq!(pending(&manager), 0);
+        assert_eq!(clock.reads.load(Ordering::Relaxed), 3);
+        manager.process_expired_timers();
+        assert_eq!(clock.reads.load(Ordering::Relaxed), 3);
     }
 }
