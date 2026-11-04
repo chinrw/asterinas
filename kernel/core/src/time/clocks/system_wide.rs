@@ -10,6 +10,7 @@ use spin::Once;
 
 use crate::time::{
     self, Clock, SystemTime, system_time::START_TIME_AS_DURATION, timer::TimerManager,
+    timer_census::Kind,
 };
 
 /// The Clock that reads the jiffies, and turn the counter into `Duration`.
@@ -213,7 +214,7 @@ macro_rules! define_system_clocks {
 
 /// Define the timer managers of some system-wide clocks.
 macro_rules! define_timer_managers {
-    ($($clock_id:ident,)*) => {
+    ($($clock_id:ident => $kind:ident,)*) => {
         $(
             paste! {
                 cpu_local! {
@@ -225,7 +226,7 @@ macro_rules! define_timer_managers {
         fn _init_system_wide_timer_managers() {
             $(
                 let clock = paste! {[<$clock_id _INSTANCE>].get().unwrap().clone()};
-                let timer_manager = TimerManager::new(clock);
+                let timer_manager = TimerManager::new_with_kind(clock, Kind::$kind);
                 for cpu in ostd::cpu::all_cpus() {
                     paste! {
                         [<$clock_id _MANAGER>].get_on_cpu(cpu).call_once(|| timer_manager.clone());
@@ -253,7 +254,11 @@ define_system_clocks! {
     CLOCK_BOOTTIME          => BootTimeClock,
 }
 
-define_timer_managers![CLOCK_REALTIME, CLOCK_MONOTONIC, CLOCK_BOOTTIME,];
+define_timer_managers![
+    CLOCK_REALTIME => Realtime,
+    CLOCK_MONOTONIC => Monotonic,
+    CLOCK_BOOTTIME => Boottime,
+];
 
 /// Init the system-wide clocks.
 fn init_system_wide_clocks() {
@@ -270,7 +275,7 @@ pub(crate) static JIFFIES_TIMER_MANAGER: Once<Arc<TimerManager>> = Once::new();
 
 fn init_jiffies_clock_manager() {
     let jiffies_clock = JiffiesClock { _private: () };
-    let jiffies_timer_manager = TimerManager::new(Arc::new(jiffies_clock));
+    let jiffies_timer_manager = TimerManager::new_with_kind(Arc::new(jiffies_clock), Kind::Jiffies);
     JIFFIES_TIMER_MANAGER.call_once(|| jiffies_timer_manager);
 
     let callback = || {
@@ -311,13 +316,13 @@ pub(crate) fn init_for_ktest() {
     for cpu in ostd::cpu::all_cpus() {
         CLOCK_REALTIME_MANAGER.get_on_cpu(cpu).call_once(|| {
             let clock = RealTimeClock { _private: () };
-            TimerManager::new(Arc::new(clock))
+            TimerManager::new_with_kind(Arc::new(clock), Kind::Realtime)
         });
     }
     CLOCK_REALTIME_COARSE_INSTANCE.call_once(|| Arc::new(RealTimeCoarseClock { _private: () }));
     RealTimeCoarseClock::current_ref().call_once(|| SpinLock::new(Duration::from_secs(0)));
     JIFFIES_TIMER_MANAGER.call_once(|| {
         let clock = JiffiesClock { _private: () };
-        TimerManager::new(Arc::new(clock))
+        TimerManager::new_with_kind(Arc::new(clock), Kind::Jiffies)
     });
 }

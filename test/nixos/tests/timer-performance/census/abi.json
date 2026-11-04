@@ -1,0 +1,970 @@
+{
+  "purpose": "Temporary diagnostic census over the unchanged BTreeMap timer queue algorithm.",
+  "prctl_option": 1095975761,
+  "magic": 4707198683434603349,
+  "version": 1,
+  "word_bytes": 8,
+  "byte_order": "guest native endian; campaign uses little-endian x86_64",
+  "hwords": 16,
+  "cpus": 64,
+  "kinds": 5,
+  "fields_per_row": 128,
+  "blob_bytes": 327808,
+  "info": [
+    "magic",
+    "version",
+    "hwords",
+    "cpus",
+    "kinds",
+    "fields_per_row",
+    "tsc_freq_hz",
+    "blob_bytes"
+  ],
+  "header": [
+    "magic",
+    "version",
+    "hwords",
+    "cpus",
+    "kinds",
+    "fields_per_row",
+    "tsc_freq_hz",
+    "epoch",
+    "case",
+    "mode",
+    "start_tsc",
+    "freeze_tsc",
+    "quiescent_tsc",
+    "active",
+    "overflow_cpu",
+    "reserved"
+  ],
+  "kind_names": [
+    "realtime",
+    "monotonic",
+    "boottime",
+    "jiffies",
+    "cpu_time"
+  ],
+  "row_order": "CPU-major, then manager kind, then field index. CPU identifies execution CPU of each admitted operation, not manager ownership. CPU-time rows combine multiple independently locked managers. Never sum their occupancies and interpret that result as one queue size.",
+  "commands": {
+    "0": {
+      "name": "info",
+      "arg3": "user pointer to 8 u64 words",
+      "arg4": "buffer bytes, at least 64",
+      "return": "64; any PID may call"
+    },
+    "1": {
+      "name": "start",
+      "arg3": "positive case ID",
+      "arg4": "mode 0, 1, or 2",
+      "return": "positive epoch",
+      "ownership": "Caller PID owns the new case. Any PID may start after the previous case has stopped successfully and become quiescent."
+    },
+    "2": {
+      "name": "stop",
+      "arg3": "same case ID",
+      "arg4": "0",
+      "return": "blob_bytes on success; EBUSY requires retry of the same STOP after admission has already closed",
+      "ownership": "Current OWNER PID only"
+    },
+    "3": {
+      "name": "read",
+      "arg3": "user pointer to frozen blob",
+      "arg4": "buffer bytes, at least blob_bytes",
+      "return": "blob_bytes",
+      "ownership": "Current OWNER PID only; successful quiescent STOP required"
+    }
+  },
+  "arg5": "Must be zero for all commands.",
+  "modes": {
+    "0": "Gate off, all rows remain zero. Control header still records the case; useful for same-build observer overhead comparison. This is not a pristine-kernel comparison.",
+    "1": "Counters and histograms only. Timer hooks do not read TSC.",
+    "2": "Counters, histograms, and elapsed TSC timing. Elapsed includes IRQ, scheduler, virtual-machine, and instrumentation effects; it is not CPU time."
+  },
+  "concurrency": "Each row and per-CPU ACTIVE are cacheline aligned. Scope disables preemption, increments only its executing CPU ACTIVE, and rechecks the epoch+mode gate before writing. STOP closes the gate and returns EBUSY until all ACTIVE counts are zero. ACTIVE is never reset. START resets only counters after the previous successful quiescent STOP, advances a nonreused epoch, and opens the gate after reset. Delayed old-epoch admissions are rejected without touching rows. User buffers are accessed outside the control lock; READ allocates its buffer before locking. Queue instrumentation accumulates probe/pop/grow counters and length samples locally while the queue guard is held, records its release timestamp, and only then publishes atomic counts and timing buckets. TSC-backward counts are also local until Scope drop.",
+  "overflow_cpu": "Number of boot-configured CPUs beyond the 64 supported slots. Those CPU operations are not instrumented. A nonzero value means the census is incomplete. This is calculated by control rather than a shared hot-path RMW.",
+  "aggregation": "Add count/sum/bucket fields across rows; take max for _max fields. Histograms sample individual queues or batches, not manager populations. For one fully admitted cancellation scope: explicit+rearm+owner_drop = weak_upgrade_fail+retire_hit+retire_miss. Dispatch callback outcomes sum to due_pop only when the same dispatch scope is admitted; independently admitted nested periodic rearm/insert scopes may cross window boundaries. Periodic retirement intent equals periodic_retire_hit plus periodic_retire_miss plus periodic_weak_upgrade_fail within each fully admitted periodic cancellation Scope; these fields are explicit-source subsets of the corresponding overall cancellation fields.",
+  "fields": [
+    {
+      "index": 0,
+      "name": "dispatch_calls",
+      "meaning": "Calls admitted at process_expired_timers entry."
+    },
+    {
+      "index": 1,
+      "name": "dispatch_empty",
+      "meaning": "Dispatch calls whose queue is empty at first locked observation."
+    },
+    {
+      "index": 2,
+      "name": "dispatch_nonempty",
+      "meaning": "Dispatch calls whose queue is nonempty at first locked observation."
+    },
+    {
+      "index": 3,
+      "name": "future_break",
+      "meaning": "Dispatch loops that encounter a noncancelled minimum with a future deadline and break."
+    },
+    {
+      "index": 4,
+      "name": "min_probe",
+      "meaning": "Calls to first_key_value inside dispatch, including a final unsuccessful probe. Initial is_empty checks are not probes."
+    },
+    {
+      "index": 5,
+      "name": "insert",
+      "meaning": "Completed queue insert operations."
+    },
+    {
+      "index": 6,
+      "name": "retire_hit",
+      "meaning": "Retire remove operations that found the exact callback key."
+    },
+    {
+      "index": 7,
+      "name": "retire_miss",
+      "meaning": "Retire remove operations that did not find the exact callback key. Attempts equal retire_hit plus retire_miss."
+    },
+    {
+      "index": 8,
+      "name": "weak_upgrade_fail",
+      "meaning": "Cancel or Timer drop intents that cannot upgrade the callback Weak. These are not retire misses."
+    },
+    {
+      "index": 9,
+      "name": "cancel_explicit",
+      "meaning": "Calls to public TimerGuard.cancel, counted as method intents before Weak upgrade regardless of queue presence."
+    },
+    {
+      "index": 10,
+      "name": "cancel_rearm",
+      "meaning": "Calls to set_timeout cancellation, counted as method intents before Weak upgrade, including first arms and periodic rearms."
+    },
+    {
+      "index": 11,
+      "name": "cancel_owner_drop",
+      "meaning": "Timer destructor intents before Weak upgrade regardless of queue presence."
+    },
+    {
+      "index": 12,
+      "name": "due_pop",
+      "meaning": "Noncancelled due callbacks popped from the queue into the callback Vec."
+    },
+    {
+      "index": 13,
+      "name": "cancelled_pop",
+      "meaning": "Cancelled callbacks popped and discarded while holding the queue lock."
+    },
+    {
+      "index": 14,
+      "name": "callback_invoked",
+      "meaning": "Registered callback invocations after owner upgrade and cancellation arbitration."
+    },
+    {
+      "index": 15,
+      "name": "callback_skip_cancel",
+      "meaning": "Selected callbacks skipped after owner upgrade because their cancelled flag is set."
+    },
+    {
+      "index": 16,
+      "name": "callback_owner_gone",
+      "meaning": "Selected callbacks whose owner Weak cannot upgrade at callback invocation time."
+    },
+    {
+      "index": 17,
+      "name": "periodic_rearm",
+      "meaning": "Selected noncancelled callbacks with nonzero interval, before invoking set_timeout."
+    },
+    {
+      "index": 18,
+      "name": "queue_observations",
+      "meaning": "Individual queue length observations under the queue lock: before and after insert/remove; at dispatch entry and after nonempty collection."
+    },
+    {
+      "index": 19,
+      "name": "queue_occupancy_sum",
+      "meaning": "Sum of observed individual queue lengths. This is observation-weighted, not time-weighted and not a population sum across managers."
+    },
+    {
+      "index": 20,
+      "name": "queue_occupancy_max",
+      "meaning": "Maximum observed individual queue length; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 21,
+      "name": "batch_observations",
+      "meaning": "One selected-callback Vec length observation per admitted dispatch, including zero for empty and future-only calls."
+    },
+    {
+      "index": 22,
+      "name": "batch_size_sum",
+      "meaning": "Sum of selected-callback Vec lengths. Cancelled removals are excluded."
+    },
+    {
+      "index": 23,
+      "name": "batch_size_max",
+      "meaning": "Maximum selected-callback Vec length; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 24,
+      "name": "callback_vec_growth",
+      "meaning": "Push operations that increase the selected-callback Vec capacity while the queue lock is held."
+    },
+    {
+      "index": 25,
+      "name": "callback_vec_capacity_added",
+      "meaning": "Sum of positive selected-callback Vec capacity increments, measured in Arc slots rather than bytes."
+    },
+    {
+      "index": 26,
+      "name": "tsc_backwards",
+      "meaning": "Backward consecutive TSC reads within one timing Scope, accumulated locally and published when that Scope exits. Reversed timing pairs are excluded from elapsed statistics; any nonzero count invalidates clean timing interpretation."
+    },
+    {
+      "index": 27,
+      "name": "periodic_retire_intent",
+      "meaning": "Periodic callback calls into set_timeout cancellation. A subset of cancel_rearm, counted before callback Weak upgrade."
+    },
+    {
+      "index": 28,
+      "name": "periodic_retire_hit",
+      "meaning": "Retire hits reached from an explicitly tagged periodic rearm; a subset of retire_hit."
+    },
+    {
+      "index": 29,
+      "name": "periodic_retire_miss",
+      "meaning": "Retire misses reached from an explicitly tagged periodic rearm; a subset of retire_miss. Never inferred from total misses."
+    },
+    {
+      "index": 30,
+      "name": "periodic_weak_upgrade_fail",
+      "meaning": "Callback Weak upgrade failures reached from explicitly tagged periodic rearm cancellation; a subset of weak_upgrade_fail."
+    },
+    {
+      "index": 31,
+      "name": "reserved_31",
+      "meaning": "Always zero."
+    },
+    {
+      "index": 32,
+      "name": "queue_occupancy_bucket_0",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 1,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 33,
+      "name": "queue_occupancy_bucket_1",
+      "range_lower_inclusive": 1,
+      "range_upper_exclusive": 2,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 34,
+      "name": "queue_occupancy_bucket_2",
+      "range_lower_inclusive": 2,
+      "range_upper_exclusive": 4,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 35,
+      "name": "queue_occupancy_bucket_3",
+      "range_lower_inclusive": 4,
+      "range_upper_exclusive": 16,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 36,
+      "name": "queue_occupancy_bucket_4",
+      "range_lower_inclusive": 16,
+      "range_upper_exclusive": 64,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 37,
+      "name": "queue_occupancy_bucket_5",
+      "range_lower_inclusive": 64,
+      "range_upper_exclusive": 256,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 38,
+      "name": "queue_occupancy_bucket_6",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 39,
+      "name": "queue_occupancy_bucket_7",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": null,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 40,
+      "name": "batch_size_bucket_0",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 1,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 41,
+      "name": "batch_size_bucket_1",
+      "range_lower_inclusive": 1,
+      "range_upper_exclusive": 2,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 42,
+      "name": "batch_size_bucket_2",
+      "range_lower_inclusive": 2,
+      "range_upper_exclusive": 4,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 43,
+      "name": "batch_size_bucket_3",
+      "range_lower_inclusive": 4,
+      "range_upper_exclusive": 16,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 44,
+      "name": "batch_size_bucket_4",
+      "range_lower_inclusive": 16,
+      "range_upper_exclusive": 64,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 45,
+      "name": "batch_size_bucket_5",
+      "range_lower_inclusive": 64,
+      "range_upper_exclusive": 256,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 46,
+      "name": "batch_size_bucket_6",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 47,
+      "name": "batch_size_bucket_7",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": null,
+      "meaning": "One count for each corresponding individual observation."
+    },
+    {
+      "index": 48,
+      "name": "insert_tsc_sum",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "From before key construction through queue guard release, ending before post-unlock counter publication. Replaced entry release remains at function exit."
+    },
+    {
+      "index": 49,
+      "name": "insert_tsc_max",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "Maximum valid elapsed sample; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 50,
+      "name": "insert_tsc_bucket_0",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 256,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 51,
+      "name": "insert_tsc_bucket_1",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 52,
+      "name": "insert_tsc_bucket_2",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": 4096,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 53,
+      "name": "insert_tsc_bucket_3",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 4096,
+      "range_upper_exclusive": 16384,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 54,
+      "name": "insert_tsc_bucket_4",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 16384,
+      "range_upper_exclusive": 65536,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 55,
+      "name": "insert_tsc_bucket_5",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 65536,
+      "range_upper_exclusive": 262144,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 56,
+      "name": "insert_tsc_bucket_6",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 262144,
+      "range_upper_exclusive": 1048576,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 57,
+      "name": "insert_tsc_bucket_7",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1048576,
+      "range_upper_exclusive": null,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 58,
+      "name": "retire_hit_tsc_sum",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "From before cancellation flag publication through queue removal and retired reference release after queue guard release, ending before post-unlock counter publication; classified by actual queue hit or miss."
+    },
+    {
+      "index": 59,
+      "name": "retire_hit_tsc_max",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "Maximum valid elapsed sample; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 60,
+      "name": "retire_hit_tsc_bucket_0",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 256,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 61,
+      "name": "retire_hit_tsc_bucket_1",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 62,
+      "name": "retire_hit_tsc_bucket_2",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": 4096,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 63,
+      "name": "retire_hit_tsc_bucket_3",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 4096,
+      "range_upper_exclusive": 16384,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 64,
+      "name": "retire_hit_tsc_bucket_4",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 16384,
+      "range_upper_exclusive": 65536,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 65,
+      "name": "retire_hit_tsc_bucket_5",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 65536,
+      "range_upper_exclusive": 262144,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 66,
+      "name": "retire_hit_tsc_bucket_6",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 262144,
+      "range_upper_exclusive": 1048576,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 67,
+      "name": "retire_hit_tsc_bucket_7",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1048576,
+      "range_upper_exclusive": null,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 68,
+      "name": "retire_miss_tsc_sum",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "From before cancellation flag publication through queue removal and retired reference release after queue guard release, ending before post-unlock counter publication; classified by actual queue hit or miss."
+    },
+    {
+      "index": 69,
+      "name": "retire_miss_tsc_max",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "Maximum valid elapsed sample; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 70,
+      "name": "retire_miss_tsc_bucket_0",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 256,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 71,
+      "name": "retire_miss_tsc_bucket_1",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 72,
+      "name": "retire_miss_tsc_bucket_2",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": 4096,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 73,
+      "name": "retire_miss_tsc_bucket_3",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 4096,
+      "range_upper_exclusive": 16384,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 74,
+      "name": "retire_miss_tsc_bucket_4",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 16384,
+      "range_upper_exclusive": 65536,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 75,
+      "name": "retire_miss_tsc_bucket_5",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 65536,
+      "range_upper_exclusive": 262144,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 76,
+      "name": "retire_miss_tsc_bucket_6",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 262144,
+      "range_upper_exclusive": 1048576,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 77,
+      "name": "retire_miss_tsc_bucket_7",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1048576,
+      "range_upper_exclusive": null,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 78,
+      "name": "dispatch_total_tsc_sum",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "From admitted dispatch entry through callback iteration completion, including post-unlock collection counter publication and callback timing publication. Empty calls end immediately after queue guard release, before counter publication."
+    },
+    {
+      "index": 79,
+      "name": "dispatch_total_tsc_max",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "Maximum valid elapsed sample; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 80,
+      "name": "dispatch_total_tsc_bucket_0",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 256,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 81,
+      "name": "dispatch_total_tsc_bucket_1",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 82,
+      "name": "dispatch_total_tsc_bucket_2",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": 4096,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 83,
+      "name": "dispatch_total_tsc_bucket_3",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 4096,
+      "range_upper_exclusive": 16384,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 84,
+      "name": "dispatch_total_tsc_bucket_4",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 16384,
+      "range_upper_exclusive": 65536,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 85,
+      "name": "dispatch_total_tsc_bucket_5",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 65536,
+      "range_upper_exclusive": 262144,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 86,
+      "name": "dispatch_total_tsc_bucket_6",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 262144,
+      "range_upper_exclusive": 1048576,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 87,
+      "name": "dispatch_total_tsc_bucket_7",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1048576,
+      "range_upper_exclusive": null,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 88,
+      "name": "collection_tsc_sum",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "From immediately after queue lock acquisition through local collection and length observation, ending immediately before queue guard release. Counter publication occurs after unlock."
+    },
+    {
+      "index": 89,
+      "name": "collection_tsc_max",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "Maximum valid elapsed sample; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 90,
+      "name": "collection_tsc_bucket_0",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 256,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 91,
+      "name": "collection_tsc_bucket_1",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 92,
+      "name": "collection_tsc_bucket_2",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": 4096,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 93,
+      "name": "collection_tsc_bucket_3",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 4096,
+      "range_upper_exclusive": 16384,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 94,
+      "name": "collection_tsc_bucket_4",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 16384,
+      "range_upper_exclusive": 65536,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 95,
+      "name": "collection_tsc_bucket_5",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 65536,
+      "range_upper_exclusive": 262144,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 96,
+      "name": "collection_tsc_bucket_6",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 262144,
+      "range_upper_exclusive": 1048576,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 97,
+      "name": "collection_tsc_bucket_7",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1048576,
+      "range_upper_exclusive": null,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 98,
+      "name": "callback_tsc_sum",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "One selected callback call, including owner upgrade, Timer lock wait, cancellation arbitration, periodic rearm, registered callback execution, and local Timer reference release; excludes selected callback Arc release in the caller."
+    },
+    {
+      "index": 99,
+      "name": "callback_tsc_max",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "Maximum valid elapsed sample; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 100,
+      "name": "callback_tsc_bucket_0",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 256,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 101,
+      "name": "callback_tsc_bucket_1",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 102,
+      "name": "callback_tsc_bucket_2",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": 4096,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 103,
+      "name": "callback_tsc_bucket_3",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 4096,
+      "range_upper_exclusive": 16384,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 104,
+      "name": "callback_tsc_bucket_4",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 16384,
+      "range_upper_exclusive": 65536,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 105,
+      "name": "callback_tsc_bucket_5",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 65536,
+      "range_upper_exclusive": 262144,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 106,
+      "name": "callback_tsc_bucket_6",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 262144,
+      "range_upper_exclusive": 1048576,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 107,
+      "name": "callback_tsc_bucket_7",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1048576,
+      "range_upper_exclusive": null,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 108,
+      "name": "queue_wait_tsc_sum",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "From immediately before disable_irq().lock() until immediately after lock acquisition. Combines insert, retire, and dispatch acquisitions; excludes all counter publication."
+    },
+    {
+      "index": 109,
+      "name": "queue_wait_tsc_max",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "Maximum valid elapsed sample; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 110,
+      "name": "queue_wait_tsc_bucket_0",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 256,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 111,
+      "name": "queue_wait_tsc_bucket_1",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 112,
+      "name": "queue_wait_tsc_bucket_2",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": 4096,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 113,
+      "name": "queue_wait_tsc_bucket_3",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 4096,
+      "range_upper_exclusive": 16384,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 114,
+      "name": "queue_wait_tsc_bucket_4",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 16384,
+      "range_upper_exclusive": 65536,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 115,
+      "name": "queue_wait_tsc_bucket_5",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 65536,
+      "range_upper_exclusive": 262144,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 116,
+      "name": "queue_wait_tsc_bucket_6",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 262144,
+      "range_upper_exclusive": 1048576,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 117,
+      "name": "queue_wait_tsc_bucket_7",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1048576,
+      "range_upper_exclusive": null,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 118,
+      "name": "queue_hold_tsc_sum",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "From immediately after queue lock acquisition until immediately after explicit guard release, including unlock and the guard IRQ-state restoration. A newly enabled interrupt can run before the ending TSC read. Queue observations, probe/pop/grow counts, and timing statistics are published only after this endpoint. This is elapsed lock-region timing, not an exact hardware lock-held or CPU-time measurement."
+    },
+    {
+      "index": 119,
+      "name": "queue_hold_tsc_max",
+      "unit": "elapsed_tsc_ticks",
+      "meaning": "Maximum valid elapsed sample; aggregate across rows with max rather than sum."
+    },
+    {
+      "index": 120,
+      "name": "queue_hold_tsc_bucket_0",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 0,
+      "range_upper_exclusive": 256,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 121,
+      "name": "queue_hold_tsc_bucket_1",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 256,
+      "range_upper_exclusive": 1024,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 122,
+      "name": "queue_hold_tsc_bucket_2",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1024,
+      "range_upper_exclusive": 4096,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 123,
+      "name": "queue_hold_tsc_bucket_3",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 4096,
+      "range_upper_exclusive": 16384,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 124,
+      "name": "queue_hold_tsc_bucket_4",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 16384,
+      "range_upper_exclusive": 65536,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 125,
+      "name": "queue_hold_tsc_bucket_5",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 65536,
+      "range_upper_exclusive": 262144,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 126,
+      "name": "queue_hold_tsc_bucket_6",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 262144,
+      "range_upper_exclusive": 1048576,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    },
+    {
+      "index": 127,
+      "name": "queue_hold_tsc_bucket_7",
+      "unit": "elapsed_tsc_ticks",
+      "range_lower_inclusive": 1048576,
+      "range_upper_exclusive": null,
+      "meaning": "Valid elapsed samples in this range. The sum of this timing family buckets is its sample count."
+    }
+  ],
+  "authorization": "INFO is available to any PID. START, STOP, and READ require the existing LSM capable hook to grant CAP_SYS_ADMIN in the initial user namespace, before census control state is accessed. STOP and READ additionally require the current OWNER PID. An authorized OWNER must finish its case; running cases are not automatically taken over."
+}

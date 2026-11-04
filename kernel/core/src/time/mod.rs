@@ -17,6 +17,7 @@ mod core;
 pub(crate) mod cpu_time_stats;
 mod softirq;
 mod system_time;
+pub(crate) mod timer_census;
 pub(crate) mod timerfd;
 pub(crate) mod wait;
 

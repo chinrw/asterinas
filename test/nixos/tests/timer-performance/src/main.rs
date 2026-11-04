@@ -290,3 +290,273 @@ fn http_history(shell: &mut Session) -> Result<(), Error> {
     fs::rename(dir.join("complete.tmp"),dir.join("complete")).unwrap();
     notingo_host_sample(shell)
 }
+
+
+fn census_control(action: &str, case_id: u64, mode: u64) -> Result<(), Error> {
+    let script = env::var("CENSUS_CONTROL_SCRIPT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| env::current_dir().unwrap().join("census/control.py"));
+    let status = Command::new("python3")
+        .arg(script)
+        .args([action, &case_id.to_string(), &mode.to_string()])
+        .status()
+        .map_err(|error| Error::Pty(error.into()))?;
+    if !status.success() {
+        return Err(Error::UnexpectedOutput {
+            expected: "validated census control reply".into(),
+            got: format!("{action}/{case_id}/{mode}: {status}"),
+        });
+    }
+    Ok(())
+}
+
+fn census_redis(case_id: u64) -> Result<(), Error> {
+    let script = env::var("CENSUS_REDIS_SCRIPT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| env::current_dir().unwrap().join("census/redis_client.py"));
+    let before = qemu_ticks();
+    let started = Instant::now();
+    let status = Command::new("python3")
+        .arg(script)
+        .arg(case_id.to_string())
+        .status()
+        .map_err(|error| Error::Pty(error.into()))?;
+    let directory = PathBuf::from(env::var("PERF_SAMPLE_DIR").unwrap());
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(directory.join("phases.jsonl"))
+        .map_err(|error| Error::Pty(error.into()))?;
+    writeln!(file, "{{\"name\":\"census_redis_{case_id}\",\"host_elapsed_ns\":{},\"qemu_cpu_ticks\":{},\"passed\":{}}}", started.elapsed().as_nanos(), qemu_ticks() - before, status.success())
+        .map_err(|error| Error::Pty(error.into()))?;
+    if !status.success() {
+        return Err(Error::UnexpectedOutput {
+            expected: "validated census Redis workload".into(),
+            got: status.to_string(),
+        });
+    }
+    Ok(())
+}
+
+#[nixos_test]
+fn queue_census(shell: &mut Session) -> Result<(), Error> {
+    let directory = PathBuf::from(env::var("PERF_SAMPLE_DIR").unwrap());
+    let plain = env::var("CENSUS_PLAIN").unwrap_or_default() == "1";
+    let cpu = env::var("SMP").unwrap();
+    assert!(matches!(cpu.as_str(), "1" | "4"));
+    let helper =
+        env::var("CENSUS_HELPER_PATH").unwrap_or_else(|_| "/etc/timer-perf/timer-census".into());
+    let workload = env::var("CENSUS_WORKLOAD_PATH")
+        .unwrap_or_else(|_| "/etc/timer-perf/census-workload".into());
+    let exporter = env::var("CENSUS_EXPORT_PATH")
+        .unwrap_or_else(|_| "/etc/timer-perf/census-export.py".into());
+    assert!(matches!(
+        helper.as_str(),
+        "/etc/timer-perf/timer-census" | "/opt/timer-census/timer-census"
+    ));
+    assert!(matches!(
+        workload.as_str(),
+        "/etc/timer-perf/census-workload" | "/opt/timer-census/census-workload"
+    ));
+    assert!(matches!(
+        exporter.as_str(),
+        "/etc/timer-perf/census-export.py" | "/opt/timer-census/export.py"
+    ));
+    let timer_hash = env::var("PERF_HELPER_SHA256").unwrap();
+    let workload_hash = env::var("CENSUS_WORKLOAD_SHA256").unwrap();
+    let go_hash = env::var("PROBE_HELPER_SHA256").unwrap();
+    phase(
+        shell,
+        "census_identity",
+        &format!(
+            "echo CENSUS_KERNEL $(uname -srm) && ulimit -n 8192 && test $(nproc) -eq {cpu} && test $(sha256sum /etc/timer-perf/timer-perf | cut -d ' ' -f 1) = {timer_hash} && test $(sha256sum {workload} | cut -d ' ' -f 1) = {workload_hash} && test $(sha256sum /etc/notingo/minimal | cut -d ' ' -f 1) = {go_hash} && echo CENSUS_IDENTITY_OK"
+        ),
+        r"(?m)^CENSUS_IDENTITY_OK\s*$",
+    )?;
+    phase(
+        shell,
+        "census_logging",
+        "systemctl log-level crit && test $(systemctl log-level) = crit && echo CENSUS_LOGGING_OK",
+        r"(?m)^CENSUS_LOGGING_OK\s*$",
+    )?;
+    if !plain {
+        let helper_hash = env::var("CENSUS_HELPER_SHA256").unwrap();
+        phase(
+            shell,
+            "census_daemon",
+            &format!(
+                "test $(sha256sum {helper} | cut -d ' ' -f 1) = {helper_hash} && {{ {helper} >/var/tmp/timer-census-daemon.log 2>&1 & echo $! >/var/tmp/timer-census-daemon.pid; for i in $(seq 1 100); do grep -q '^TIMER_CENSUS_READY ' /var/tmp/timer-census-daemon.log && break; sleep 0.05; done; kill -0 $(cat /var/tmp/timer-census-daemon.pid) && cat /var/tmp/timer-census-daemon.log; }}"
+            ),
+            r"(?m)^TIMER_CENSUS_READY ",
+        )?;
+    }
+    phase(
+        shell,
+        "census_services_start",
+        "python3 /etc/timer-perf/setup.py start && cat /var/tmp/timer-perf/redis.log && cat /var/tmp/timer-perf/nginx-error.log && echo CENSUS_SERVICES_READY",
+        r"(?m)^CENSUS_SERVICES_READY\s*$",
+    )?;
+    client("ready", "none")?;
+    phase(shell, "census_network", "ip -j addr && echo CENSUS_NETWORK_READY", r"(?m)^CENSUS_NETWORK_READY\s*$")?;
+    if !plain { census_control("ping", 0, 0)?; }
+    census_control("plan", 0, 0)?;
+    let plan = fs::read_to_string(directory.join("census-plan.tsv"))
+        .map_err(|error| Error::Pty(error.into()))?;
+    let go_runs = env::var("CENSUS_GO_RUNS")
+        .unwrap_or_else(|_| "5".into())
+        .parse::<usize>()
+        .unwrap();
+    assert!((1..=100).contains(&go_runs));
+    for line in plan.lines() {
+        let fields: Vec<_> = line.split('\t').collect();
+        assert_eq!(fields.len(), 3);
+        let case_id = fields[0].parse::<u64>().unwrap();
+        let mode = fields[1].parse::<u64>().unwrap();
+        let case = fields[2];
+        let name = format!("census_{case_id}_m{mode}_{case}");
+        let churn_key = format!("churn_census_{case_id}");
+        if case == "redis_churn" {
+            phase(
+                shell,
+                &format!("{name}_load_start"),
+                &format!(
+                    "/etc/timer-perf/timer-perf load churn 5000 120 >/var/tmp/timer-load-{churn_key}.log 2>&1 & echo $! >/var/tmp/timer-load-{churn_key}.pid; for i in $(seq 1 100); do grep -q '^PERF_LOAD_STARTED ' /var/tmp/timer-load-{churn_key}.log && break; sleep 0.05; done; kill -0 $(cat /var/tmp/timer-load-{churn_key}.pid) && cat /var/tmp/timer-load-{churn_key}.log && /etc/timer-perf/timer-perf stamp {churn_key}_begin >/var/tmp/{churn_key}.begin && cat /var/tmp/{churn_key}.begin"
+                ),
+                r"(?m)^PERF_LOAD_STARTED \{",
+            )?;
+        }
+        if !plain {
+            census_control("start", case_id, mode)?;
+        }
+        let window_ticks = qemu_ticks();
+        let window_started = Instant::now();
+        let result = (|| -> Result<(), Error> {
+            match case {
+                "idle" | "future" | "periodic" => phase(
+                    shell,
+                    &name,
+                    &format!("{workload} {case}"),
+                    r"(?m)^CENSUS_WORKLOAD \{",
+                )?,
+                "go" => {
+                    phase(
+                        shell,
+                        &format!("{name}_begin"),
+                        "echo CENSUS_GO_BEGIN",
+                        r"(?m)^CENSUS_GO_BEGIN\s*$",
+                    )?;
+                    for repetition in 0..go_runs {
+                        let marker = PathBuf::from(env::var("PROBE_HOST_MARKER").unwrap());
+                        if marker.exists() {
+                            fs::remove_file(&marker).map_err(|error| Error::Pty(error.into()))?;
+                        }
+                        let result = notingo_host_sample(shell);
+                        if marker.exists() {
+                            fs::copy(
+                                marker,
+                                directory.join(format!("census-go-{case_id}-{repetition}.json")),
+                            )
+                            .map_err(|error| Error::Pty(error.into()))?;
+                        }
+                        result?;
+                    }
+                    phase(
+                        shell,
+                        &format!("{name}_end"),
+                        "echo CENSUS_GO_END",
+                        r"(?m)^CENSUS_GO_END\s*$",
+                    )?;
+                }
+                "redis" | "redis_churn" => {
+                    phase(
+                        shell,
+                        &format!("{name}_begin"),
+                        "echo CENSUS_REDIS_BEGIN",
+                        r"(?m)^CENSUS_REDIS_BEGIN\s*$",
+                    )?;
+                    census_redis(case_id)?;
+                    phase(
+                        shell,
+                        &format!("{name}_end"),
+                        "echo CENSUS_REDIS_END",
+                        r"(?m)^CENSUS_REDIS_END\s*$",
+                    )?;
+                }
+                _ => {
+                    let micro: Vec<_> = case.split('_').collect();
+                    assert_eq!(micro.len(), 3);
+                    assert_eq!(micro[0], "micro");
+                    assert!(matches!(micro[1], "1" | "64" | "4096"));
+                    assert!(matches!(micro[2], "cancel" | "drop" | "rearm" | "expiry"));
+                    phase(
+                        shell,
+                        &name,
+                        &format!("/etc/timer-perf/timer-perf micro {} {}", micro[1], micro[2]),
+                        r"(?m)^PERF_MICRO \{",
+                    )?;
+                }
+            }
+            Ok(())
+        })();
+        let window_elapsed_ns = window_started.elapsed().as_nanos();
+        let window_cpu_ticks = if result.is_ok() {
+            (qemu_ticks() - window_ticks).to_string()
+        } else {
+            "null".into()
+        };
+        // FREEZE runs after workload errors too, unless the watchdog stopped the VM.
+        let freeze = if plain {
+            Ok(())
+        } else {
+            census_control("freeze", case_id, mode)
+        };
+        let mut windows = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(directory.join("census-windows.jsonl"))
+            .map_err(|error| Error::Pty(error.into()))?;
+        writeln!(windows, "{{\"case_id\":{case_id},\"mode\":{mode},\"workload\":\"{case}\",\"plain\":{plain},\"host_elapsed_ns\":{window_elapsed_ns},\"qemu_cpu_ticks\":{window_cpu_ticks},\"workload_passed\":{},\"freeze_passed\":{}}}", result.is_ok(), freeze.is_ok())
+            .map_err(|error| Error::Pty(error.into()))?;
+        if case == "redis_churn" {
+            let stopped = phase(
+                shell,
+                &format!("{name}_load_stop"),
+                &format!(
+                    "/etc/timer-perf/timer-perf stamp {churn_key}_end >/var/tmp/{churn_key}.end && kill -TERM $(cat /var/tmp/timer-load-{churn_key}.pid) && wait $(cat /var/tmp/timer-load-{churn_key}.pid) && cat /var/tmp/timer-load-{churn_key}.log && python3 /etc/timer-perf/loadcheck.py {churn_key}"
+                ),
+                r"(?m)^PERF_LOAD_VALIDATED \{",
+            );
+            result?;
+            freeze?;
+            stopped?;
+        } else {
+            result?;
+            freeze?;
+        }
+    }
+    phase(
+        shell,
+        "census_services_stop",
+        "python3 /etc/timer-perf/setup.py stop",
+        r"(?m)^PERF_SERVICES_STOPPED\s*$",
+    )?;
+    if !plain {
+        phase(
+            shell,
+            "census_export",
+            &format!("python3 {exporter}"),
+            r"(?m)^CENSUS_EXPORT_DONE\s*$",
+        )?;
+        phase(
+            shell,
+            "census_daemon_stop",
+            "kill -TERM $(cat /var/tmp/timer-census-daemon.pid) && wait $(cat /var/tmp/timer-census-daemon.pid); echo CENSUS_DAEMON_STOPPED",
+            r"(?m)^CENSUS_DAEMON_STOPPED\s*$",
+        )?;
+    }
+    fs::write(directory.join("complete.tmp"), "complete\n")
+        .map_err(|error| Error::Pty(error.into()))?;
+    fs::rename(directory.join("complete.tmp"), directory.join("complete"))
+        .map_err(|error| Error::Pty(error.into()))?;
+    Ok(())
+}

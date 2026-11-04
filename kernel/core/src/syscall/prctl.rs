@@ -6,10 +6,12 @@ use super::SyscallReturn;
 use crate::{
     prelude::*,
     process::{
+        UserNamespace,
         credentials::{SecureBits, capabilities::CapSet},
         posix_thread::{ContextPthreadAdminApi, ThreadName},
         signal::sig_num::SigNum,
     },
+    security::lsm::hooks as lsm_hooks,
 };
 
 pub(super) fn sys_prctl(
@@ -20,6 +22,17 @@ pub(super) fn sys_prctl(
     arg5: u64,
     ctx: &Context,
 ) -> Result<SyscallReturn> {
+    if option == crate::time::timer_census::CONTROL {
+        if matches!(arg2, 1..=3) {
+            lsm_hooks::on_capable(lsm_hooks::CapableContext::new(
+                UserNamespace::get_init_singleton().as_ref(),
+                ctx.posix_thread,
+                CapSet::SYS_ADMIN,
+            ))?;
+        }
+        return crate::time::timer_census::control(arg2, arg3, arg4, arg5, ctx)
+            .map(SyscallReturn::Return);
+    }
     let prctl_cmd = PrctlCmd::from_args(option, arg2, arg3, arg4, arg5)?;
     debug!("prctl_cmd = {:x?}", prctl_cmd);
 

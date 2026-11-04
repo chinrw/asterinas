@@ -14,6 +14,7 @@ use core::{
 use ostd::sync::{LocalIrqDisabled, SpinLock, SpinLockGuard};
 
 use super::Clock;
+use crate::time::timer_census::{Kind, Reason, Scope, Timing};
 
 /// A timeout, represented in one of the two ways.
 #[derive(Clone, Debug)]
@@ -62,6 +63,10 @@ impl TimerGuard<'_> {
     /// when reaching timeout. If the timer has a valid interval, this timer
     /// will be set again with the interval when reaching timeout.
     pub(crate) fn set_timeout(&mut self, timeout: Timeout) {
+        self.set_timeout_with_reason(timeout, Reason::Rearm);
+    }
+
+    fn set_timeout_with_reason(&mut self, timeout: Timeout, reason: Reason) {
         let expired_time = match timeout {
             Timeout::After(timeout) => {
                 let now = self.timer.timer_manager.clock.read_time();
@@ -73,7 +78,7 @@ impl TimerGuard<'_> {
         let timer_weak = Arc::downgrade(self.timer);
         let new_timer_callback = Arc::new(TimerCallback::new(expired_time, timer_weak));
 
-        self.cancel();
+        self.cancel_with_reason(reason);
 
         self.inner.timer_callback = Arc::downgrade(&new_timer_callback);
         self.timer.timer_manager.insert(new_timer_callback);
@@ -83,8 +88,21 @@ impl TimerGuard<'_> {
     ///
     /// Once cancelled, the current `TimerCallback` will not be triggered again.
     pub(crate) fn cancel(&self) {
+        self.cancel_with_reason(Reason::Explicit);
+    }
+
+    fn cancel_with_reason(&self, reason: Reason) {
+        let census = Scope::new(self.timer.timer_manager.kind);
+        census.reason(reason);
         if let Some(timer_callback) = self.inner.timer_callback.upgrade() {
-            self.timer.timer_manager.retire(&timer_callback);
+            self.timer
+                .timer_manager
+                .retire(&timer_callback, &census, reason);
+        } else {
+            census.add(8, 1);
+            if matches!(reason, Reason::Periodic) {
+                census.add(30, 1);
+            }
         }
     }
 
@@ -150,8 +168,13 @@ impl Timer {
 
 impl Drop for Timer {
     fn drop(&mut self) {
+        let census = Scope::new(self.timer_manager.kind);
+        census.reason(Reason::OwnerDrop);
         if let Some(timer_callback) = self.inner.get_mut().timer_callback.upgrade() {
-            self.timer_manager.retire(&timer_callback);
+            self.timer_manager
+                .retire(&timer_callback, &census, Reason::OwnerDrop);
+        } else {
+            census.add(8, 1);
         }
     }
 }
@@ -162,6 +185,7 @@ impl Drop for Timer {
 /// These created `Timer`s will hold an `Arc` pointer to this manager, hence this manager
 /// will be actually dropped after all the created timers have been dropped.
 pub(crate) struct TimerManager {
+    kind: Kind,
     clock: Arc<dyn Clock>,
     timer_callbacks: SpinLock<BTreeMap<TimerCallbackKey, Arc<TimerCallback>>>,
 }
@@ -169,7 +193,12 @@ pub(crate) struct TimerManager {
 impl TimerManager {
     /// Creates a `TimerManager` instance from a clock.
     pub(crate) fn new(clock: Arc<dyn Clock>) -> Arc<Self> {
+        Self::new_with_kind(clock, Kind::CpuTime)
+    }
+
+    pub(crate) fn new_with_kind(clock: Arc<dyn Clock>, kind: Kind) -> Arc<Self> {
         Arc::new(Self {
+            kind,
             clock,
             timer_callbacks: SpinLock::new(BTreeMap::new()),
         })
@@ -192,55 +221,145 @@ impl TimerManager {
     }
 
     fn insert(&self, timer_callback: Arc<TimerCallback>) {
+        let census = Scope::new(self.kind);
+        let start = census.timestamp();
         let key = timer_callback.key();
-        let replaced = self
-            .timer_callbacks
-            .disable_irq()
-            .lock()
-            .insert(key, timer_callback);
+        let wait = census.timestamp();
+        let mut queue = self.timer_callbacks.disable_irq().lock();
+        let acquired = census.timestamp();
+        let before = queue.len();
+        let replaced = queue.insert(key, timer_callback);
+        let after = queue.len();
+        drop(queue);
+        let released = census.timestamp();
         debug_assert!(replaced.is_none());
+
+        census.add(5, 1);
+        census.occupancy(before);
+        census.occupancy(after);
+        census.elapsed_between(Timing::QueueWait, wait, acquired);
+        census.elapsed_between(Timing::QueueHold, acquired, released);
+        census.elapsed_between(Timing::Insert, start, released);
     }
 
-    fn retire(&self, timer_callback: &Arc<TimerCallback>) {
+    fn retire(&self, timer_callback: &Arc<TimerCallback>, census: &Scope, reason: Reason) {
+        let start = census.timestamp();
         // Preserve cancellation for callbacks already selected by a dispatcher.
         timer_callback.cancel();
-        let retired = self
-            .timer_callbacks
-            .disable_irq()
-            .lock()
-            .remove(&timer_callback.key());
+        let wait = census.timestamp();
+        let mut queue = self.timer_callbacks.disable_irq().lock();
+        let acquired = census.timestamp();
+        let before = queue.len();
+        let retired = queue.remove(&timer_callback.key());
+        let after = queue.len();
+        drop(queue);
+        let released = census.timestamp();
+        let hit = retired.is_some();
         // Release the callback after the queue guard, including when its owner is being dropped.
         drop(retired);
+        let retired_end = census.timestamp();
+
+        let timing = if hit {
+            census.add(6, 1);
+            if matches!(reason, Reason::Periodic) {
+                census.add(28, 1);
+            }
+            Timing::RetireHit
+        } else {
+            census.add(7, 1);
+            if matches!(reason, Reason::Periodic) {
+                census.add(29, 1);
+            }
+            Timing::RetireMiss
+        };
+        census.occupancy(before);
+        census.occupancy(after);
+        census.elapsed_between(Timing::QueueWait, wait, acquired);
+        census.elapsed_between(Timing::QueueHold, acquired, released);
+        census.elapsed_between(timing, start, retired_end);
     }
 
     /// Checks and processes the managed timers.
     ///
     /// If any of the timers have timed out, call the corresponding callback functions.
     pub(crate) fn process_expired_timers(&self) {
-        let callbacks = {
-            let mut timeout_list = self.timer_callbacks.disable_irq().lock();
-            if timeout_list.is_empty() {
-                return;
-            }
+        let census = Scope::new(self.kind);
+        let start = census.timestamp();
+        census.add(0, 1);
+        let wait = census.timestamp();
+        let mut timeout_list = self.timer_callbacks.disable_irq().lock();
+        let acquired = census.timestamp();
+        let before = timeout_list.len();
+        if timeout_list.is_empty() {
+            let collected = census.timestamp();
+            drop(timeout_list);
+            let released = census.timestamp();
+            census.add(1, 1);
+            census.occupancy(before);
+            census.batch(0);
+            census.elapsed_between(Timing::QueueWait, wait, acquired);
+            census.elapsed_between(Timing::QueueHold, acquired, released);
+            census.elapsed_between(Timing::Collection, acquired, collected);
+            census.elapsed_between(Timing::Dispatch, start, released);
+            return;
+        }
 
-            let mut callbacks = Vec::new();
-            let current_time = self.clock.read_time();
-            while let Some(((expired_time, _), timer_callback)) = timeout_list.first_key_value() {
-                if timer_callback.is_cancelled() {
-                    // Just ignore the cancelled callback
-                    timeout_list.pop_first();
-                } else if *expired_time <= current_time {
-                    callbacks.push(timeout_list.pop_first().unwrap().1);
-                } else {
-                    break;
+        // Aggregate locally so publishing counters does not extend the queue lock interval.
+        let mut probes = 0;
+        let mut cancelled = 0;
+        let mut due = 0;
+        let mut future = 0;
+        let mut growths = 0;
+        let mut capacity_added = 0;
+        let mut callbacks = Vec::new();
+        let current_time = self.clock.read_time();
+        loop {
+            probes += 1;
+            let Some(((expired_time, _), timer_callback)) = timeout_list.first_key_value() else {
+                break;
+            };
+            if timer_callback.is_cancelled() {
+                // Keep discarded callback references inside the original queue guard.
+                timeout_list.pop_first();
+                cancelled += 1;
+            } else if *expired_time <= current_time {
+                let capacity = callbacks.capacity();
+                callbacks.push(timeout_list.pop_first().unwrap().1);
+                due += 1;
+                if callbacks.capacity() != capacity {
+                    growths += 1;
+                    capacity_added += (callbacks.capacity() - capacity) as u64;
                 }
+            } else {
+                future = 1;
+                break;
             }
-            callbacks
-        };
+        }
+        let after = timeout_list.len();
+        let collected = census.timestamp();
+        drop(timeout_list);
+        let released = census.timestamp();
+
+        census.add(2, 1);
+        census.add(3, future);
+        census.add(4, probes);
+        census.add(12, due);
+        census.add(13, cancelled);
+        census.add(24, growths);
+        census.add(25, capacity_added);
+        census.occupancy(before);
+        census.occupancy(after);
+        census.batch(callbacks.len());
+        census.elapsed_between(Timing::QueueWait, wait, acquired);
+        census.elapsed_between(Timing::QueueHold, acquired, released);
+        census.elapsed_between(Timing::Collection, acquired, collected);
 
         for callback in callbacks {
-            callback.call();
+            let callback_start = census.timestamp();
+            callback.call(&census);
+            census.elapsed(Timing::Callback, callback_start);
         }
+        census.elapsed(Timing::Dispatch, start);
     }
 
     /// Creates an [`Timer`], which will be managed by this `TimerManager`.
@@ -287,8 +406,9 @@ impl TimerCallback {
         (self.expired_time, Arc::as_ptr(self) as usize)
     }
 
-    fn call(&self) {
+    fn call(&self, census: &Scope) {
         let Some(timer) = self.timer.upgrade() else {
+            census.add(16, 1);
             return;
         };
 
@@ -296,16 +416,19 @@ impl TimerCallback {
 
         if self.is_cancelled() {
             // The callback is cancelled.
+            census.add(15, 1);
             return;
         }
 
         let interval = timer_guard.interval();
         if interval != Duration::ZERO {
-            timer_guard.set_timeout(Timeout::After(interval));
+            census.add(17, 1);
+            timer_guard.set_timeout_with_reason(Timeout::After(interval), Reason::Periodic);
         }
 
         // Pass the `timer_guard` guard to the callback, allowing it to prevent race conditions.
         // The callback may choose to use the guard or drop it if not needed.
+        census.add(14, 1);
         (timer.registered_callback)(timer_guard);
     }
 }
@@ -403,13 +526,13 @@ mod tests {
         timer.lock().set_timeout(Timeout::When(Duration::ZERO));
         let callback = selected_callback(&manager);
         timer.lock().cancel();
-        callback.call();
+        callback.call(&Scope::new(Kind::CpuTime));
         assert_eq!(pending(&manager), 0);
 
         timer.lock().set_timeout(Timeout::When(Duration::ZERO));
         let callback = selected_callback(&manager);
         drop(timer);
-        callback.call();
+        callback.call(&Scope::new(Kind::CpuTime));
         assert_eq!(pending(&manager), 0);
     }
 
