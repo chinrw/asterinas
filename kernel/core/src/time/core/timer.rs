@@ -2,18 +2,20 @@
 
 use alloc::{
     boxed::Box,
-    collections::BTreeMap,
     sync::{Arc, Weak},
     vec::Vec,
 };
 use core::{
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     time::Duration,
 };
 
 use ostd::sync::{LocalIrqDisabled, SpinLock, SpinLockGuard};
 
+use self::queue::TimerQueue;
 use super::Clock;
+
+mod queue;
 
 /// A timeout, represented in one of the two ways.
 #[derive(Clone, Debug)]
@@ -163,7 +165,7 @@ impl Drop for Timer {
 /// will be actually dropped after all the created timers have been dropped.
 pub(crate) struct TimerManager {
     clock: Arc<dyn Clock>,
-    timer_callbacks: SpinLock<BTreeMap<TimerCallbackKey, Arc<TimerCallback>>>,
+    timer_callbacks: SpinLock<TimerQueue>,
 }
 
 impl TimerManager {
@@ -171,7 +173,7 @@ impl TimerManager {
     pub(crate) fn new(clock: Arc<dyn Clock>) -> Arc<Self> {
         Arc::new(Self {
             clock,
-            timer_callbacks: SpinLock::new(BTreeMap::new()),
+            timer_callbacks: SpinLock::new(TimerQueue::new()),
         })
     }
 
@@ -192,13 +194,10 @@ impl TimerManager {
     }
 
     fn insert(&self, timer_callback: Arc<TimerCallback>) {
-        let key = timer_callback.key();
-        let replaced = self
-            .timer_callbacks
+        self.timer_callbacks
             .disable_irq()
             .lock()
-            .insert(key, timer_callback);
-        debug_assert!(replaced.is_none());
+            .insert(timer_callback);
     }
 
     fn retire(&self, timer_callback: &Arc<TimerCallback>) {
@@ -208,7 +207,7 @@ impl TimerManager {
             .timer_callbacks
             .disable_irq()
             .lock()
-            .remove(&timer_callback.key());
+            .remove(timer_callback);
         // Release the callback after the queue guard, including when its owner is being dropped.
         drop(retired);
     }
@@ -225,12 +224,12 @@ impl TimerManager {
 
             let mut callbacks = Vec::new();
             let current_time = self.clock.read_time();
-            while let Some(((expired_time, _), timer_callback)) = timeout_list.first_key_value() {
+            while let Some(timer_callback) = timeout_list.first() {
                 if timer_callback.is_cancelled() {
                     // Just ignore the cancelled callback
-                    timeout_list.pop_first();
-                } else if *expired_time <= current_time {
-                    callbacks.push(timeout_list.pop_first().unwrap().1);
+                    timeout_list.pop();
+                } else if timer_callback.expired_time <= current_time {
+                    callbacks.push(timeout_list.pop().unwrap());
                 } else {
                     break;
                 }
@@ -259,6 +258,8 @@ struct TimerCallback {
     expired_time: Duration,
     timer: Weak<Timer>,
     is_cancelled: AtomicBool,
+    // Only the owning manager's queue lock permits access to this position.
+    queue_position: AtomicUsize,
 }
 
 impl TimerCallback {
@@ -268,6 +269,7 @@ impl TimerCallback {
             expired_time: timeout,
             timer,
             is_cancelled: AtomicBool::new(false),
+            queue_position: AtomicUsize::new(queue::NOT_QUEUED),
         }
     }
 
@@ -313,7 +315,7 @@ impl TimerCallback {
 #[cfg(ktest)]
 mod tests {
     use alloc::vec;
-    use core::sync::atomic::{AtomicU64, AtomicUsize};
+    use core::sync::atomic::AtomicU64;
 
     use ostd::prelude::ktest;
 
@@ -332,13 +334,7 @@ mod tests {
     }
 
     fn selected_callback(manager: &TimerManager) -> Arc<TimerCallback> {
-        manager
-            .timer_callbacks
-            .disable_irq()
-            .lock()
-            .pop_first()
-            .unwrap()
-            .1
+        manager.timer_callbacks.disable_irq().lock().pop().unwrap()
     }
 
     fn dropping_owners_retires_queued_entries() {
@@ -495,5 +491,115 @@ mod tests {
         equal_deadlines_keep_distinct_callbacks();
         periodic_callbacks_survive_rearm_and_stop_on_retirement();
         periodic_callback_can_cancel_its_new_timeout();
+    }
+
+    #[ktest]
+    fn selected_old_generation_cannot_replace_a_same_deadline_rearm() {
+        let clock = Arc::new(TestClock(AtomicU64::new(0)));
+        let manager = TimerManager::new(clock);
+        let fired = Arc::new(AtomicUsize::new(0));
+        let observed = fired.clone();
+        let timer = manager.create_timer(move |guard| {
+            observed.fetch_add(1, Ordering::Relaxed);
+            guard.cancel();
+        });
+        timer.lock().set_interval(Duration::from_nanos(10));
+        timer.lock().set_timeout(Timeout::When(Duration::ZERO));
+        let old = selected_callback(&manager);
+        timer.lock().set_timeout(Timeout::When(Duration::ZERO));
+        old.call();
+        assert_eq!(fired.load(Ordering::Relaxed), 0);
+        assert_eq!(pending(&manager), 1);
+        manager.process_expired_timers();
+        assert_eq!(fired.load(Ordering::Relaxed), 1);
+        assert_eq!(pending(&manager), 0);
+    }
+
+    struct ConcurrentTimers {
+        manager: Arc<TimerManager>,
+        observations: SpinLock<Vec<Arc<AtomicUsize>>>,
+        completed: Vec<AtomicUsize>,
+    }
+
+    static CONCURRENT_TIMERS: SpinLock<Option<Arc<ConcurrentTimers>>> = SpinLock::new(None);
+
+    fn exercise_concurrent_timers() {
+        use ostd::cpu::PinCurrentCpu;
+
+        let state = CONCURRENT_TIMERS
+            .disable_irq()
+            .lock()
+            .as_ref()
+            .unwrap()
+            .clone();
+        for iteration in 0..16 {
+            let fired = Arc::new(AtomicUsize::new(0));
+            state.observations.disable_irq().lock().push(fired.clone());
+            let timer = state.manager.create_timer(move |_| {
+                fired.fetch_add(1, Ordering::Relaxed);
+            });
+            {
+                let mut guard = timer.lock();
+                guard.set_timeout(Timeout::When(Duration::ZERO));
+                guard.set_timeout(Timeout::When(Duration::ZERO));
+            }
+            if iteration % 3 == 0 {
+                timer.lock().cancel();
+            } else {
+                state.manager.process_expired_timers();
+            }
+            drop(timer);
+        }
+        let cpu = ostd::irq::disable_local().current_cpu();
+        state.completed[u32::from(cpu) as usize].fetch_add(16, Ordering::Release);
+    }
+
+    #[ktest]
+    fn concurrent_rearm_cancel_and_dispatch_preserve_generations() {
+        let clock = Arc::new(TestClock(AtomicU64::new(0)));
+        let manager = TimerManager::new(clock);
+        let mut sentinels = Vec::new();
+        for _ in 0..64 {
+            let timer = manager.create_timer(|_| panic!("future timer fired"));
+            timer
+                .lock()
+                .set_timeout(Timeout::When(Duration::from_secs(1)));
+            sentinels.push(timer);
+        }
+        let state = Arc::new(ConcurrentTimers {
+            manager: manager.clone(),
+            observations: SpinLock::new(Vec::new()),
+            completed: (0..ostd::cpu::num_cpus())
+                .map(|_| AtomicUsize::new(0))
+                .collect(),
+        });
+        *CONCURRENT_TIMERS.disable_irq().lock() = Some(state.clone());
+        for _ in 0..32 {
+            ostd::smp::inter_processor_call(
+                &ostd::cpu::CpuSet::new_full(),
+                exercise_concurrent_timers,
+            )
+            .wait();
+        }
+        CONCURRENT_TIMERS.disable_irq().lock().take();
+        manager.process_expired_timers();
+        for count in &state.completed {
+            assert_eq!(count.load(Ordering::Acquire), 512);
+        }
+        let observations = state.observations.disable_irq().lock();
+        assert_eq!(observations.len(), ostd::cpu::num_cpus() * 512);
+        assert!(
+            observations
+                .iter()
+                .all(|count| count.load(Ordering::Relaxed) <= 1)
+        );
+        assert!(
+            observations
+                .iter()
+                .any(|count| count.load(Ordering::Relaxed) == 1)
+        );
+        assert_eq!(pending(&manager), sentinels.len());
+        drop(sentinels);
+        assert_eq!(pending(&manager), 0);
     }
 }
