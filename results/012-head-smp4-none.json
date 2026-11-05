@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "system": "asterinas",
+  "condition": "none",
+  "cpus": 4,
+  "host": "10.0.2.15",
+  "port": 6379,
+  "status": "success",
+  "failure": null,
+  "control": [
+    {
+      "command": [
+        "GET",
+        "timer-bench:ready"
+      ],
+      "started_ns": 3546820300263798,
+      "reply": "1",
+      "finished_ns": 3546820300429400
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:condition"
+      ],
+      "started_ns": 3546820300434900,
+      "reply": "none",
+      "finished_ns": 3546820300491211
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:load-start"
+      ],
+      "started_ns": 3546820300494321,
+      "reply": null,
+      "finished_ns": 3546820300544611
+    },
+    {
+      "command": [
+        "RPUSH",
+        "timer-bench:done",
+        "1"
+      ],
+      "started_ns": 3546826020733875,
+      "reply": 1,
+      "finished_ns": 3546826020919977
+    },
+    {
+      "command": [
+        "BLPOP",
+        "timer-bench:completed",
+        "15"
+      ],
+      "started_ns": 3546826020923727,
+      "reply": [
+        "timer-bench:completed",
+        "1"
+      ],
+      "finished_ns": 3546826042447320
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:status"
+      ],
+      "started_ns": 3546826042460860,
+      "reply": "complete",
+      "finished_ns": 3546826042640632
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:load-exit"
+      ],
+      "started_ns": 3546826042642642,
+      "reply": "0",
+      "finished_ns": 3546826042701143
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:load-log"
+      ],
+      "started_ns": 3546826042702523,
+      "reply": null,
+      "finished_ns": 3546826042755604
+    },
+    {
+      "command": [
+        "RPUSH",
+        "timer-bench:ack",
+        "1"
+      ],
+      "started_ns": 3546826042761654,
+      "reply": 1,
+      "finished_ns": 3546826042809525
+    }
+  ],
+  "throughput": {
+    "log_path": "../throughput/012-head-smp4-none.log",
+    "command": [
+      "redis-benchmark",
+      "-h",
+      "10.0.2.15",
+      "-p",
+      "6379",
+      "-n",
+      "100000",
+      "-c",
+      "20",
+      "-t",
+      "get"
+    ],
+    "requests": 100000,
+    "concurrency": 20,
+    "exit_code": 0,
+    "host_elapsed_ns": 614509461,
+    "rps": 171526.58
+  },
+  "fixed": {
+    "offered_rps": 1000,
+    "duration_s": 5,
+    "connections": 20,
+    "planned": 5000,
+    "started": 5000,
+    "completed": 5000,
+    "error_count": 0,
+    "failure": null,
+    "summaries": {
+      "service": {
+        "p999_ns": 258314,
+        "max_ns": 542868,
+        "error_count": 0,
+        "over_10ms_count": 0
+      },
+      "client_queue": {
+        "p999_ns": 1078738,
+        "max_ns": 1093490,
+        "error_count": 0,
+        "over_10ms_count": 0
+      },
+      "total": {
+        "p999_ns": 1236881,
+        "max_ns": 1263794,
+        "error_count": 0,
+        "over_10ms_count": 0
+      }
+    },
+    "records_file": "../requests/012-head-smp4-none.jsonl"
+  },
+  "load": {
+    "start_raw": null,
+    "exit_code": "0",
+    "log": null
+  },
+  "shutdown_verified": true,
+  "export_schema_version": 1
+}
