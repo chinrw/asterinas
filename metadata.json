@@ -373,5 +373,12 @@
     "001: Redis wildcard bind failed before measurement; both guests and logs retained.",
     "002: consecutive Redis instances reused a port; both failed trials retained.",
     "003: all workloads passed; corrected a CRLF-only validator error by rechecking unchanged logs, no additional guests."
-  ]
+  ],
+  "fork_ci": {
+    "url": "https://github.com/chinrw/asterinas/actions/runs/42005429931",
+    "head": "5b7726ff9a15d4ed27fd64a08cb072a6573f704a",
+    "result": "success",
+    "passed_jobs": 34,
+    "total_jobs": 34
+  }
 }

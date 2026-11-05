@@ -1,0 +1,605 @@
+[Info] [normal] Forwarded QEMU guest port: 11690->22; 18923->8080 3503->6379 12494->5201 23730->31234 30752->31236 8359->11211
+[Info] [test] Forwarded QEMU guest port: 26366->22; 29373->8080 14036->6379 24635->5201 16330->31234 18668->31236 10131->11211
+TIMER_PR_TEST_LOCK_SEEDED
+     Locking 1 package to latest Rust 1.99.0-nightly compatible version
+      Adding osdk-test-kernel v0.19.0 (/root/asterinas/osdk/deps/test-kernel)
+   Compiling log v0.4.35
+   Compiling align_ext v0.1.0 (/root/asterinas/ostd/libs/align_ext)
+   Compiling linux-boot-params v0.19.0 (/root/asterinas/ostd/libs/linux-bzimage/boot-params)
+   Compiling ostd-test v0.19.0 (/root/asterinas/ostd/libs/ostd-test)
+   Compiling typeflags-util v0.1.0 (/root/asterinas/kernel/libs/typeflags-util)
+   Compiling id-alloc v0.1.0 (/root/asterinas/ostd/libs/id-alloc)
+   Compiling int-to-c-enum v0.1.0 (/root/asterinas/ostd/libs/int-to-c-enum)
+   Compiling iced-x86 v1.22.0
+   Compiling ostd-pod v0.4.0 (/root/asterinas/ostd/libs/ostd-pod)
+   Compiling io-util v0.1.0 (/root/asterinas/kernel/libs/io-util)
+   Compiling jhash v0.1.0 (/root/asterinas/kernel/libs/jhash)
+warning: unstable feature specified for `-Ctarget-feature`: `ermsb`
+  |
+  = note: this feature is not stably supported; its behavior can change in the future
+
+   Compiling logo-ascii-art v0.1.0 (/root/asterinas/kernel/libs/logo-ascii-art)
+   Compiling keyable-arc v0.1.0 (/root/asterinas/kernel/libs/keyable-arc)
+   Compiling sparse-id-alloc v0.1.0 (/root/asterinas/kernel/libs/sparse-id-alloc)
+   Compiling cpio-decoder v0.1.0 (/root/asterinas/kernel/libs/cpio-decoder)
+warning: `logo-ascii-art` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-rights v0.1.0 (/root/asterinas/kernel/libs/aster-rights)
+warning: `int-to-c-enum` (lib) generated 1 warning (1 duplicate)
+warning: `align_ext` (lib) generated 1 warning (1 duplicate)
+warning: `keyable-arc` (lib) generated 1 warning (1 duplicate)
+warning: `typeflags-util` (lib) generated 1 warning (1 duplicate)
+warning: `linux-boot-params` (lib) generated 1 warning (1 duplicate)
+warning: `jhash` (lib) generated 1 warning (1 duplicate)
+   Compiling acpi v5.2.0
+   Compiling multiboot2 v0.24.1
+   Compiling component v0.1.0 (/root/asterinas/kernel/libs/comp-sys/component)
+   Compiling smoltcp v0.11.0 (https://github.com/asterinas/smoltcp?tag=r_2026-08-11_1b7629c#56ab8379)
+warning: `ostd-pod` (lib) generated 1 warning (1 duplicate)
+warning: `io-util` (lib) generated 1 warning (1 duplicate)
+warning: `ostd-test` (lib) generated 1 warning (1 duplicate)
+warning: `cpio-decoder` (lib) generated 1 warning (1 duplicate)
+warning: `id-alloc` (lib) generated 1 warning
+warning: `sparse-id-alloc` (lib) generated 1 warning (1 duplicate)
+warning: `aster-rights` (lib) generated 1 warning (1 duplicate)
+warning: `component` (lib) generated 1 warning (1 duplicate)
+   Compiling tdx-guest v0.5.0
+   Compiling ostd v0.19.0 (/root/asterinas/ostd)
+   Compiling osdk-heap-allocator v0.19.0 (/root/asterinas/osdk/deps/heap-allocator)
+   Compiling aster-console v0.1.0 (/root/asterinas/kernel/core/comps/console)
+   Compiling aster-pci v0.1.0 (/root/asterinas/kernel/core/comps/pci)
+   Compiling aster-fuse v0.1.0 (/root/asterinas/kernel/libs/aster-fuse)
+   Compiling aster-cmdline v0.1.0 (/root/asterinas/kernel/core/comps/cmdline)
+   Compiling aster-input v0.1.0 (/root/asterinas/kernel/core/comps/input)
+   Compiling osdk-frame-allocator v0.19.0 (/root/asterinas/osdk/deps/frame-allocator)
+   Compiling aster-framebuffer v0.1.0 (/root/asterinas/kernel/core/comps/framebuffer)
+   Compiling ring-buffer v0.1.0 (/root/asterinas/kernel/libs/ring-buffer)
+   Compiling xarray v0.1.0 (/root/asterinas/kernel/libs/xarray)
+   Compiling osdk-test-kernel v0.19.0 (/root/asterinas/osdk/deps/test-kernel)
+   Compiling aster-logger v0.1.0 (/root/asterinas/kernel/core/comps/logger)
+warning: `ring-buffer` (lib) generated 1 warning (1 duplicate)
+warning: `aster-logger` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-util v0.1.0 (/root/asterinas/kernel/libs/aster-util)
+warning: `aster-console` (lib) generated 1 warning (1 duplicate)
+warning: `aster-input` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-softirq v0.1.0 (/root/asterinas/kernel/core/comps/softirq)
+   Compiling device-id v0.1.0 (/root/asterinas/kernel/libs/device-id)
+   Compiling aster-systree v0.1.0 (/root/asterinas/kernel/core/comps/systree)
+   Compiling aster-time v0.1.0 (/root/asterinas/kernel/core/comps/time)
+warning: `aster-framebuffer` (lib) generated 1 warning (1 duplicate)
+warning: `device-id` (lib) generated 1 warning (1 duplicate)
+warning: `osdk-frame-allocator` (lib) generated 1 warning (1 duplicate)
+warning: `xarray` (lib) generated 1 warning (1 duplicate)
+warning: `aster-pci` (lib) generated 1 warning (1 duplicate)
+   Compiling dma-pool v0.1.0 (/root/asterinas/kernel/libs/dma-pool)
+warning: `aster-util` (lib) generated 1 warning (1 duplicate)
+warning: `aster-softirq` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-bigtcp v0.1.0 (/root/asterinas/kernel/libs/aster-bigtcp)
+   Compiling aster-block v0.1.0 (/root/asterinas/kernel/core/comps/block)
+   Compiling aster-device v0.1.0 (/root/asterinas/kernel/core/comps/device)
+warning: `aster-cmdline` (lib) generated 1 warning (1 duplicate)
+warning: `aster-time` (lib) generated 1 warning (1 duplicate)
+warning: `osdk-test-kernel` (lib) generated 1 warning (1 duplicate)
+warning: `dma-pool` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-nvme v0.1.0 (/root/asterinas/kernel/core/comps/nvme)
+warning: `aster-fuse` (lib) generated 1 warning (1 duplicate)
+warning: `aster-systree` (lib) generated 1 warning (1 duplicate)
+warning: `aster-block` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-network v0.1.0 (/root/asterinas/kernel/core/comps/network)
+warning: `osdk-heap-allocator` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-virtio v0.1.0 (/root/asterinas/kernel/core/comps/virtio)
+warning: `aster-network` (lib) generated 1 warning (1 duplicate)
+warning: `aster-bigtcp` (lib) generated 1 warning (1 duplicate)
+warning: `aster-nvme` (lib) generated 1 warning (1 duplicate)
+warning: `aster-device` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-core v0.1.0 (/root/asterinas/kernel/core)
+warning: `ostd` (lib) generated 1 warning (1 duplicate)
+warning: `aster-virtio` (lib) generated 1 warning (1 duplicate)
+warning: `aster-core` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-core-osdk-bin v0.1.0 (/root/asterinas/target/osdk/aster-core-test-base)
+warning: `aster-core-osdk-bin` (bin "aster-core-osdk-bin") generated 1 warning (1 duplicate)
+    Finished `release-lto` profile [optimized] target(s) in 52.13s
+TIMER_PR_TEST_LOCK_SEEDED
+  Installing linux-bzimage-setup v0.19.0 (/root/asterinas/ostd/libs/linux-bzimage/setup)
+warning: default toolchain implicitly overridden with `nightly-2026-07-21-x86_64-unknown-linux-gnu` by environment variable
+  |
+  = help: use `cargo +stable install` if you meant to use the stable toolchain
+  = note: rustup selects the toolchain based on the parent environment and not the environment of the package being installed
+    Updating crates.io index
+     Locking 33 packages to latest compatible versions
+      Adding miniz_oxide v0.8.9 (available: v0.9.1)
+      Adding tdx-guest v0.5.0 (available: v0.6.0)
+      Adding uart_16550 v0.3.2 (available: v0.9.0)
+      Adding uefi v0.37.0 (available: v0.41.0)
+      Adding uefi-raw v0.14.0 (available: v0.17.0)
+   Compiling compiler_builtins v0.1.160 (/root/.rustup/toolchains/nightly-2026-07-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/root/.rustup/toolchains/nightly-2026-07-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling rustversion v1.0.23
+   Compiling const_fn v0.4.12
+   Compiling x86 v0.52.0
+   Compiling linux-bzimage-setup v0.19.0 (/root/asterinas/ostd/libs/linux-bzimage/setup)
+   Compiling syn v3.0.9
+   Compiling syn v2.0.119
+   Compiling uefi-macros v0.19.0
+   Compiling ptr_meta_derive v0.3.2
+   Compiling alloc v0.0.0 (/root/.rustup/toolchains/nightly-2026-07-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling bit_field v0.10.3
+   Compiling bitflags v2.13.2
+   Compiling bitflags v1.3.2
+   Compiling uguid v2.2.1
+   Compiling spin v0.9.9
+   Compiling log v0.4.35
+   Compiling volatile v0.4.6
+   Compiling cfg-if v1.0.5
+   Compiling ptr_meta v0.3.2
+   Compiling adler2 v2.0.1
+   Compiling zero v0.1.3
+   Compiling qemu-exit v3.0.2
+   Compiling linux-boot-params v0.19.0 (/root/asterinas/ostd/libs/linux-bzimage/boot-params)
+   Compiling raw-cpuid v10.7.0
+   Compiling miniz_oxide v0.8.9
+   Compiling lazy_static v1.5.1
+   Compiling ucs2 v0.3.3
+   Compiling xmas-elf v0.10.0
+   Compiling iced-x86 v1.22.0
+   Compiling uefi-raw v0.14.0
+   Compiling x86_64 v0.15.5
+   Compiling uart_16550 v0.3.2
+   Compiling uefi v0.37.0
+   Compiling tdx-guest v0.5.0
+    Finished `release` profile [optimized] target(s) in 12.87s
+   Replacing /root/asterinas/target/osdk/bin/linux-bzimage-setup
+    Replaced package `linux-bzimage-setup v0.19.0 (/root/asterinas/ostd/libs/linux-bzimage/setup)` with `linux-bzimage-setup v0.19.0 (/root/asterinas/ostd/libs/linux-bzimage/setup)` (executable `linux-bzimage-setup`)
+warning: be sure to add `/root/asterinas/target/osdk/bin` to your PATH to be able to run the installed binaries
+install_path: "/root/asterinas/target/osdk/iso_root/boot/aster-core-osdk-bin"
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:/root/asterinas/target/osdk/aster-core-osdk-bin.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data, 2013g free
+Added to ISO image: directory '/'='/tmp/grub.d3oUpY'
+xorriso : UPDATE :     299 files added in 1 seconds
+Added to ISO image: directory '/'='/root/asterinas/target/osdk/iso_root'
+xorriso : UPDATE :     304 files added in 1 seconds
+ISO image produced: 13784 sectors
+Written to medium : 13784 sectors at LBA 0
+Writing to 'stdio:/root/asterinas/target/osdk/aster-core-osdk-bin.iso' completed successfully.
+
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.vmx [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.hle [bit 4]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.rtm [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.rdseed [bit 18]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].ECX.la57 [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-vintr-pending [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-tsc-offset [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-hlt-exit [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-invlpg-exit [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-mwait-exit [bit 10]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-rdpmc-exit [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-rdtsc-exit [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr3-load-noexit [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr3-store-noexit [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr8-load-exit [bit 19]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr8-store-exit [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-flexpriority [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-vnmi-pending [bit 22]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-movdr-exit [bit 23]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-io-exit [bit 24]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-io-bitmap [bit 25]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-mtf [bit 27]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-msr-bitmap [bit 28]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-monitor-exit [bit 29]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-pause-exit [bit 30]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-secondary-ctls [bit 31]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-xapic [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-ept [bit 1]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-desc-exit [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-rdtscp-exit [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-x2apic [bit 4]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-vpid [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-wbinvd-exit [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-unrestricted-guest [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-register [bit 8]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-vid [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-rdrand-exit [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-invpcid-exit [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-vmfunc [bit 13]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-shadow-vmcs [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-intr-exit [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-nmi-exit [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-vnmi [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-preemption-timer [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-posted-intr [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-nosave-debugctl [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-perf-global-ctrl [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-ack-intr [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-pat [bit 18]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-pat [bit 19]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-efer [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-efer [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-preemption-timer [bit 22]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-noload-debugctl [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-ia32e-mode [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-perf-global-ctrl [bit 13]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-pat [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-efer [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-store-lma [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-activity-hlt [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-vmwrite-vmexit-fields [bit 29]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-execonly [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-page-walk-4 [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch) [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-2mb [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-1gb [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-eptad [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context [bit 25]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-all-context [bit 26]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid [bit 32]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid-single-addr [bit 40]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context [bit 41]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid-all-context [bit 42]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context-noglobals [bit 43]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(480h).vmx-ins-outs [bit 54]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(480h).vmx-true-ctls [bit 55]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.vmx [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.hle [bit 4]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.rtm [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.rdseed [bit 18]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].ECX.la57 [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-vintr-pending [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-tsc-offset [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-hlt-exit [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-invlpg-exit [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-mwait-exit [bit 10]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-rdpmc-exit [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-rdtsc-exit [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr3-load-noexit [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr3-store-noexit [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr8-load-exit [bit 19]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr8-store-exit [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-flexpriority [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-vnmi-pending [bit 22]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-movdr-exit [bit 23]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-io-exit [bit 24]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-io-bitmap [bit 25]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-mtf [bit 27]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-msr-bitmap [bit 28]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-monitor-exit [bit 29]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-pause-exit [bit 30]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-secondary-ctls [bit 31]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-xapic [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-ept [bit 1]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-desc-exit [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-rdtscp-exit [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-x2apic [bit 4]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-vpid [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-wbinvd-exit [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-unrestricted-guest [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-register [bit 8]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-vid [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-rdrand-exit [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-invpcid-exit [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-vmfunc [bit 13]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-shadow-vmcs [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-intr-exit [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-nmi-exit [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-vnmi [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-preemption-timer [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-posted-intr [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-nosave-debugctl [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-perf-global-ctrl [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-ack-intr [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-pat [bit 18]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-pat [bit 19]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-efer [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-efer [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-preemption-timer [bit 22]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-noload-debugctl [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-ia32e-mode [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-perf-global-ctrl [bit 13]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-pat [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-efer [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-store-lma [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-activity-hlt [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-vmwrite-vmexit-fields [bit 29]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-execonly [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-page-walk-4 [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch) [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-2mb [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-1gb [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-eptad [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context [bit 25]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-all-context [bit 26]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid [bit 32]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid-single-addr [bit 40]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context [bit 41]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid-all-context [bit 42]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context-noglobals [bit 43]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(480h).vmx-ins-outs [bit 54]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(480h).vmx-true-ctls [bit 55]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.vmx [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.hle [bit 4]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.rtm [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.rdseed [bit 18]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].ECX.la57 [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-vintr-pending [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-tsc-offset [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-hlt-exit [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-invlpg-exit [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-mwait-exit [bit 10]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-rdpmc-exit [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-rdtsc-exit [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr3-load-noexit [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr3-store-noexit [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr8-load-exit [bit 19]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr8-store-exit [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-flexpriority [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-vnmi-pending [bit 22]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-movdr-exit [bit 23]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-io-exit [bit 24]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-io-bitmap [bit 25]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-mtf [bit 27]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-msr-bitmap [bit 28]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-monitor-exit [bit 29]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-pause-exit [bit 30]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-secondary-ctls [bit 31]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-xapic [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-ept [bit 1]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-desc-exit [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-rdtscp-exit [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-x2apic [bit 4]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-vpid [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-wbinvd-exit [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-unrestricted-guest [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-register [bit 8]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-vid [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-rdrand-exit [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-invpcid-exit [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-vmfunc [bit 13]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-shadow-vmcs [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-intr-exit [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-nmi-exit [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-vnmi [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-preemption-timer [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-posted-intr [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-nosave-debugctl [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-perf-global-ctrl [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-ack-intr [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-pat [bit 18]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-pat [bit 19]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-efer [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-efer [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-preemption-timer [bit 22]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-noload-debugctl [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-ia32e-mode [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-perf-global-ctrl [bit 13]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-pat [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-efer [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-store-lma [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-activity-hlt [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-vmwrite-vmexit-fields [bit 29]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-execonly [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-page-walk-4 [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch) [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-2mb [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-1gb [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-eptad [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context [bit 25]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-all-context [bit 26]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid [bit 32]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid-single-addr [bit 40]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context [bit 41]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid-all-context [bit 42]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context-noglobals [bit 43]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(480h).vmx-ins-outs [bit 54]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(480h).vmx-true-ctls [bit 55]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.vmx [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.hle [bit 4]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.rtm [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].EBX.rdseed [bit 18]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=07h,ecx=00h].ECX.la57 [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-vintr-pending [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-tsc-offset [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-hlt-exit [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-invlpg-exit [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-mwait-exit [bit 10]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-rdpmc-exit [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-rdtsc-exit [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr3-load-noexit [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr3-store-noexit [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr8-load-exit [bit 19]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-cr8-store-exit [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-flexpriority [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-vnmi-pending [bit 22]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-movdr-exit [bit 23]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-io-exit [bit 24]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-io-bitmap [bit 25]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-mtf [bit 27]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-msr-bitmap [bit 28]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-monitor-exit [bit 29]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-pause-exit [bit 30]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Eh).vmx-secondary-ctls [bit 31]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-xapic [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-ept [bit 1]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-desc-exit [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-rdtscp-exit [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-x2apic [bit 4]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-vpid [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-wbinvd-exit [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-unrestricted-guest [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-register [bit 8]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-apicv-vid [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-rdrand-exit [bit 11]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-invpcid-exit [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-vmfunc [bit 13]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Bh).vmx-shadow-vmcs [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-intr-exit [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-nmi-exit [bit 3]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-vnmi [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-preemption-timer [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Dh).vmx-posted-intr [bit 7]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-nosave-debugctl [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-perf-global-ctrl [bit 12]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-ack-intr [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-pat [bit 18]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-pat [bit 19]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-efer [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-load-efer [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Fh).vmx-exit-save-preemption-timer [bit 22]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-noload-debugctl [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-ia32e-mode [bit 9]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-perf-global-ctrl [bit 13]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-pat [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(490h).vmx-entry-load-efer [bit 15]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-store-lma [bit 5]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-activity-hlt [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(485h).vmx-vmwrite-vmexit-fields [bit 29]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-execonly [bit 0]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-page-walk-4 [bit 6]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch) [bit 14]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-2mb [bit 16]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-ept-1gb [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept [bit 20]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-eptad [bit 21]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context [bit 25]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-all-context [bit 26]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid [bit 32]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid-single-addr [bit 40]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context [bit 41]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invvpid-all-context [bit 42]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(48Ch).vmx-invept-single-context-noglobals [bit 43]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(480h).vmx-ins-outs [bit 54]
+qemu-system-x86_64: warning: host doesn't support requested feature: MSR(480h).vmx-true-ctls [bit 55]
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[8;042;160t0[2J[01;01H[2J[01;01H[8;056;240t0[2J[01;01HBdsDxe: loading Boot0002 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+BdsDxe: starting Boot0002 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+[EFI stub] Loaded with offset 0x7dd93000
+[EFI stub] Loading the cmdline
+[EFI stub] Loaded the cmdline: "BOOT_IMAGE=/boot/aster-core-osdk-bin earlycon console=ttyS0 --"
+[EFI stub] Loading the initrd
+[EFI stub] Loaded the initrd: addr=0x7d17c000, size=0xd15bf3
+[EFI stub] Found the ACPI RSDP at 0x7fb7e014
+[EFI stub] Found the framebuffer at 0x80000000 with 1280x800 pixels
+[EFI stub] Decoding the kernel payload
+[EFI stub] Loading the payload as an ELF file
+[EFI stub] Exiting EFI boot services
+[EFI stub] Processing 132 memory map entries
+[EFI stub] Entering the Asterinas entry point at 0x8001200
+DEBUG: Found a local APIC entry in MADT: LocalApicEntry { header: EntryHeader { entry_type: 0, length: 8 }, processor_id: 0, apic_id: 0, flags: 1 }
+DEBUG: Found a local APIC entry in MADT: LocalApicEntry { header: EntryHeader { entry_type: 0, length: 8 }, processor_id: 1, apic_id: 1, flags: 1 }
+DEBUG: Found a local APIC entry in MADT: LocalApicEntry { header: EntryHeader { entry_type: 0, length: 8 }, processor_id: 2, apic_id: 2, flags: 1 }
+DEBUG: Found a local APIC entry in MADT: LocalApicEntry { header: EntryHeader { entry_type: 0, length: 8 }, processor_id: 3, apic_id: 3, flags: 1 }
+INFO: Initializing frame metadata for physical memory 0..180000000
+INFO: Adding free frames to the allocator: 0..8000
+INFO: Adding free frames to the allocator: 9000..a0000
+INFO: Adding free frames to the allocator: 100000..800000
+INFO: Adding free frames to the allocator: 808000..80b000
+INFO: Adding free frames to the allocator: 80c000..811000
+INFO: Adding free frames to the allocator: 900000..8000000
+INFO: Adding free frames to the allocator: e849000..7d17c000
+INFO: Adding free frames to the allocator: 7de92000..7e89e000
+INFO: Adding free frames to the allocator: 7e89f000..7f8ed000
+INFO: Adding free frames to the allocator: 7fbff000..7fe90000
+INFO: Adding free frames to the allocator: 7fe96000..7fedc000
+INFO: Adding free frames to the allocator: 100000000..180000000
+INFO: Initializing the kernel page table
+INFO: Creating new I/O memory allocator builder, ranges: [
+    0x80000000..0x100000000,
+    0x180000000..0x10000000000000,
+]
+INFO: x2APIC found!
+INFO: irq: Initializing PIC as disabled
+DEBUG: Try to reserve security-sensitive MMIO range: 0xfec00000..0xfec01000 with cache policy: Uncacheable
+INFO: irq: IOAPIC found at 0xfec00000, ID 0, version 32, interrupt base 0, interrupt count 23
+INFO: irq: IOAPIC override: ISA interrupt 0 for GSI 2
+INFO: irq: IOAPIC override: ISA interrupt 5 for GSI 5
+INFO: irq: IOAPIC override: ISA interrupt 9 for GSI 9
+INFO: irq: IOAPIC override: ISA interrupt 10 for GSI 10
+INFO: irq: IOAPIC override: ISA interrupt 11 for GSI 11
+INFO: TSC frequency: 4299996000 Hz
+INFO: timer: Enable APIC TSC deadline mode
+INFO: x2APIC ID: 0, Version: 14, Max LVT: 5
+INFO: Booting 3 processors
+INFO: Booting all application processors...
+INFO: Detected ISA extensions: IsaExtensions(X2APIC | TSC_DEADLINE | XSAVE | AVX | RDRAND | XAPIC | FSGSBASE | AVX512F)
+INFO: Detected ISA extensions: IsaExtensions(X2APIC | TSC_DEADLINE | XSAVE | AVX | RDRAND | XAPIC | FSGSBASE | AVX512F)
+INFO: x2APIC ID: 3, Version: 14, Max LVT: 5
+INFO: x2APIC ID: 1, Version: 14, Max LVT: 5
+INFO: Processor 1 started. Spinning for tasks.
+INFO: Processor 2 started. Spinning for tasks.
+INFO: Detected ISA extensions: IsaExtensions(X2APIC | TSC_DEADLINE | XSAVE | AVX | RDRAND | XAPIC | FSGSBASE | AVX512F)
+INFO: x2APIC ID: 2, Version: 14, Max LVT: 5
+INFO: Processor 3 started. Spinning for tasks.
+INFO: All application processors started. The BSP continues to run.
+WARN: IOMMU initialization error: NoIommu
+DEBUG: Removing sensitive I/O port range: RawIoPortRange {
+    begin: 0x3f8,
+    end: 0x400,
+}
+DEBUG: Removing sensitive I/O port range: RawIoPortRange {
+    begin: 0x40,
+    end: 0x41,
+}
+DEBUG: Removing sensitive I/O port range: RawIoPortRange {
+    begin: 0x41,
+    end: 0x42,
+}
+DEBUG: Removing sensitive I/O port range: RawIoPortRange {
+    begin: 0x42,
+    end: 0x43,
+}
+DEBUG: Removing sensitive I/O port range: RawIoPortRange {
+    begin: 0x43,
+    end: 0x44,
+}
+DEBUG: Removing sensitive I/O port range: RawIoPortRange {
+    begin: 0x20,
+    end: 0x21,
+}
+DEBUG: Removing sensitive I/O port range: RawIoPortRange {
+    begin: 0xa1,
+    end: 0xa2,
+}
+DEBUG: Removing sensitive I/O port range: RawIoPortRange {
+    begin: 0x21,
+    end: 0x22,
+}
+DEBUG: Removing sensitive I/O port range: RawIoPortRange {
+    begin: 0xa0,
+    end: 0xa1,
+}
+INFO: acpi: Collected information AcpiInfo { century_register: Some(50), boot_flags: Some(IaPcBootArchFlags(2)), reset_port_and_val: Some((3321, 15)), pci_ecam_region: Some(PciEcamRegion { base_address: 3758096384, bus_start: 0, bus_end: 255 }) }
+INFO: QEMU hypervisor detected, assuming that the isa-debug-exit device exists
+DEBUG: Try to acquire PIO range: 0xf4..0xf8
+
+[ktest runner] running 509 tests in 16 crates
+
+[ktest runner] skipping crate "aster-bigtcp".
+
+[ktest runner] skipping crate "aster-cmdline".
+
+running 146 tests in crate "aster-core"
+
+test aster_core::time::core::timer::tests::timer_lifecycle_regressions ... [31mFAILED[39m
+
+test result: [31mFAILED[39m. 0 passed; 1 failed; 145 filtered out.
+
+failures:
+
+---- /root/asterinas/kernel/core/src/time/core/timer.rs:484:4 - timer_lifecycle_regressions ----
+
+[caught panic] Panicked at /root/asterinas/kernel/core/src/time/core/timer.rs:346:13
+assertion `left == right` failed: dropped owners left queued callbacks
+  left: 1024
+ right: 0
+
+E

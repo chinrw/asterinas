@@ -35,3 +35,8 @@ All error counts are zero.
 Timerfd expiry is deadline-to-completed-read, including delivery, scheduling, poll/scanning and reads.
 With 64 timers nearest-rank p99 is the per-run maximum.
 Four pairs are descriptive evidence and do not establish a universal speedup or an absence of regressions.
+
+correctness/ retains the actual named red/green ktest logs and the final fork CI result.
+The red run executes one test and fails with 1024 retained entries.
+Each of the three head runs executes one test and passes; the concurrent log includes calls to remote CPUs 1,2,3.
+The final code head passes all 34 x86 CI jobs.
