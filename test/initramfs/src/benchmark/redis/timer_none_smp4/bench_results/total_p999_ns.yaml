@@ -1,0 +1,13 @@
+alert:
+  bigger_is_better: false
+chart:
+  description: 'GET throughput: 100K requests at concurrency 20; fixed arrivals: 1000/s for 5s over 20 connections'
+  legend: 'Redis fixed-arrival total p99.9 on {system}'
+  title: 'Redis fixed-arrival total p99.9 (timer none, SMP=4)'
+  unit: ns
+result_extraction:
+  result_index: 2
+  search_pattern: '^REDIS_TIMER_TOTAL_P999_NS '
+runtime_config:
+  check_guest_exit: true
+  smp: 4

@@ -29,6 +29,7 @@ rec {
   schbench = callPackage ./schbench.nix { };
   sqlite-speedtest1 = callPackage ./sqlite-speedtest1.nix { };
   sysbench = if hostPlatform.isx86_64 then pkgsHostTarget.sysbench else null;
+  timerfd = callPackage ./timerfd.nix { };
 
   # Pairs a package with the shell that installs its files into `$out`.
   packWith = pkg: install: { inherit pkg install; };
@@ -67,7 +68,13 @@ rec {
       mkdir -p $out/nginx/conf
       cp -r ${p}/conf/* $out/nginx/conf/
     '');
-    redis = packWith redis (p: "cp -r ${p}/bin/redis-server $out/bin/");
+    redis = packWith redis (p: ''
+      cp -r ${p}/bin/redis-server ${p}/bin/redis-cli $out/bin/
+      ${lib.optionalString (benchmarkGroup == "redis") ''
+        cp -r ${timerfd}/bin/timerfd-bench $out/bin/
+      ''}
+    '');
+    timerfd = packWith timerfd (p: "cp -r ${p}/bin/timerfd-bench $out/bin/");
     schbench = packWith schbench (p: "cp -r ${p}/bin/schbench $out/bin/");
     sqlite = packWith sqlite-speedtest1 (p: "cp -r ${p}/bin/sqlite-speedtest1 $out/bin/");
   }

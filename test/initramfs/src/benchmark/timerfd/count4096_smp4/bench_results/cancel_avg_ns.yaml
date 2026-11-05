@@ -1,0 +1,13 @@
+alert:
+  bigger_is_better: false
+chart:
+  description: 'Disarm phase elapsed time divided by N (N=4096, SMP=4)'
+  legend: 'Cancel average on {system}'
+  title: '[Timerfd] Cancel average (N=4096, SMP=4)'
+  unit: ns
+result_extraction:
+  result_index: 2
+  search_pattern: '^TIMERFD_CANCEL_AVG_NS '
+runtime_config:
+  smp: 4
+  check_guest_exit: true

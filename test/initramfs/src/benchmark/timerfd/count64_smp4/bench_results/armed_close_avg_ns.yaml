@@ -1,0 +1,13 @@
+alert:
+  bigger_is_better: false
+chart:
+  description: 'Armed close phase elapsed time divided by N (N=64, SMP=4)'
+  legend: 'Armed close average on {system}'
+  title: '[Timerfd] Armed close average (N=64, SMP=4)'
+  unit: ns
+result_extraction:
+  result_index: 2
+  search_pattern: '^TIMERFD_ARMED_CLOSE_AVG_NS '
+runtime_config:
+  smp: 4
+  check_guest_exit: true

@@ -1,0 +1,13 @@
+alert:
+  bigger_is_better: false
+chart:
+  description: 'Maximum deadline-to-read latency in the expiry case (N=4096, SMP=4)'
+  legend: 'Maximum expiry read lateness on {system}'
+  title: '[Timerfd] Maximum expiry read lateness (N=4096, SMP=4)'
+  unit: ns
+result_extraction:
+  result_index: 2
+  search_pattern: '^TIMERFD_EXPIRY_READ_MAX_NS '
+runtime_config:
+  smp: 4
+  check_guest_exit: true

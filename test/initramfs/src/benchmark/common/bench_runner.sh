@@ -76,10 +76,10 @@ main() {
     chmod +x ${BENCHMARK_SCRIPT}
     ${BENCHMARK_SCRIPT}
 
-    # Shutdown explicitly if running on Linux
-    if [ "$SYSTEM" = "linux" ]; then
-        poweroff -f
-    fi
+    echo "BENCHMARK_SUCCEEDED ${BENCHMARK_NAME}"
+
+    # Exiting PID 1 would turn a successful run into a kernel failure.
+    poweroff -f
 }
 
 main "$@"

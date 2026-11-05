@@ -1,0 +1,25 @@
+benchmarks:
+  - count64_smp1_arm_avg_ns
+  - count64_smp1_cancel_avg_ns
+  - count64_smp1_rearm_avg_ns
+  - count64_smp1_armed_close_avg_ns
+  - count64_smp1_expiry_read_p99_ns
+  - count64_smp1_expiry_read_max_ns
+  - count64_smp4_arm_avg_ns
+  - count64_smp4_cancel_avg_ns
+  - count64_smp4_rearm_avg_ns
+  - count64_smp4_armed_close_avg_ns
+  - count64_smp4_expiry_read_p99_ns
+  - count64_smp4_expiry_read_max_ns
+  - count4096_smp1_arm_avg_ns
+  - count4096_smp1_cancel_avg_ns
+  - count4096_smp1_rearm_avg_ns
+  - count4096_smp1_armed_close_avg_ns
+  - count4096_smp1_expiry_read_p99_ns
+  - count4096_smp1_expiry_read_max_ns
+  - count4096_smp4_arm_avg_ns
+  - count4096_smp4_cancel_avg_ns
+  - count4096_smp4_rearm_avg_ns
+  - count4096_smp4_armed_close_avg_ns
+  - count4096_smp4_expiry_read_p99_ns
+  - count4096_smp4_expiry_read_max_ns

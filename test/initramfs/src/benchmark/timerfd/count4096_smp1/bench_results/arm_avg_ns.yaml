@@ -1,0 +1,13 @@
+alert:
+  bigger_is_better: false
+chart:
+  description: 'Initial arm phase of the cancel case, divided by N (N=4096, SMP=1)'
+  legend: 'Initial arm average on {system}'
+  title: '[Timerfd] Initial arm average (N=4096, SMP=1)'
+  unit: ns
+result_extraction:
+  result_index: 2
+  search_pattern: '^TIMERFD_ARM_AVG_NS '
+runtime_config:
+  smp: 1
+  check_guest_exit: true

@@ -1,0 +1,13 @@
+alert:
+  bigger_is_better: false
+chart:
+  description: 'GET throughput: 100K requests at concurrency 20; fixed arrivals: 1000/s for 5s over 20 connections'
+  legend: 'Redis fixed-arrival service request errors on {system}'
+  title: 'Redis fixed-arrival service request errors (timer none, SMP=1)'
+  unit: requests
+result_extraction:
+  result_index: 2
+  search_pattern: '^REDIS_TIMER_SERVICE_ERROR_COUNT '
+runtime_config:
+  check_guest_exit: true
+  smp: 1

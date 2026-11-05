@@ -41,18 +41,20 @@ runs:
       shell: bash
       run: |
         make install_osdk
-        bash test/initramfs/src/benchmark/bench_linux_and_aster.sh "${{ matrix.benchmarks }}" "${{ inputs.platform }}"
         BENCHMARK_ARTIFACT=results_$(echo "${{ matrix.benchmarks }}" | tr '/' '-')
         echo "BENCHMARK_ARTIFACT=$BENCHMARK_ARTIFACT" >> $GITHUB_ENV
+        export BENCHMARK_ARTIFACT_DIR="$GITHUB_WORKSPACE/target/benchmark-artifacts"
+        bash test/initramfs/src/benchmark/bench_linux_and_aster.sh "${{ matrix.benchmarks }}" "${{ inputs.platform }}"
 
     - name: Store benchmark results
-      if: ${{ inputs.task == 'benchmark' }}
+      if: ${{ always() && inputs.task == 'benchmark' }}
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.BENCHMARK_ARTIFACT }}
         if-no-files-found: error # Fail the benchmark job if no file is found.
         path: |
           result_*.json
+          target/benchmark-artifacts/
 
     - name: Download Benchmark Results
       if: ${{ inputs.task == 'result' }}

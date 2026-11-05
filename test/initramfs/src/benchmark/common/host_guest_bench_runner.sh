@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 set -e
+set -o pipefail
 
 BENCHMARK_PATH=$1
 ASTERINAS_GUEST_CMD=$2
@@ -10,6 +11,14 @@ LINUX_GUEST_CMD=$3
 ASTERINAS_OUTPUT=$4
 LINUX_OUTPUT=$5
 BENCHMARK_NAME=$6
+CHECK_GUEST_EXIT=${7:-false}
+case "$CHECK_GUEST_EXIT" in
+    true|false) ;;
+    *) echo "Invalid check_guest_exit: $CHECK_GUEST_EXIT" >&2; exit 1 ;;
+esac
+ARTIFACT_ROOT=${BENCHMARK_ARTIFACT_DIR:-"$PWD/target/benchmark-artifacts/$BENCHMARK_NAME"}
+mkdir -p "$ARTIFACT_ROOT"
+ARTIFACT_ROOT=$(cd "$ARTIFACT_ROOT" && pwd)
 # Message to monitor in the log file to determine whether the VM is ready
 # It should align with bench_runner.sh
 READY_MESSAGE="The VM is ready for the benchmark."
@@ -38,53 +47,67 @@ elif [[ "$BENCHMARK_PATH" =~ "memcached" ]]; then
     export MEMCACHED_PORT=11211
 fi
 
-# Function to run the benchmark
-# Parameters:
-#   $1: guest command to run on the VM
-#   $2: output file to store the benchmark results
-#   $3: log file to monitor for the ready message
-#   $4: ready message to monitor in the log file
+# Legacy jobs terminate QEMU from host.sh. New jobs can require an orderly
+# guest exit by setting runtime_config.check_guest_exit to true.
 run_benchmark() {
     local guest_cmd=$1
     local output_file=$2
-    local guest_log_file=$3
-    local ready_message=$4
+    local system=$3
+    local guest_pid host_status=0 guest_status=0
 
-    echo "Running the benchmark on the VM..."
-    eval "${guest_cmd}" | tee "${guest_log_file}" &
+    export BENCHMARK_SYSTEM="$system"
+    export BENCHMARK_ARTIFACT_DIR
+    BENCHMARK_ARTIFACT_DIR=$(mktemp -d "$ARTIFACT_ROOT/$system.XXXXXX")
+    local guest_log_file="$BENCHMARK_ARTIFACT_DIR/guest.log"
+    echo "Benchmark artifacts: $BENCHMARK_ARTIFACT_DIR"
+    if [[ "$CHECK_GUEST_EXIT" == true ]]; then
+        # Bound build, readiness and shutdown, including a guest panic after
+        # a failed benchmark. timeout signals only its own process group.
+        timeout --kill-after=10s 20m bash -o pipefail -c "$guest_cmd" >"$guest_log_file" 2>&1 &
+    else
+        ( eval "$guest_cmd" 2>&1 | tee "$guest_log_file" ) &
+    fi
+    guest_pid=$!
 
-    # Monitor the log file for the ready message
-    echo "Waiting for the ready message: ${ready_message}"
-    while true; do
-        if grep -q "${ready_message}" "${guest_log_file}"; then
-            echo "Ready message detected. Running the benchmark on the host..."
-            break
+    echo "Waiting for the ready message: $READY_MESSAGE"
+    until grep -q "$READY_MESSAGE" "$guest_log_file" 2>/dev/null; do
+        if ! kill -0 "$guest_pid" 2>/dev/null; then
+            wait "$guest_pid" || guest_status=$?
+            echo "Guest exited before readiness (status $guest_status)" >&2
+            return 1
         fi
         sleep 1
     done
 
-    # Sleep for a short time to ensure the guest is fully ready
-    sleep 1
+    if [[ "$CHECK_GUEST_EXIT" != true ]]; then
+        sleep 1
+    fi
 
-    # The listening server address in guest VM
     export GUEST_SERVER_IP_ADDRESS=10.0.2.15
-
-    # Run the host command and save the output to the specified file.
-    bash "${BENCHMARK_PATH}/host.sh" 2>&1 | tee "${output_file}"
-
-    # Clean up the log file
-    rm -f "${guest_log_file}"
+    bash "$BENCHMARK_PATH/host.sh" 2>&1 | tee "$output_file" || host_status=$?
+    cp "$output_file" "$BENCHMARK_ARTIFACT_DIR/host.log"
+    if [[ "$CHECK_GUEST_EXIT" == true && "$host_status" -ne 0 ]]; then
+        kill -TERM -- "-$guest_pid" 2>/dev/null || true
+    fi
+    wait "$guest_pid" || guest_status=$?
+    if [[ "$CHECK_GUEST_EXIT" == true ]]; then
+        cat "$guest_log_file"
+    fi
+    if [[ "$host_status" -ne 0 ]]; then
+        echo "Host benchmark failed (status $host_status)" >&2
+        return "$host_status"
+    fi
+    if [[ "$CHECK_GUEST_EXIT" == true && "$guest_status" -ne 0 ]]; then
+        echo "Guest benchmark failed (status $guest_status)" >&2
+        return "$guest_status"
+    fi
+    if [[ "$CHECK_GUEST_EXIT" == true ]] &&
+        ! tr -d '\r' <"$guest_log_file" | grep -Fx "BENCHMARK_SUCCEEDED $BENCHMARK_NAME" >/dev/null; then
+        echo "Guest benchmark did not report successful completion" >&2
+        return 1
+    fi
 }
 
-# Run the benchmark on the Asterinas VM
-run_benchmark "${ASTERINAS_GUEST_CMD}" "${ASTERINAS_OUTPUT}" "/tmp/asterinas.log" "${READY_MESSAGE}"
-
-# Wait for the Asterinas QEMU process to exit
-wait
-
-# Run the benchmark on the Linux VM
-prepare_fs "${BENCHMARK_NAME}"
-run_benchmark "${LINUX_GUEST_CMD}" "${LINUX_OUTPUT}" "/tmp/linux.log" "${READY_MESSAGE}"
-
-# Wait for the Linux QEMU process to exit
-wait
+run_benchmark "$ASTERINAS_GUEST_CMD" "$ASTERINAS_OUTPUT" asterinas
+prepare_fs "$BENCHMARK_NAME"
+run_benchmark "$LINUX_GUEST_CMD" "$LINUX_OUTPUT" linux

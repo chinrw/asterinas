@@ -151,6 +151,7 @@ run_benchmark() {
     local mem_val="8G"
     local aster_scheme_cmd_part="SCHEME=iommu" # Default scheme
     local virtiofs="off"
+    local check_guest_exit="false"
 
     # Process runtime_configs_str to override defaults and gather extra args
     while IFS='=' read -r key value; do
@@ -172,12 +173,22 @@ run_benchmark() {
              "virtiofs")
                  virtiofs="$value"
                  ;;
+             "check_guest_exit")
+                 check_guest_exit="$value"
+                 ;;
              *)
                  echo "Warning: Unknown runtime configuration key '$key'" >&2
                  exit 1
                  ;;
          esac
      done <<< "$runtime_configs_str"
+
+    local guest_prefix=()
+    case "$check_guest_exit" in
+        true) guest_prefix=(timeout --kill-after=10s 20m) ;;
+        false) ;;
+        *) echo "Invalid check_guest_exit: $check_guest_exit" >&2; exit 1 ;;
+    esac
 
     # Prepare commands for Asterinas and Linux using arrays
     local asterinas_cmd_arr=(make run_kernel "BENCHMARK=${benchmark}")
@@ -189,7 +200,7 @@ run_benchmark() {
         ENABLE_KVM=1
         RELEASE_LTO=1
         NETDEV=tap
-        VHOST=on
+        "VHOST=${VHOST:-on}"
     )
     if [[ "$platform" == "tdx" ]]; then
         asterinas_cmd_arr+=(INTEL_TDX=1)
@@ -228,7 +239,7 @@ run_benchmark() {
         -device "nvme,drive=nvme0n1,serial=nvme0n1"
         -device "virtio-net-pci,netdev=net01,disable-legacy=on,disable-modern=off,csum=off,ctrl_guest_offloads=off,ctrl_mac_addr=off,ctrl_rx_extra=off,ctrl_rx=off,ctrl_vlan=off,ctrl_vq=off,event_idx=off,guest_announce=off,guest_csum=off,guest_ecn=off,guest_tso4=off,guest_tso6=off,guest_ufo=off,guest_uso4=off,guest_uso6=off,host_ecn=off,host_tso4=off,host_tso6=off,host_ufo=off,host_uso=off,indirect_desc=off,mrg_rxbuf=off,queue_reset=off"
         -append "console=ttyS0 rdinit=/benchmark/common/bench_runner.sh ${benchmark} linux mitigations=off hugepages=0 transparent_hugepage=never quiet"
-        -netdev "tap,id=net01,script=${BENCHMARK_ROOT}/../../../../tools/net/qemu-ifup.sh,downscript=${BENCHMARK_ROOT}/../../../../tools/net/qemu-ifdown.sh,vhost=on"
+        -netdev "tap,id=net01,script=${BENCHMARK_ROOT}/../../../../tools/net/qemu-ifup.sh,downscript=${BENCHMARK_ROOT}/../../../../tools/net/qemu-ifdown.sh,vhost=${VHOST:-on}"
         -nographic
     )
     if [[ "$platform" != "tdx" ]]; then
@@ -261,14 +272,24 @@ run_benchmark() {
         "guest_only")
             echo "Running benchmark ${benchmark} on Asterinas..."
             # Execute directly from array, redirect stderr to stdout, then tee
-            "${asterinas_cmd_arr[@]}" 2>&1 | tee "${ASTER_OUTPUT}"
+            "${guest_prefix[@]}" "${asterinas_cmd_arr[@]}" 2>&1 | tee "${ASTER_OUTPUT}" "$BENCHMARK_ARTIFACT_DIR/asterinas.log"
+            if [[ "$check_guest_exit" == true ]] &&
+                ! tr -d '\r' <"$BENCHMARK_ARTIFACT_DIR/asterinas.log" | grep -Fx "BENCHMARK_SUCCEEDED $benchmark" >/dev/null; then
+                echo "Guest benchmark did not report successful completion" >&2
+                return 1
+            fi
             prepare_fs "$benchmark"
             if [[ "$virtiofs" == "on" ]]; then
                 start_linux_virtiofsd
             fi
             echo "Running benchmark ${benchmark} on Linux..."
             # Execute directly from array, redirect stderr to stdout, then tee
-            "${linux_cmd_arr[@]}" 2>&1 | tee "${LINUX_OUTPUT}"
+            "${guest_prefix[@]}" "${linux_cmd_arr[@]}" 2>&1 | tee "${LINUX_OUTPUT}" "$BENCHMARK_ARTIFACT_DIR/linux.log"
+            if [[ "$check_guest_exit" == true ]] &&
+                ! tr -d '\r' <"$BENCHMARK_ARTIFACT_DIR/linux.log" | grep -Fx "BENCHMARK_SUCCEEDED $benchmark" >/dev/null; then
+                echo "Guest benchmark did not report successful completion" >&2
+                return 1
+            fi
             ;;
         "host_guest")
             # Note: host_guest_bench_runner.sh expects commands as single strings.
@@ -289,7 +310,8 @@ run_benchmark() {
                 "${linux_cmd_str}" \
                 "${ASTER_OUTPUT}" \
                 "${LINUX_OUTPUT}" \
-                "${benchmark}"
+                "${benchmark}" \
+                "${check_guest_exit}"
             ;;
         *)
             echo "Error: Unknown benchmark type '${run_mode}'" >&2
@@ -362,6 +384,11 @@ main() {
             fi
         done
     fi
+
+    local artifact_root=${BENCHMARK_ARTIFACT_DIR:-"$PWD/target/benchmark-artifacts/$benchmark"}
+    mkdir -p "$artifact_root"
+    export BENCHMARK_ARTIFACT_DIR
+    BENCHMARK_ARTIFACT_DIR=$(mktemp -d "$artifact_root/run.XXXXXX")
 
     # Run the benchmark, passing the config string
     run_benchmark "$benchmark" "$run_mode" "$runtime_configs_str"

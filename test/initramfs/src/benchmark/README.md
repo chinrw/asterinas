@@ -254,3 +254,30 @@ runtime_config:              # Runtime configuration
 FIO benchmarks use `parser: fio_json` with `direction: read` or `direction: write` instead of `search_pattern`, `nth_occurrence`, and `result_index`. The parser requires one successful JSON result whose effective `rw` option matches `direction`, and converts its positive, finite `bw_bytes` value from bytes/s to decimal MB/s. The chart unit must therefore be `MB/s`. Incomplete or duplicate result blocks and invalid job results fail parsing.
 
 By adhering to this format, we ensure clarity and consistency in benchmarking workflows and reporting systems.
+
+## Timer lifecycle comparisons
+ The [timerfd jobs](timerfd/README.md) measure operation averages and complete deadline-to-read tails.
+The [Redis timer jobs](redis/timer_common/README.md) measure GET capacity and fixed-arrival latency under no explicit background load and timer churn.
+Both use the normal initramfs packaging and result YAML files.
+Use the project development container with KVM, the normal TAP networking setup, and the host dependencies required by this runner.
+Redis also requires Python 3 and `redis-benchmark` on the host.
+
+To compare a kernel change, run the same jobs on a benchmark-only commit and on the fix commit.
+Keep the container image, kernel profile, dependency locks, userland, helper binaries, memory, guest CPU count and host hardware identical.
+Use fresh guests and balance base-first and head-first pairs before collecting results.
+Retain slow and failed trials; throughput and average operation cost do not replace latency percentiles.
+The suite-specific READMEs define each metric and the workload's fixed timing.
+
+Host/guest jobs retain logs and client records in unique directories beneath `target/benchmark-artifacts/<suite>/<job>` by default.
+Set `BENCHMARK_ARTIFACT_DIR` to choose another writable root.
+A host failure or a guest exit before readiness fails the job.
+New jobs that shut down their own service set `runtime_config.check_guest_exit: true` to require a successful guest exit and the guest success marker as well.
+Existing jobs that stop QEMU from the host retain their prior guest-exit behavior.
+
+Strict guest jobs have a 20-minute build/readiness/run/shutdown limit and a 10-second forced-stop grace period.
+A host failure stops that owned guest process group.
+Guest console output is retained in the artifact directory and printed after the strict job finishes.
+
+The runner defaults to `VHOST=on`.
+On hosts without `/dev/vhost-net`, prefix each command with `VHOST=off`; keep
+that setting identical for base, head and Linux.
