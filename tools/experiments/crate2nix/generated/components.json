@@ -1,0 +1,761 @@
+[
+  {
+    "dependencies": [
+      {
+        "name": "align_ext"
+      },
+      {
+        "name": "aster-util"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "device-id"
+      },
+      {
+        "name": "dma-pool"
+      },
+      {
+        "name": "id-alloc"
+      },
+      {
+        "name": "int-to-c-enum"
+      },
+      {
+        "name": "io-util"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "ostd-pod"
+      },
+      {
+        "name": "spin"
+      },
+      {
+        "name": "zerocopy"
+      }
+    ],
+    "name": "aster-block",
+    "relative_path": "kernel/core/comps/block"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "component"
+      },
+      {
+        "name": "inventory"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      }
+    ],
+    "name": "aster-cmdline",
+    "relative_path": "kernel/core/comps/cmdline"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "component"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      }
+    ],
+    "name": "aster-console",
+    "relative_path": "kernel/core/comps/console"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "align_ext"
+      },
+      {
+        "name": "aster-bigtcp"
+      },
+      {
+        "name": "aster-block"
+      },
+      {
+        "name": "aster-cmdline"
+      },
+      {
+        "name": "aster-console"
+      },
+      {
+        "name": "aster-device"
+      },
+      {
+        "name": "aster-framebuffer"
+      },
+      {
+        "name": "aster-fuse"
+      },
+      {
+        "name": "aster-input"
+      },
+      {
+        "name": "aster-logger"
+      },
+      {
+        "name": "aster-network"
+      },
+      {
+        "name": "aster-nvme"
+      },
+      {
+        "name": "aster-rights"
+      },
+      {
+        "name": "aster-rights-proc"
+      },
+      {
+        "name": "aster-softirq"
+      },
+      {
+        "name": "aster-systree"
+      },
+      {
+        "name": "aster-time"
+      },
+      {
+        "name": "aster-util"
+      },
+      {
+        "name": "aster-virtio"
+      },
+      {
+        "name": "atomic-integer-wrapper"
+      },
+      {
+        "name": "bitflags"
+      },
+      {
+        "name": "bitvec"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "const_format"
+      },
+      {
+        "name": "cpio-decoder"
+      },
+      {
+        "name": "device-id"
+      },
+      {
+        "name": "getset"
+      },
+      {
+        "name": "hashbrown"
+      },
+      {
+        "name": "id-alloc"
+      },
+      {
+        "name": "inherit-methods-macro"
+      },
+      {
+        "name": "int-to-c-enum"
+      },
+      {
+        "name": "intrusive-collections"
+      },
+      {
+        "name": "inventory"
+      },
+      {
+        "name": "io-util"
+      },
+      {
+        "name": "jhash"
+      },
+      {
+        "name": "keyable-arc"
+      },
+      {
+        "name": "lending-iterator"
+      },
+      {
+        "name": "logo-ascii-art"
+      },
+      {
+        "name": "lru"
+      },
+      {
+        "name": "miniz_oxide"
+      },
+      {
+        "name": "osdk-frame-allocator"
+      },
+      {
+        "name": "osdk-heap-allocator"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "ostd-pod"
+      },
+      {
+        "name": "paste"
+      },
+      {
+        "name": "rand"
+      },
+      {
+        "name": "ring-buffer"
+      },
+      {
+        "name": "short-vis-path"
+      },
+      {
+        "name": "smallvec"
+      },
+      {
+        "name": "sparse-id-alloc"
+      },
+      {
+        "name": "spin"
+      },
+      {
+        "name": "takeable"
+      },
+      {
+        "name": "time"
+      },
+      {
+        "name": "typeflags"
+      },
+      {
+        "name": "typeflags-util"
+      },
+      {
+        "name": "xarray"
+      },
+      {
+        "name": "xmas-elf"
+      },
+      {
+        "name": "zerocopy"
+      },
+      {
+        "name": "loongArch64"
+      },
+      {
+        "name": "riscv"
+      },
+      {
+        "name": "tdx-guest"
+      },
+      {
+        "name": "x86_64"
+      }
+    ],
+    "name": "aster-core",
+    "relative_path": "kernel/core"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-systree"
+      },
+      {
+        "name": "aster-util"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "device-id"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      }
+    ],
+    "name": "aster-device",
+    "relative_path": "kernel/core/comps/device"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "align_ext"
+      },
+      {
+        "name": "bitflags"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "font8x8"
+      },
+      {
+        "name": "int-to-c-enum"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      }
+    ],
+    "name": "aster-framebuffer",
+    "relative_path": "kernel/core/comps/framebuffer"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-cmdline"
+      },
+      {
+        "name": "aster-core"
+      },
+      {
+        "name": "aster-input"
+      },
+      {
+        "name": "bitflags"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      }
+    ],
+    "name": "aster-i8042",
+    "relative_path": "kernel/comps/i8042"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "bitflags"
+      },
+      {
+        "name": "bitvec"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "ostd-pod"
+      },
+      {
+        "name": "spin"
+      },
+      {
+        "name": "zerocopy"
+      }
+    ],
+    "name": "aster-input",
+    "relative_path": "kernel/core/comps/input"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-console"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "owo-colors"
+      }
+    ],
+    "name": "aster-logger",
+    "relative_path": "kernel/core/comps/logger"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aes-gcm"
+      },
+      {
+        "name": "aster-block"
+      },
+      {
+        "name": "bittle"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "ctr"
+      },
+      {
+        "name": "device-id"
+      },
+      {
+        "name": "hashbrown"
+      },
+      {
+        "name": "inherit-methods-macro"
+      },
+      {
+        "name": "lending-iterator"
+      },
+      {
+        "name": "lru"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "ostd-pod"
+      },
+      {
+        "name": "postcard"
+      },
+      {
+        "name": "serde"
+      },
+      {
+        "name": "zerocopy"
+      }
+    ],
+    "name": "aster-mlsdisk",
+    "relative_path": "kernel/core/comps/mlsdisk"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-bigtcp"
+      },
+      {
+        "name": "aster-softirq"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      }
+    ],
+    "name": "aster-network",
+    "relative_path": "kernel/core/comps/network"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-block"
+      },
+      {
+        "name": "aster-pci"
+      },
+      {
+        "name": "aster-util"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "device-id"
+      },
+      {
+        "name": "io-util"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "ostd-pod"
+      },
+      {
+        "name": "spin"
+      },
+      {
+        "name": "zerocopy"
+      }
+    ],
+    "name": "aster-nvme",
+    "relative_path": "kernel/core/comps/nvme"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "align_ext"
+      },
+      {
+        "name": "bitflags"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "int-to-c-enum"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      },
+      {
+        "name": "fdt"
+      },
+      {
+        "name": "fdt-util"
+      },
+      {
+        "name": "fdt-util"
+      }
+    ],
+    "name": "aster-pci",
+    "relative_path": "kernel/core/comps/pci"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-core"
+      },
+      {
+        "name": "aster-drm"
+      },
+      {
+        "name": "aster-framebuffer"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "ostd"
+      }
+    ],
+    "name": "aster-simpledrm",
+    "relative_path": "kernel/comps/simpledrm"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-util"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "intrusive-collections"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      }
+    ],
+    "name": "aster-softirq",
+    "relative_path": "kernel/core/comps/softirq"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-util"
+      },
+      {
+        "name": "bitflags"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "id-alloc"
+      },
+      {
+        "name": "inherit-methods-macro"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      }
+    ],
+    "name": "aster-systree",
+    "relative_path": "kernel/core/comps/systree"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-util"
+      },
+      {
+        "name": "bitflags"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      },
+      {
+        "name": "fdt-util"
+      },
+      {
+        "name": "chrono"
+      },
+      {
+        "name": "fdt-util"
+      },
+      {
+        "name": "fdt-util"
+      },
+      {
+        "name": "chrono"
+      }
+    ],
+    "name": "aster-time",
+    "relative_path": "kernel/core/comps/time"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-console"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "inherit-methods-macro"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "spin"
+      },
+      {
+        "name": "fdt-util"
+      },
+      {
+        "name": "aster-util"
+      },
+      {
+        "name": "fdt"
+      },
+      {
+        "name": "fdt-util"
+      }
+    ],
+    "name": "aster-uart",
+    "relative_path": "kernel/comps/uart"
+  },
+  {
+    "dependencies": [
+      {
+        "name": "aster-bigtcp"
+      },
+      {
+        "name": "aster-block"
+      },
+      {
+        "name": "aster-console"
+      },
+      {
+        "name": "aster-fuse"
+      },
+      {
+        "name": "aster-input"
+      },
+      {
+        "name": "aster-network"
+      },
+      {
+        "name": "aster-pci"
+      },
+      {
+        "name": "aster-rights"
+      },
+      {
+        "name": "aster-softirq"
+      },
+      {
+        "name": "aster-util"
+      },
+      {
+        "name": "bitflags"
+      },
+      {
+        "name": "component"
+      },
+      {
+        "name": "device-id"
+      },
+      {
+        "name": "dma-pool"
+      },
+      {
+        "name": "id-alloc"
+      },
+      {
+        "name": "int-to-c-enum"
+      },
+      {
+        "name": "io-util"
+      },
+      {
+        "name": "ostd"
+      },
+      {
+        "name": "ostd-pod"
+      },
+      {
+        "name": "short-vis-path"
+      },
+      {
+        "name": "smallvec"
+      },
+      {
+        "name": "spin"
+      },
+      {
+        "name": "typeflags-util"
+      },
+      {
+        "name": "zerocopy"
+      },
+      {
+        "name": "fdt-util"
+      },
+      {
+        "name": "fdt-util"
+      },
+      {
+        "name": "aster-cmdline"
+      },
+      {
+        "name": "tdx-guest"
+      }
+    ],
+    "name": "aster-virtio",
+    "relative_path": "kernel/core/comps/virtio"
+  }
+]

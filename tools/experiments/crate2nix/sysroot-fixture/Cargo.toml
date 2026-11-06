@@ -1,0 +1,9 @@
+[package]
+name = "c2n-sysroot-probe"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[profile.dev]
+panic = "unwind"

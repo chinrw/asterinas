@@ -1,0 +1,40 @@
+--- a/kernel-Cargo.nix
++++ b/kernel-Cargo.nix
+@@ -95 +95,6 @@
+-    crates = {
++    crates = lib.mapAttrs (_: crate:
++      crate // lib.optionalAttrs (!(builtins.elem
++        "${crate.crateName}@${crate.version}"
++        (builtins.fromJSON (builtins.readFile ./build-script-packages.json)))) {
++          buildDependencies = [ ];
++        }) {
+@@ -6197,0 +6203 @@
++            buildTarget = makeTarget stdenv.buildPlatform;
+@@ -6222 +6228,2 @@
+-            features = mergedFeatures."${packageId}" or [ ];
++            context = if pkgs.stdenv.hostPlatform == pkgs.stdenv.buildPlatform then "host" else "target";
++            features = mergedFeatures."${context}/${packageId}" or [ ];
+@@ -6439,0 +6447 @@
++    , context ? "target"
+@@ -6440,0 +6449 @@
++    , buildTarget ? target
+@@ -6482 +6491,3 @@
+-                cacheFeatures = cache.${packageId} or [ ];
++                dependencyContext = if path == "build" || (crateConfigs.${packageId}.procMacro or false) then "host" else context;
++                key = "${dependencyContext}/${packageId}";
++                cacheFeatures = cache.${key} or [ ];
+@@ -6485 +6496 @@
+-              if cache ? ${packageId} && cache.${packageId} == combinedFeatures then
++              if cache ? ${key} && cache.${key} == combinedFeatures then
+@@ -6490,0 +6502,2 @@
++                  context = dependencyContext;
++                  target = if dependencyContext == "host" then buildTarget else target;
+@@ -6494 +6507 @@
+-                    target
++                    buildTarget
+@@ -6502 +6515 @@
+-            cacheFeatures = featuresByPackageId.${packageId} or [ ];
++            cacheFeatures = featuresByPackageId."${context}/${packageId}" or [ ];
+@@ -6507 +6520 @@
+-            "${packageId}" = combinedFeatures;
++            "${context}/${packageId}" = combinedFeatures;

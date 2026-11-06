@@ -1,0 +1,278 @@
+name: Crate2nix fork experiment
+
+on:
+  push:
+    branches: [experiment/crate2nix-ci-cache]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Build the small probe or the complete dev kernel
+        type: choice
+        options: [probe, kernel]
+        default: probe
+      repetitions:
+        description: Fresh runners per scenario
+        type: choice
+        options: ['1', '5']
+        default: '1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crate2nix-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  C2N_CACHE: asterina-test
+  NIX_CONFIG: |
+    accept-flake-config = true
+    experimental-features = nix-command flakes
+    max-jobs = 2
+    cores = 1
+    builders =
+    allow-import-from-derivation = false
+
+jobs:
+  validate:
+    if: github.repository == 'chinrw/asterinas' && github.ref == 'refs/heads/experiment/crate2nix-ci-cache'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      mode: ${{ steps.matrix.outputs.mode }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      repetitions: ${{ steps.matrix.outputs.repetitions }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate the experiment configuration
+        id: matrix
+        env:
+          MODE: ${{ inputs.mode || vars.CRATE2NIX_MODE || 'probe' }}
+          REPETITIONS: ${{ inputs.repetitions || vars.CRATE2NIX_REPETITIONS || '1' }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          mode, repetitions = os.environ['MODE'], int(os.environ['REPETITIONS'])
+          assert mode in ['probe', 'kernel'] and repetitions in [1, 5]
+          assert os.environ['C2N_CACHE'] == 'asterina-test'
+          scenarios = ['same-input', 'docs-only', 'library-change', 'negative']
+          if mode == 'kernel':
+              scenarios += ['assembler-change', 'core-change']
+          samples = [{'scenario': scenario, 'replicate': replicate, 'artifact': f'consumer-{scenario}-{replicate}'}
+                     for scenario in scenarios for replicate in range(1, repetitions + 1)]
+          if mode == 'kernel':
+              samples += [{'scenario': scenario, 'replicate': replicate, 'artifact': f'{scenario}-{replicate}'}
+                          for scenario in ['cargo-baseline', 'nix-cold'] for replicate in range(1, repetitions + 1)]
+          with open('experiment-config.json', 'w') as output:
+              json.dump({'mode': mode, 'repetitions': repetitions, 'expected_samples': samples}, output, indent=2)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('mode=' + mode + '\n')
+              output.write('matrix=' + json.dumps({'scenario': scenarios, 'replicate': list(range(1, repetitions + 1))}) + '\n')
+              output.write('repetitions=' + json.dumps(list(range(1, repetitions + 1))) + '\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: experiment-config
+          path: experiment-config.json
+          retention-days: 14
+      - uses: cachix/install-nix-action@d9186cbdca7adedf113a159fa91f725a27866771
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.34.9/install
+      - name: Check the frozen generated inputs
+        run: nix develop --command python3 tools/experiments/crate2nix/generate.py --check
+
+  seed:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      MODE: ${{ needs.validate.outputs.mode }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@d9186cbdca7adedf113a159fa91f725a27866771
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.34.9/install
+      - name: Build and inventory every compilation instance
+        run: |
+          mkdir -p evidence
+          package=c2n-exp-host-probe
+          graph=host-graph
+          if [ "$MODE" = kernel ]; then package=c2n-exp-kernel-dev; graph=graph; fi
+          nix eval --json ".#legacyPackages.x86_64-linux.c2n-exp.$graph" > evidence/seed-crate-graph.json
+          nix build ".#$package" --no-link --print-out-paths --log-format internal-json -v -L > evidence/result-path.txt 2> evidence/build-events.jsonl
+          python3 - <<'PY'
+          import json
+          rows = json.load(open('evidence/seed-crate-graph.json'))
+          open('evidence/crate-outputs.txt', 'w').write('\n'.join(sorted({output for row in rows for output in row['outputs']})) + '\n')
+          PY
+          if [ "$MODE" = kernel ]; then
+            nix build .#c2n-exp-sysroot-x86_64 --no-link --print-out-paths >> evidence/crate-outputs.txt
+          fi
+      - name: Publish and verify the dedicated seed
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN_FOR_TEST_CACHE }}
+        run: |
+          test -n "$CACHIX_AUTH_TOKEN"
+          cachix_bin="$(nix build .#c2n-exp-cachix --no-link --print-out-paths)/bin/cachix"
+          "$cachix_bin" push "$C2N_CACHE" < evidence/crate-outputs.txt
+          python3 - <<'PY'
+          import os, subprocess
+          paths = open('evidence/crate-outputs.txt').read().splitlines()
+          with open('evidence/remote-path-info.json', 'w') as output:
+              subprocess.run(['nix', 'path-info', '--json', '--json-format', '1', '--store',
+                              'https://' + os.environ['C2N_CACHE'] + '.cachix.org'] + paths,
+                             stdout=output, check=True)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: seed-evidence
+          path: evidence
+          retention-days: 14
+
+  consumer:
+    needs: [validate, seed]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
+    env:
+      MODE: ${{ needs.validate.outputs.mode }}
+      SCENARIO: ${{ matrix.scenario }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@d9186cbdca7adedf113a159fa91f725a27866771
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.34.9/install
+      - name: Configure public read-only cache access
+        run: |
+          cachix_bin="$(nix build .#c2n-exp-cachix --no-link --print-out-paths)/bin/cachix"
+          "$cachix_bin" use "$C2N_CACHE"
+      - name: Realize the scenario on a fresh runner
+        run: |
+          mkdir -p evidence
+          graph=graph
+          args=()
+          if [ "$MODE" = probe ]; then graph=host-graph; args+=(--probe); fi
+          if [ "$SCENARIO" = same-input ] || [ "$SCENARIO" = docs-only ]; then args+=(--require-substitute); fi
+          nix eval --json ".#legacyPackages.x86_64-linux.c2n-exp.$graph" > evidence/seed-crate-graph.json
+          python3 tools/experiments/crate2nix/run-scenario.py "$SCENARIO" \
+            --seed-graph evidence/seed-crate-graph.json --output evidence/scenario \
+            --max-jobs 2 --cores 1 --fresh-runner "${args[@]}"
+      - name: Run the restored kernel boot smoke
+        if: needs.validate.outputs.mode == 'kernel' && matrix.scenario == 'same-input'
+        run: |
+          nix develop --command python3 tools/experiments/crate2nix/generate.py --check
+          nix develop --command make -C test/initramfs initramfs-boot-images BENCHMARK=none PREBUILT_ROOT="$PWD/target/c2n-prebuilt"
+          elf="$(nix build .#c2n-exp-kernel-dev --no-link --print-out-paths --max-jobs 0 --builders '')/bin/asterinas-osdk-bin"
+          nix develop --command bash tools/experiments/crate2nix/boot.sh "$elf" evidence/boot
+          nix develop --command bash tools/experiments/crate2nix/boot.sh "$elf" evidence/hello-world hello-world
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: consumer-${{ matrix.scenario }}-${{ matrix.replicate }}
+          path: |
+            evidence/**/*.json
+            evidence/**/*.jsonl
+            evidence/**/*.log
+            evidence/**/*.sha256
+          retention-days: 14
+
+  cargo-baseline:
+    needs: validate
+    if: needs.validate.outputs.mode == 'kernel'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        replicate: ${{ fromJSON(needs.validate.outputs.repetitions) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@d9186cbdca7adedf113a159fa91f725a27866771
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.34.9/install
+      - name: Prepare the same pinned build environment
+        run: nix develop --command python3 tools/experiments/crate2nix/generate.py --check
+      - name: Build with the exported Cargo command
+        run: nix develop --command python3 tools/experiments/crate2nix/run-cargo-baseline.py --output evidence/cargo-baseline --jobs 2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: cargo-baseline-${{ matrix.replicate }}
+          path: |
+            evidence/cargo-baseline/metrics.json
+            evidence/cargo-baseline/build-description.json
+            evidence/cargo-baseline/build.log
+          retention-days: 14
+
+  nix-cold:
+    needs: validate
+    if: needs.validate.outputs.mode == 'kernel'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        replicate: ${{ fromJSON(needs.validate.outputs.repetitions) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@d9186cbdca7adedf113a159fa91f725a27866771
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.34.9/install
+      - name: Realize the kernel without the experimental substituter
+        run: |
+          mkdir -p evidence
+          nix eval --json .#legacyPackages.x86_64-linux.c2n-exp.graph > evidence/seed-crate-graph.json
+          python3 tools/experiments/crate2nix/run-scenario.py same-input \
+            --seed-graph evidence/seed-crate-graph.json --output evidence/scenario \
+            --max-jobs 2 --cores 1 --fresh-runner --sample-name nix-cold
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: nix-cold-${{ matrix.replicate }}
+          path: |
+            evidence/**/*.json
+            evidence/**/*.jsonl
+          retention-days: 14
+
+  report:
+    needs: [validate, seed, consumer, cargo-baseline, nix-cold]
+    if: always() && needs.validate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: samples
+      - name: Retain job timings and summarize all samples
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" > evidence/actions-jobs.json
+          python3 tools/experiments/crate2nix/summarize.py samples > evidence/report.md
+          cat evidence/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: experiment-report
+          path: evidence
+          retention-days: 14

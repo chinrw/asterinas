@@ -1,0 +1,20 @@
+{
+  "build_std_args": [
+    "-Zbuild-std=core,alloc,compiler_builtins",
+    "-Zbuild-std-features=compiler-builtins-mem"
+  ],
+  "final_link_flags": [
+    "-C link-arg=-Tx86_64.ld"
+  ],
+  "library_rustflags": [
+    "-C relocation-model=static",
+    "-C relro-level=off",
+    "-C force-unwind-tables=yes",
+    "--check-cfg cfg(ktest)",
+    "-C no-redzone=y",
+    "-C target-feature=+ermsb"
+  ],
+  "profile": "dev",
+  "rustc_version": "rustc 1.99.0-nightly",
+  "target_arch": "x86_64"
+}
