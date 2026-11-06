@@ -1,0 +1,187 @@
+{
+  "cohorts": [
+    {
+      "run": 40648624606,
+      "url": "https://github.com/chinrw/asterinas/actions/runs/40648624606",
+      "base": "b6c7d55ce6552b4aa85d0b6d866f50cb9ce62600",
+      "fixed": "567d337dc90852bfe89788ff7da726c421e7b596",
+      "harness": "dfd77d7b2f636944255740cd3f8b47311b7b0fdc",
+      "protocol": {
+        "host_deadline_seconds": 3,
+        "endpoint": "command exit status plus BARRIER_OK observed by host",
+        "fresh_guest_per_sample": true,
+        "minimal_samples_per_kernel": 25,
+        "controls_per_kernel": {
+          "sleep20": 1,
+          "sleep1000": 1
+        },
+        "paired_variant_order_seed": 20261028,
+        "same_runner": true,
+        "guest_cpus": 1
+      },
+      "variants": {
+        "base": {
+          "minimal_attempts": 25,
+          "passes": 10,
+          "outcomes": {
+            "deadline": 15,
+            "pass": 10
+          },
+          "invalid_attempts": 0,
+          "wilson_failure_two_sided_95": [
+            0.40739457358967,
+            0.7659669762225203
+          ],
+          "passing_latency": {
+            "endpoint": "successful host command completion only; deadline failures are censored",
+            "min_s": 0.301756388,
+            "median_s": 0.402107953,
+            "p95_nearest_rank_s": 1.90371371,
+            "max_s": 1.90371371
+          },
+          "controls": [
+            {
+              "helper": "sleep20",
+              "outcome": "pass",
+              "elapsed_ns": 401833523
+            },
+            {
+              "helper": "sleep1000",
+              "outcome": "pass",
+              "elapsed_ns": 201486915
+            }
+          ]
+        },
+        "retirement": {
+          "minimal_attempts": 25,
+          "passes": 25,
+          "outcomes": {
+            "pass": 25
+          },
+          "invalid_attempts": 0,
+          "wilson_failure_two_sided_95": [
+            0.0,
+            0.13319225093904846
+          ],
+          "passing_latency": {
+            "endpoint": "successful host command completion only; deadline failures are censored",
+            "min_s": 0.30165935,
+            "median_s": 0.401827307,
+            "p95_nearest_rank_s": 0.502255054,
+            "max_s": 0.50234287
+          },
+          "controls": [
+            {
+              "helper": "sleep20",
+              "outcome": "pass",
+              "elapsed_ns": 301673478
+            },
+            {
+              "helper": "sleep1000",
+              "outcome": "pass",
+              "elapsed_ns": 201498526
+            }
+          ]
+        }
+      },
+      "records_file": "40648624606-records.jsonl",
+      "plan_file": "40648624606-plan.json"
+    },
+    {
+      "run": 40657435112,
+      "url": "https://github.com/chinrw/asterinas/actions/runs/40657435112",
+      "base": "449721d9ce02adfe7c6d2a618e044b218867615b",
+      "fixed": "cba4d13d80f45828be80138f403db758d0ef68b5",
+      "harness": "1185091b9d739fc418ffc37e2b2b4a549200dd55",
+      "protocol": {
+        "host_deadline_seconds": 3,
+        "endpoint": "command exit status plus BARRIER_OK observed by host",
+        "fresh_guest_per_sample": true,
+        "minimal_samples_per_kernel": 25,
+        "controls_per_kernel": {
+          "sleep20": 1,
+          "sleep1000": 1
+        },
+        "paired_variant_order_seed": 20261028,
+        "same_runner": true,
+        "guest_cpus": 1,
+        "guest_memory": "8G",
+        "runner_pool": "ubuntu-22.04",
+        "container_image": "asterinas/kernel-dev:0.19.0-20261012"
+      },
+      "variants": {
+        "base": {
+          "minimal_attempts": 25,
+          "passes": 9,
+          "outcomes": {
+            "deadline": 16,
+            "pass": 9
+          },
+          "invalid_attempts": 0,
+          "wilson_failure_two_sided_95": [
+            0.44518497748164865,
+            0.7975211922554178
+          ],
+          "passing_latency": {
+            "endpoint": "successful host command completion only; deadline failures are censored",
+            "min_s": 0.301602156,
+            "median_s": 0.401933498,
+            "p95_nearest_rank_s": 2.904620424,
+            "max_s": 2.904620424
+          },
+          "controls": [
+            {
+              "helper": "sleep20",
+              "outcome": "pass",
+              "elapsed_ns": 402261182
+            },
+            {
+              "helper": "sleep1000",
+              "outcome": "pass",
+              "elapsed_ns": 402086782
+            }
+          ]
+        },
+        "retirement": {
+          "minimal_attempts": 25,
+          "passes": 25,
+          "outcomes": {
+            "pass": 25
+          },
+          "invalid_attempts": 0,
+          "wilson_failure_two_sided_95": [
+            0.0,
+            0.13319225093904846
+          ],
+          "passing_latency": {
+            "endpoint": "successful host command completion only; deadline failures are censored",
+            "min_s": 0.301573415,
+            "median_s": 0.401724303,
+            "p95_nearest_rank_s": 0.502041723,
+            "max_s": 0.502080482
+          },
+          "controls": [
+            {
+              "helper": "sleep20",
+              "outcome": "pass",
+              "elapsed_ns": 301663423
+            },
+            {
+              "helper": "sleep1000",
+              "outcome": "pass",
+              "elapsed_ns": 402231129
+            }
+          ]
+        }
+      },
+      "records_file": "40657435112-records.jsonl",
+      "plan_file": "40657435112-plan.json"
+    }
+  ],
+  "source_commit": "1185091b9d739fc418ffc37e2b2b4a549200dd55",
+  "source_path": "test/nixos/tests/development-tools-go/minimal_cgo.go",
+  "current_fix_only": "ec33c743471209bbb302f9e116b9e307703c77a3",
+  "current_go_pair_rerun": false,
+  "cohorts_pooled": false,
+  "record_notes": "driver_exit=-9 is owned supervisor cleanup, not the helper outcome. PASS requires the command/barrier endpoint before the host deadline; deadline observations are censored."
+}

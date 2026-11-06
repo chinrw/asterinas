@@ -39,4 +39,8 @@ Four pairs are descriptive evidence and do not establish a universal speedup or 
 correctness/ retains the actual named red/green ktest logs and the final fork CI result.
 The red run executes one test and fails with 1024 retained entries.
 Each of the three head runs executes one test and passes; the concurrent log includes calls to remote CPUs 1,2,3.
-The final code head passes all 34 x86 CI jobs.
+The recorded code head `5b7726ff9` passes all 34 x86 CI jobs.
+
+reviewer-tests.md gives download and run commands for the fork-only benchmarks and the standalone Go source.
+The proposed upstream branch contains only the timer fix and kernel regressions; reviewer-scope.json checks its relationship to the measured trees.
+The historical Go results are separate from the current timerfd/Redis campaign.

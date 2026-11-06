@@ -1,0 +1,329 @@
+{
+  "seed": 20261028,
+  "samples": [
+    {
+      "id": 0,
+      "block": 0,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 1,
+      "block": 0,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 2,
+      "block": 1,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 3,
+      "block": 1,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 4,
+      "block": 2,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 5,
+      "block": 2,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 6,
+      "block": 3,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 7,
+      "block": 3,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 8,
+      "block": 4,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 9,
+      "block": 4,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 10,
+      "block": 5,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 11,
+      "block": 5,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 12,
+      "block": 6,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 13,
+      "block": 6,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 14,
+      "block": 7,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 15,
+      "block": 7,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 16,
+      "block": 8,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 17,
+      "block": 8,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 18,
+      "block": 9,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 19,
+      "block": 9,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 20,
+      "block": 10,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 21,
+      "block": 10,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 22,
+      "block": 11,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 23,
+      "block": 11,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 24,
+      "block": 12,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 25,
+      "block": 12,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 26,
+      "block": 13,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 27,
+      "block": 13,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 28,
+      "block": 14,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 29,
+      "block": 14,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 30,
+      "block": 15,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 31,
+      "block": 15,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 32,
+      "block": 16,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 33,
+      "block": 16,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 34,
+      "block": 17,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 35,
+      "block": 17,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 36,
+      "block": 18,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 37,
+      "block": 18,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 38,
+      "block": 19,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 39,
+      "block": 19,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 40,
+      "block": 20,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 41,
+      "block": 20,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 42,
+      "block": 21,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 43,
+      "block": 21,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 44,
+      "block": 22,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 45,
+      "block": 22,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 46,
+      "block": 23,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 47,
+      "block": 23,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 48,
+      "block": 24,
+      "variant": "base",
+      "helper": "minimal"
+    },
+    {
+      "id": 49,
+      "block": 24,
+      "variant": "retirement",
+      "helper": "minimal"
+    },
+    {
+      "id": 50,
+      "block": 25,
+      "variant": "base",
+      "helper": "sleep20"
+    },
+    {
+      "id": 51,
+      "block": 25,
+      "variant": "retirement",
+      "helper": "sleep20"
+    },
+    {
+      "id": 52,
+      "block": 25,
+      "variant": "base",
+      "helper": "sleep1000"
+    },
+    {
+      "id": 53,
+      "block": 25,
+      "variant": "retirement",
+      "helper": "sleep1000"
+    }
+  ]
+}
