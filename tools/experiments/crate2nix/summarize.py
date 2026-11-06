@@ -4,12 +4,22 @@
 """Summarize retained samples without treating negative tests as timings."""
 
 from collections import defaultdict
+import argparse
 import json
 from pathlib import Path
 import statistics
-import sys
 
-source = Path(sys.argv[1])
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("source", type=Path)
+parser.add_argument("--jobs", type=Path)
+args = parser.parse_args()
+source = args.source
+job_outcomes = {}
+if args.jobs:
+    pages = json.loads(args.jobs.read_text())
+    if isinstance(pages, dict):
+        pages = [pages]
+    job_outcomes = {job["name"]: job["conclusion"] for page in pages for job in page["jobs"]}
 groups = defaultdict(list)
 configurations = list(source.rglob("experiment-config.json"))
 expected = []
@@ -21,12 +31,18 @@ if expected:
     for sample in expected:
         paths = list((source / sample["artifact"]).rglob("metrics.json"))
         if len(paths) == 1:
-            value = json.loads(paths[0].read_text())
-            if value["scenario"] != sample["scenario"]:
+            try:
+                value = json.loads(paths[0].read_text())
+            except (OSError, json.JSONDecodeError) as error:
+                value = {"exit_code": None, "validation_passed": False, "failure_reason": str(error)}
+            if value.get("scenario") != sample["scenario"]:
                 value["validation_passed"] = False
         else:
             value = {"exit_code": None, "validation_passed": False,
                      "failure_reason": "Missing or ambiguous metrics artifact"}
+        if args.jobs and job_outcomes.get(sample["artifact"]) != "success":
+            value["validation_passed"] = False
+            value["valid_performance_sample"] = False
         groups[sample["scenario"]].append(value)
 else:
     for path in source.rglob("metrics.json"):

@@ -82,6 +82,15 @@ jobs:
           install_url: https://releases.nixos.org/nix/nix-2.34.9/install
       - name: Check the frozen generated inputs
         run: nix develop --command python3 tools/experiments/crate2nix/generate.py --check
+      - name: Check dependency-feature and compiler-option isolation
+        if: steps.matrix.outputs.mode == 'kernel'
+        run: nix develop --command python3 tools/experiments/crate2nix/check-invalidation-controls.py --output evidence/controls
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && steps.matrix.outputs.mode == 'kernel'
+        with:
+          name: validation-evidence
+          path: evidence/controls
+          retention-days: 14
 
   seed:
     needs: validate
@@ -135,6 +144,7 @@ jobs:
           retention-days: 14
 
   consumer:
+    name: consumer-${{ matrix.scenario }}-${{ matrix.replicate }}
     needs: [validate, seed]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -155,6 +165,9 @@ jobs:
         run: |
           cachix_bin="$(nix build .#c2n-exp-cachix --no-link --print-out-paths)/bin/cachix"
           "$cachix_bin" use "$C2N_CACHE"
+      - name: Prepare the common pinned kernel environment
+        if: needs.validate.outputs.mode == 'kernel'
+        run: nix develop --command true
       - name: Realize the scenario on a fresh runner
         run: |
           mkdir -p evidence
@@ -167,13 +180,18 @@ jobs:
             --seed-graph evidence/seed-crate-graph.json --output evidence/scenario \
             --max-jobs 2 --cores 1 --fresh-runner "${args[@]}"
       - name: Run the restored kernel boot smoke
-        if: needs.validate.outputs.mode == 'kernel' && matrix.scenario == 'same-input'
+        if: needs.validate.outputs.mode == 'kernel' && matrix.scenario != 'negative'
         run: |
           nix develop --command python3 tools/experiments/crate2nix/generate.py --check
           nix develop --command make -C test/initramfs initramfs-boot-images BENCHMARK=none PREBUILT_ROOT="$PWD/target/c2n-prebuilt"
-          elf="$(nix build .#c2n-exp-kernel-dev --no-link --print-out-paths --max-jobs 0 --builders '')/bin/asterinas-osdk-bin"
+          elf="$(python3 -c 'import json; print(json.load(open("evidence/scenario/metrics.json"))["realized_output"])')/bin/asterinas-osdk-bin"
           nix develop --command bash tools/experiments/crate2nix/boot.sh "$elf" evidence/boot
           nix develop --command bash tools/experiments/crate2nix/boot.sh "$elf" evidence/hello-world hello-world
+      - name: Retain the complete sample validation outcome
+        if: always()
+        env:
+          SAMPLE_JOB_STATUS: ${{ job.status }}
+        run: python3 tools/experiments/crate2nix/finalize-sample.py evidence/scenario/metrics.json "$SAMPLE_JOB_STATUS"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -186,6 +204,7 @@ jobs:
           retention-days: 14
 
   cargo-baseline:
+    name: cargo-baseline-${{ matrix.replicate }}
     needs: validate
     if: needs.validate.outputs.mode == 'kernel'
     runs-on: ubuntu-24.04
@@ -201,10 +220,23 @@ jobs:
       - uses: cachix/install-nix-action@d9186cbdca7adedf113a159fa91f725a27866771
         with:
           install_url: https://releases.nixos.org/nix/nix-2.34.9/install
-      - name: Prepare the same pinned build environment
+      - name: Prepare the common pinned kernel environment
+        run: nix develop --command true
+      - name: Prepare OSDK and verify generated inputs
         run: nix develop --command python3 tools/experiments/crate2nix/generate.py --check
       - name: Build with the exported Cargo command
         run: nix develop --command python3 tools/experiments/crate2nix/run-cargo-baseline.py --output evidence/cargo-baseline --jobs 2
+      - name: Run the Cargo kernel boot and existing integration test
+        run: |
+          nix develop --command make -C test/initramfs initramfs-boot-images BENCHMARK=none PREBUILT_ROOT="$PWD/target/c2n-prebuilt"
+          elf="$PWD/evidence/cargo-baseline/target/x86_64-unknown-none/debug/asterinas-osdk-bin"
+          nix develop --command bash tools/experiments/crate2nix/boot.sh "$elf" evidence/boot
+          nix develop --command bash tools/experiments/crate2nix/boot.sh "$elf" evidence/hello-world hello-world
+      - name: Retain the complete baseline validation outcome
+        if: always()
+        env:
+          SAMPLE_JOB_STATUS: ${{ job.status }}
+        run: python3 tools/experiments/crate2nix/finalize-sample.py evidence/cargo-baseline/metrics.json "$SAMPLE_JOB_STATUS"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -213,9 +245,16 @@ jobs:
             evidence/cargo-baseline/metrics.json
             evidence/cargo-baseline/build-description.json
             evidence/cargo-baseline/build.log
+            evidence/boot/*.log
+            evidence/boot/*.jsonl
+            evidence/boot/*.sha256
+            evidence/hello-world/*.log
+            evidence/hello-world/*.jsonl
+            evidence/hello-world/*.sha256
           retention-days: 14
 
   nix-cold:
+    name: nix-cold-${{ matrix.replicate }}
     needs: validate
     if: needs.validate.outputs.mode == 'kernel'
     runs-on: ubuntu-24.04
@@ -231,6 +270,8 @@ jobs:
       - uses: cachix/install-nix-action@d9186cbdca7adedf113a159fa91f725a27866771
         with:
           install_url: https://releases.nixos.org/nix/nix-2.34.9/install
+      - name: Prepare the common pinned kernel environment
+        run: nix develop --command true
       - name: Realize the kernel without the experimental substituter
         run: |
           mkdir -p evidence
@@ -238,6 +279,18 @@ jobs:
           python3 tools/experiments/crate2nix/run-scenario.py same-input \
             --seed-graph evidence/seed-crate-graph.json --output evidence/scenario \
             --max-jobs 2 --cores 1 --fresh-runner --sample-name nix-cold
+      - name: Run the cold kernel boot and existing integration test
+        run: |
+          nix develop --command python3 tools/experiments/crate2nix/generate.py --check
+          nix develop --command make -C test/initramfs initramfs-boot-images BENCHMARK=none PREBUILT_ROOT="$PWD/target/c2n-prebuilt"
+          elf="$(python3 -c 'import json; print(json.load(open("evidence/scenario/metrics.json"))["realized_output"])')/bin/asterinas-osdk-bin"
+          nix develop --command bash tools/experiments/crate2nix/boot.sh "$elf" evidence/boot
+          nix develop --command bash tools/experiments/crate2nix/boot.sh "$elf" evidence/hello-world hello-world
+      - name: Retain the complete cold sample validation outcome
+        if: always()
+        env:
+          SAMPLE_JOB_STATUS: ${{ job.status }}
+        run: python3 tools/experiments/crate2nix/finalize-sample.py evidence/scenario/metrics.json "$SAMPLE_JOB_STATUS"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -245,6 +298,8 @@ jobs:
           path: |
             evidence/**/*.json
             evidence/**/*.jsonl
+            evidence/**/*.log
+            evidence/**/*.sha256
           retention-days: 14
 
   report:
@@ -268,7 +323,7 @@ jobs:
         run: |
           mkdir -p evidence
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" > evidence/actions-jobs.json
-          python3 tools/experiments/crate2nix/summarize.py samples > evidence/report.md
+          python3 tools/experiments/crate2nix/summarize.py samples --jobs evidence/actions-jobs.json > evidence/report.md
           cat evidence/report.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

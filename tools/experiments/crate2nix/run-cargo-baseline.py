@@ -62,6 +62,10 @@ metrics = {
     "realization_seconds": elapsed, "exit_code": result.returncode,
     "validation_passed": result.returncode == 0,
     "valid_performance_sample": result.returncode == 0,
+    "cpu_model": next((line.split(":", 1)[1].strip() for line in Path("/proc/cpuinfo").read_text().splitlines()
+                       if line.startswith("model name")), "unknown"),
+    "logical_cpus": os.cpu_count(),
+    "nix_version": subprocess.check_output(["nix", "--version"], text=True).strip(),
     "command": command, "cargo_jobs": args.jobs,
     "kernel": str(output / "target/x86_64-unknown-none/debug/asterinas-osdk-bin"),
 }

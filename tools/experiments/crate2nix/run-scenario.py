@@ -96,6 +96,15 @@ try:
     with (args.output / "build-result.json").open("w") as stdout, (args.output / "build-events.jsonl").open("w") as stderr:
         result = subprocess.run(build_command, cwd=root, stdout=stdout, stderr=stderr, check=False)
     elapsed = time.monotonic() - started
+    realized_output = None
+    if result.returncode == 0:
+        realized = json.loads((args.output / "build-result.json").read_text())
+        if len(realized) != 1 or len(realized[0]["outputs"]) != 1:
+            raise RuntimeError("Expected one selected package output")
+        realized_output = next(iter(realized[0]["outputs"].values()))
+        with (args.output / "output-path-info.json").open("w") as info:
+            subprocess.run(["nix", "path-info", "--json", "--json-format", "1", realized_output],
+                           stdout=info, check=True)
     events = [json.loads(line.removeprefix("@nix "))
               for line in (args.output / "build-events.jsonl").read_text().splitlines()
               if line.startswith("@nix ")]
@@ -109,6 +118,11 @@ try:
             args.require_substitute and result.returncode == 0 and not present_before and not project_built
         ),
         "compilation_instances": len(graph),
+        "realized_output": realized_output,
+        "cpu_model": next((line.split(":", 1)[1].strip() for line in Path("/proc/cpuinfo").read_text().splitlines()
+                           if line.startswith("model name")), "unknown"),
+        "logical_cpus": os.cpu_count(),
+        "nix_version": subprocess.check_output(["nix", "--version"], text=True).strip(),
         "project_builds_started": project_built,
         "project_build_count": len(project_built), "present_outputs_before": present_before,
         "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),

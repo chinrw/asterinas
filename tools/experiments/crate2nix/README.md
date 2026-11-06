@@ -37,6 +37,10 @@ To compare it with Cargo, retain the Cargo unit graph and metadata,
 then run `compare-graph.py CARGO_UNITS CARGO_METADATA NIX_GRAPH`.
 The comparison checks every project's compilation instance and direct dependency;
 the separately built standard library is excluded from that instance count.
+`check-invalidation-controls.py --output evidence/controls` temporarily changes
+a real dependency feature and a target compiler option, regenerates the feature
+graph, compares it with Cargo, and verifies that all inputs are restored.
+These controls check graph and sysroot invalidation without timing modified configurations.
 
 ## Run a prebuilt kernel
 
@@ -99,10 +103,15 @@ Manual dispatch offers the same choices when GitHub makes the workflow dispatcha
 
 Each consumer gets a fresh runner.
 Kernel trials also run independent Cargo and Nix cold comparisons.
+Kernel realization timings start after preparing the common pinned environment.
+Successful Cargo and Nix consumer samples both run the boot smoke and the existing
+hello-world tests; changed samples boot their actual newly produced ELF.
 Artifacts contain graphs, raw logs, metrics, and job metadata;
 they do not transfer compiled outputs between jobs.
 Five repetitions are intended for a performance decision;
 the default single trial establishes correctness only.
+The report rejects timed-out or failed jobs even when they uploaded an earlier
+successful compilation metric.
 
 ## Adaptations and maintenance
 
