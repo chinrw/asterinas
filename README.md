@@ -42,5 +42,7 @@ Each of the three head runs executes one test and passes; the concurrent log inc
 The recorded code head `5b7726ff9` passes all 34 x86 CI jobs.
 
 reviewer-tests.md gives download and run commands for the fork-only benchmarks and the standalone Go source.
-The proposed upstream branch contains only the timer fix and kernel regressions; reviewer-scope.json checks its relationship to the measured trees.
+The undated upstream candidate branch contains only the timer fix and kernel regressions.
+reviewer-scope.json records the rebased candidate; historical-reviewer-scope.json preserves the earlier exact-tree checks.
+The published performance tables remain measurements of the older base and need revalidation on the current one.
 The historical Go results are separate from the current timerfd/Redis campaign.

@@ -1,31 +1,33 @@
 {
-  "main": "a9c942d275631c14f637745e63599852c90c2303",
-  "fix_only": "ec33c743471209bbb302f9e116b9e307703c77a3",
-  "branch": "fix/timer-retirement-only-20261106",
-  "benchmark_commit": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
-  "measured_base": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
-  "measured_head": "5b7726ff9a15d4ed27fd64a08cb072a6573f704a",
-  "changed_paths": [
+  "branch": "fix/timer-retirement",
+  "head": "6ed88254c429177b5240b27f7410bf53637a9380",
+  "base": "dc583d659489f7e195779bfa6d3e845ea6ea0782",
+  "preserved_branch": "fix/timer-retirement-only-20261106",
+  "preserved_head": "363d481c8c639128117b148ba4db3adae63d396e",
+  "upstream_changed_paths": [
     "kernel/core/src/time/core/timer.rs"
   ],
-  "kernel_identical_to_measured_head": true,
-  "benchmark_overlay_tree_checks": [
+  "unrelated_boot_ci_commit_excluded": "e52a0b45ce9f1f216a562c322e62614e7f36b459",
+  "pinned_rustfmt_passed": true,
+  "whitespace_check_passed": true,
+  "benchmark_patch_applies_to_current_base_and_head": [
     {
-      "source": "a9c942d275631c14f637745e63599852c90c2303",
-      "benchmark_overlay": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
-      "result_tree": "e80cb7ec4007332a9bffdb943d83d4918a4a577c",
-      "equal_to_tested_commit": "c0db432e39b50cd0f85a83c549ab65223cbe538b"
+      "source": "dc583d659489f7e195779bfa6d3e845ea6ea0782",
+      "benchmark_patch": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
+      "result_tree": "ef9c0e47f1b63963bf34c082348cb6b08f5c3c1f"
     },
     {
-      "source": "ec33c743471209bbb302f9e116b9e307703c77a3",
-      "benchmark_overlay": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
-      "result_tree": "2d033dd48830ed2ef758d88f0a8a2f794297ae40",
-      "equal_to_tested_commit": "5b7726ff9a15d4ed27fd64a08cb072a6573f704a"
+      "source": "6ed88254c429177b5240b27f7410bf53637a9380",
+      "benchmark_patch": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
+      "result_tree": "9801784ba640ac58f72218c9ced6126652e19fc7"
     }
   ],
-  "existing_ci_run": "https://github.com/chinrw/asterinas/actions/runs/42005429931",
-  "existing_ci_tested_commit": "5b7726ff9a15d4ed27fd64a08cb072a6573f704a",
-  "new_fix_only_ci_run": false,
+  "historical_performance_base": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
+  "historical_performance_head": "5b7726ff9a15d4ed27fd64a08cb072a6573f704a",
+  "historical_base": "a9c942d275631c14f637745e63599852c90c2303",
+  "historical_tables_do_not_validate_new_base": true,
+  "new_baseline_performance_rerun": false,
   "current_go_pair_comparison": false,
-  "historical_go_source_commit": "1185091b9d739fc418ffc37e2b2b4a549200dd55"
+  "new_ci_run_url": "https://github.com/chinrw/asterinas/actions/runs/42193931015",
+  "timer_executable_code_and_test_strings_unchanged": true
 }

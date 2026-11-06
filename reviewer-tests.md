@@ -1,13 +1,13 @@
 # Run the fork-only timer tests
 
-The proposed upstream patch is `ec33c743471209bbb302f9e116b9e307703c77a3` on main `a9c942d275631c14f637745e63599852c90c2303`.
+The proposed upstream patch is `6ed88254c429177b5240b27f7410bf53637a9380` on base `dc583d659489f7e195779bfa6d3e845ea6ea0782`; its branch is `fix/timer-retirement`.
 It changes only `kernel/core/src/time/core/timer.rs`, including the kernel regression tests.
 The timerfd/Redis benchmarks stay in fork commit `c0db432e39b50cd0f85a83c549ab65223cbe538b`.
 The standalone Go program stays in the older fork harness commit `1185091b9d739fc418ffc37e2b2b4a549200dd55`.
 
 ## Timerfd and Redis
 
-Use disposable checkouts of main and the proposed fix.
+Use disposable checkouts of the proposed base and fix.
 Run these commands in each checkout to add the same benchmark harness without changing the checked-out kernel:
 
 ```sh
@@ -18,8 +18,10 @@ git show --format= --no-color --binary "$timer_benchmark_commit" | git apply
 
 The patch adds benchmark sources, Nix packaging and runner support.
 It leaves the timer implementation in each checkout intact.
-Applying it to the proposed base reproduces the full measured source tree at `c0db432e3`; applying it to the proposed fix reproduces the full measured source tree at `5b7726ff9`.
-Both equalities were checked with Git tree hashes and are recorded in `reviewer-scope.json`.
+The patch applies to both current checkouts without changing their kernel code.
+The published measurements used older trees, `c0db432e3` and `5b7726ff9`, based on `a9c942d27`.
+Their source-tree equivalence checks belong to the earlier `ec33c7434` proposal, not the rebased candidate.
+The current base contains other kernel changes, so it still needs a new performance comparison.
 
 Inside the project development container, with KVM and TAP permissions:
 
@@ -45,9 +47,10 @@ Keep failures and slow runs in the comparison.
 The published timerfd/Redis tables used 16 local Ryzen 9 9950X QEMU/KVM guests, four base/head pairs per CPU setting with two pairs in each order.
 All 160000 fixed-arrival GETs succeeded.
 Those measurements batch Redis none/churn and timerfd64/4096 inside NixOS guests; the commands above use fresh initramfs guests per job, so absolute values can differ.
-The code and workload are the same.
-The recorded 34-job CI run tested `5b7726ff9`, which has the same kernel code as the proposed fix plus this benchmark harness.
-It is not a new CI run on the fix-only commit.
+The helper and workload are unchanged.
+The recorded 34-job CI result belongs to `5b7726ff9`.
+A new [fork CI run](https://github.com/chinrw/asterinas/actions/runs/42193931015) was requested for the current candidate; its result is separate from that historical pass.
+The new candidate changes only timer.rs relative to its base; the independent boot-CI disk cleanup remains on the preserved old branch.
 
 ## Standalone Go reproducer
 
