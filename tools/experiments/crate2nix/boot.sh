@@ -32,7 +32,7 @@ timeout 180 "$root/target/c2n-exp-prepare/release/cargo-osdk" osdk run \
   --init-args="$init_script" \
   --kcmd-args="earlycon console=ttyS0 loglevel=error" --qemu-args="-accel tcg" \
   2>&1 | tee "$output/boot.log"
-rg -q -F "$success_marker" "$output/boot.log"
+grep -q -F -- "$success_marker" "$output/boot.log"
 sha256sum "$elf" > "$output/input-after.sha256"
 cmp "$output/input-before.sha256" "$output/input-after.sha256"
 python3 - "$C2N_RUSTC_LOG" <<'PY'
