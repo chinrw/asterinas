@@ -111,6 +111,10 @@ try:
     built = {event["fields"][0] for event in events
              if event.get("action") == "start" and event.get("type") == 105 and event.get("fields")}
     project_built = sorted(built.intersection(row["drvPath"] for row in graph))
+    expected_builds = None
+    if args.fresh_runner and args.scenario != "negative":
+        expected_builds = ({row["drvPath"] for row in graph} if args.sample_name == "nix-cold"
+                           else {current[identity]["drvPath"] for identity in changed})
     metrics = {
         "scenario": args.sample_name or args.scenario,
         "environment": "github-runner" if os.environ.get("GITHUB_ACTIONS") else "local-populated-store",
@@ -124,6 +128,7 @@ try:
         "logical_cpus": os.cpu_count(),
         "nix_version": subprocess.check_output(["nix", "--version"], text=True).strip(),
         "project_builds_started": project_built,
+        "expected_project_builds": sorted(expected_builds) if expected_builds is not None else None,
         "project_build_count": len(project_built), "present_outputs_before": present_before,
         "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
         "runner": os.environ.get("RUNNER_NAME"), "run_id": os.environ.get("GITHUB_RUN_ID"),
@@ -136,13 +141,14 @@ try:
                          and "C2N_NEGATIVE_INVALIDATION" in (args.output / "build-events.jsonl").read_text())
     else:
         validated = result.returncode == 0
-        if args.sample_name == "nix-cold":
-            validated = validated and len(project_built) == len(graph)
+        if expected_builds is not None and set(project_built) != expected_builds:
+            validated = False
+            metrics["failure_reason"] = "Fresh sample did not build exactly the expected project derivations"
     metrics["validation_passed"] = validated
     metrics["valid_performance_sample"] = validated and args.scenario != "negative"
     metrics_path.write_text(json.dumps(metrics, indent=2) + "\n")
     if not validated:
-        raise RuntimeError("Sample failed realization or scenario validation; retain its metrics and logs")
+        raise RuntimeError(metrics.get("failure_reason", "Sample failed realization or scenario validation; retain its metrics and logs"))
     print(json.dumps(metrics, indent=2))
 except Exception as error:
     metrics = json.loads(metrics_path.read_text())
