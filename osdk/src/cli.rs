@@ -24,9 +24,10 @@ pub fn main() {
         let manifest = TomlManifest::load();
         let scheme = manifest.get_scheme(common_args.scheme.as_ref());
         let mut config = Config::new(scheme, common_args);
-        config
-            .build
-            .append_rustflags(&std::env::var("RUSTFLAGS").unwrap_or_default());
+        let rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
+        config.build.append_rustflags(&rustflags);
+        config.run.build.append_rustflags(&rustflags);
+        config.test.build.append_rustflags(&rustflags);
         config
     };
 
@@ -42,6 +43,7 @@ pub fn main() {
             execute_run_command(
                 &load_config(&run_args.common_args),
                 run_args.gdb_server.as_deref(),
+                run_args.prebuilt_elf.as_deref(),
             );
         }
         OsdkSubcommand::Debug(debug_args) => {
@@ -171,6 +173,11 @@ impl NewArgs {
 #[derive(Debug, Parser)]
 pub struct BuildArgs {
     #[arg(
+        long,
+        help = "Prepare the base crate and export the build command without compiling"
+    )]
+    pub export_build_description: Option<PathBuf>,
+    #[arg(
         long = "for-test",
         help = "Build for running unit tests",
         default_value_t
@@ -189,6 +196,11 @@ pub struct BuildArgs {
 
 #[derive(Debug, Parser)]
 pub struct RunArgs {
+    #[arg(
+        long,
+        help = "Package and run an existing kernel ELF without compiling it"
+    )]
+    pub prebuilt_elf: Option<PathBuf>,
     #[arg(
         long = "gdb-server",
         help = "Enable the QEMU GDB server for debugging\n\

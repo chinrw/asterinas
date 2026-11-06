@@ -25,7 +25,7 @@ use crate::{
     cli::BuildArgs,
     config::{
         Config,
-        scheme::{ActionChoice, BootMethod, BootProtocol},
+        scheme::{ActionChoice, BootMethod, BootProtocol, Build},
     },
     error::Errno,
     error_msg,
@@ -41,6 +41,7 @@ pub fn execute_build_command(config: &Config, build_args: &BuildArgs) {
         .output
         .clone()
         .unwrap_or(cargo_target_directory.join(DEFAULT_TARGET_RELPATH));
+    let osdk_output_directory = std::path::absolute(osdk_output_directory).unwrap();
     if !osdk_output_directory.exists() {
         std::fs::create_dir_all(&osdk_output_directory).unwrap();
     }
@@ -54,6 +55,47 @@ pub fn execute_build_command(config: &Config, build_args: &BuildArgs) {
     } else {
         ActionChoice::Run
     };
+
+    if let Some(description_path) = &build_args.export_build_description {
+        let description_path = std::path::absolute(description_path).unwrap();
+        let base_crate_path = new_base_crate(
+            if build_args.for_test {
+                BaseCrateType::Test
+            } else {
+                BaseCrateType::Run
+            },
+            osdk_output_directory.join(&target_info.name),
+            &target_info.name,
+            &target_info.path,
+            false,
+        );
+        let base_crate_path = base_crate_path.canonicalize().unwrap();
+        let _dir_guard = DirGuard::change_dir(&base_crate_path);
+        let build = if build_args.for_test {
+            &config.test.build
+        } else {
+            &config.run.build
+        };
+        let command = kernel_build_command(
+            config.target_arch,
+            build,
+            &cargo_target_directory,
+            &[&build.rustflags],
+        );
+        let description = serde_json::json!({
+            "base_crate": base_crate_path,
+            "program": command.get_program(),
+            "args": command.get_args().collect::<Vec<_>>(),
+            "env": command.get_envs().collect::<Vec<_>>(),
+            "config": config,
+        });
+        std::fs::write(
+            description_path,
+            serde_json::to_vec_pretty(&description).unwrap(),
+        )
+        .unwrap();
+        return;
+    }
 
     let _bundle = create_base_and_cached_build(
         target_info,
@@ -132,19 +174,16 @@ pub fn do_cached_build(
     action: ActionChoice,
     rustflags: &[&str],
 ) -> Bundle {
-    let (build, boot, grub) = match action {
-        ActionChoice::Run => (&config.run.build, &config.run.boot, &config.run.grub),
-        ActionChoice::Test => (&config.test.build, &config.test.boot, &config.test.grub),
+    let build = match action {
+        ActionChoice::Run => &config.run.build,
+        ActionChoice::Test => &config.test.build,
     };
 
     let mut rustflags = rustflags.to_vec();
     rustflags.push(&build.rustflags);
     let aster_elf = build_kernel_elf(
         config.target_arch,
-        &build.profile,
-        &build.features[..],
-        build.no_default_features,
-        &build.override_configs[..],
+        build,
         &cargo_target_directory,
         &rustflags,
     );
@@ -156,6 +195,27 @@ pub fn do_cached_build(
         info!("Reusing existing bundle: aster_elf is unchanged");
         return existing_bundle;
     }
+
+    create_bundle_from_elf(
+        bundle_path,
+        osdk_output_directory,
+        config,
+        action,
+        aster_elf,
+    )
+}
+
+pub(super) fn create_bundle_from_elf(
+    bundle_path: impl AsRef<Path>,
+    osdk_output_directory: impl AsRef<Path>,
+    config: &Config,
+    action: ActionChoice,
+    aster_elf: AsterBin,
+) -> Bundle {
+    let (build, boot, grub) = match action {
+        ActionChoice::Run => (&config.run.build, &config.run.boot, &config.run.grub),
+        ActionChoice::Test => (&config.test.build, &config.test.boot, &config.test.grub),
+    };
 
     // Build a new bundle
     info!("Building a new bundle");
@@ -205,15 +265,16 @@ pub fn do_cached_build(
     bundle
 }
 
-fn build_kernel_elf(
+fn kernel_build_command(
     arch: Arch,
-    profile: &str,
-    features: &[String],
-    no_default_features: bool,
-    override_configs: &[String],
+    build: &Build,
     cargo_target_directory: impl AsRef<Path>,
     rustflags: &[&str],
-) -> AsterBin {
+) -> process::Command {
+    let profile = &build.profile;
+    let features = &build.features;
+    let no_default_features = build.no_default_features;
+    let override_configs = &build.override_configs;
     let target_os_string = OsString::from(&arch.triple());
     let rustc_linker_script_arg = format!("-C link-arg=-T{}.ld", arch);
 
@@ -249,11 +310,13 @@ fn build_kernel_elf(
     command.env_remove("RUSTUP_TOOLCHAIN");
     command.env(
         "OSDK_BUILD_USERNAME",
-        whoami::fallible::username().unwrap_or("unknown".to_string()),
+        std::env::var("OSDK_BUILD_USERNAME")
+            .unwrap_or_else(|_| whoami::fallible::username().unwrap_or("unknown".to_string())),
     );
     command.env(
         "OSDK_BUILD_HOSTNAME",
-        whoami::fallible::hostname().unwrap_or("unknown".to_string()),
+        std::env::var("OSDK_BUILD_HOSTNAME")
+            .unwrap_or_else(|_| whoami::fallible::hostname().unwrap_or("unknown".to_string())),
     );
     command.env(
         "OSDK_BUILD_RUSTC",
@@ -296,6 +359,16 @@ fn build_kernel_elf(
     info!("Building kernel ELF using command: {:#?}", command);
     info!("Building directory: {:?}", std::env::current_dir().unwrap());
 
+    command
+}
+
+fn build_kernel_elf(
+    arch: Arch,
+    build: &Build,
+    cargo_target_directory: impl AsRef<Path>,
+    rustflags: &[&str],
+) -> AsterBin {
+    let mut command = kernel_build_command(arch, build, &cargo_target_directory, rustflags);
     let status = command.status().unwrap();
     if !status.success() {
         error_msg!("Cargo build failed");
@@ -304,8 +377,8 @@ fn build_kernel_elf(
 
     let aster_bin_path = cargo_target_directory
         .as_ref()
-        .join(&target_os_string)
-        .join(profile_name_adapter(profile))
+        .join(arch.triple())
+        .join(profile_name_adapter(&build.profile))
         .join(get_current_crates().remove(0).name);
 
     AsterBin::new(

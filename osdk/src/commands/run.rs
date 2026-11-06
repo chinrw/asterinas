@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use std::process::exit;
+use std::{os::unix::fs::PermissionsExt, path::Path, process::exit};
 
 use vsc::VscLaunchConfig;
 
 use super::{
-    build::create_base_and_cached_build,
+    build::{create_base_and_cached_build, create_bundle_from_elf},
     util::{DEFAULT_TARGET_RELPATH, is_tdx_enabled},
 };
 use crate::{
+    bundle::bin::{AsterBin, AsterBinType, AsterElfMeta},
     config::{Config, scheme::ActionChoice},
     error::Errno,
     error_msg,
@@ -16,7 +17,11 @@ use crate::{
     warn_msg,
 };
 
-pub fn execute_run_command(config: &Config, gdb_server_args: Option<&str>) {
+pub fn execute_run_command(
+    config: &Config,
+    gdb_server_args: Option<&str>,
+    prebuilt_elf: Option<&Path>,
+) {
     let cargo_target_directory = get_target_directory();
     let osdk_output_directory = cargo_target_directory.join(DEFAULT_TARGET_RELPATH);
 
@@ -31,15 +36,44 @@ pub fn execute_run_command(config: &Config, gdb_server_args: Option<&str>) {
     };
 
     let default_bundle_directory = osdk_output_directory.join(&target_info.name);
-    let bundle = create_base_and_cached_build(
-        target_info,
-        default_bundle_directory,
-        &osdk_output_directory,
-        &cargo_target_directory,
-        &config,
-        ActionChoice::Run,
-        &[],
-    );
+    let bundle = if let Some(elf) = prebuilt_elf {
+        std::fs::create_dir_all(&osdk_output_directory).unwrap();
+        let prebuilt_directory = tempfile::tempdir_in(&osdk_output_directory).unwrap();
+        let writable_elf = prebuilt_directory.path().join(super::util::bin_file_name());
+        // Boot packaging patches ELF headers through hard links. Copy first
+        // so that an immutable input, such as a Nix output, stays intact.
+        std::fs::copy(elf, &writable_elf).unwrap();
+        std::fs::set_permissions(&writable_elf, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let aster_elf = AsterBin::new(
+            writable_elf,
+            config.target_arch,
+            AsterBinType::Elf(AsterElfMeta {
+                has_linux_header: false,
+                has_pvh_header: false,
+                has_multiboot_header: true,
+                has_multiboot2_header: true,
+            }),
+            target_info.version,
+            false,
+        );
+        create_bundle_from_elf(
+            default_bundle_directory,
+            prebuilt_directory.path(),
+            &config,
+            ActionChoice::Run,
+            aster_elf,
+        )
+    } else {
+        create_base_and_cached_build(
+            target_info,
+            default_bundle_directory,
+            &osdk_output_directory,
+            &cargo_target_directory,
+            &config,
+            ActionChoice::Run,
+            &[],
+        )
+    };
 
     bundle.run(&config, ActionChoice::Run);
 }
