@@ -24,11 +24,11 @@ Four pairs are descriptive evidence. Throughput does not replace tail latency.
 ## Run the reviewer workloads
 
 Use the project development container with KVM, the normal benchmark host
-network setup, Python 3 and redis-benchmark. Use separate clean checkouts of
-acf7dcf5e and f48cf611f, and apply the same two fork-only patches in each:
+network setup, Python 3 and redis-benchmark. Fetch the three commits below, then use separate clean checkouts of
+acf7dcf5e and f48cf611f. Apply the same benchmark and dependency patches in each:
 
 ```sh
-git fetch https://github.com/chinrw/asterinas.git c0db432e39b50cd0f85a83c549ab65223cbe538b 461280bdbe7cf77d0bcee36940c6938a56403897
+git fetch https://github.com/chinrw/asterinas.git c0db432e39b50cd0f85a83c549ab65223cbe538b 461280bdbe7cf77d0bcee36940c6938a56403897 f48cf611fa6a78e27c374759957276555f6416e1
 git show --format= c0db432e39b50cd0f85a83c549ab65223cbe538b | git apply
 git show --format= 461280bdbe7cf77d0bcee36940c6938a56403897 | git apply
 for cpus in 1 4; do

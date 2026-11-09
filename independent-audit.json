@@ -1,0 +1,9 @@
+{
+  "complete": true,
+  "requests": 160000,
+  "redis_windows": 32,
+  "timer_rows": 32,
+  "timer_cases": 128,
+  "paired_metric_medians_checked": 55,
+  "definitions": "Redis nearest-rank quantiles, maxima and strict threshold counts independently recomputed; timerfd metrics recovered from raw case records."
+}

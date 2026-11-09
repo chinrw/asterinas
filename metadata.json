@@ -438,10 +438,13 @@
   ],
   "ci_control": {
     "ci_support_base": "461280bdbe7cf77d0bcee36940c6938a56403897",
-    "ci_support_head": "1d94419a6",
+    "ci_support_head": "1d94419a6124aca9062231ae18efb4e9bc8483aa",
     "ci_base_url": "https://github.com/chinrw/asterinas/actions/runs/42601343803",
     "ci_head_url": "https://github.com/chinrw/asterinas/actions/runs/42601348318",
-    "unmodified_base_failure_url": "https://github.com/chinrw/asterinas/actions/runs/42600238836"
+    "unmodified_base_failure_url": "https://github.com/chinrw/asterinas/actions/runs/42600238836",
+    "ci_support_changes_only": [
+      "Cargo.toml: unwinding version constraint"
+    ]
   },
   "kernel_lock_sha256": "fba84816dae6f6359437d943b3c955cda20b6bdbba31002c04f1183573d8a5a3"
 }
