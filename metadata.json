@@ -1,0 +1,447 @@
+{
+  "commits": {
+    "main": "acf7dcf5ebe6289b6d45554d370aa3ace7fbf4ca",
+    "base": "acf7dcf5ebe6289b6d45554d370aa3ace7fbf4ca",
+    "head": "f48cf611fa6a78e27c374759957276555f6416e1",
+    "implementation": "76d81ac0d16aa8422f3f594a1519329785d478e2",
+    "benchmark": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
+    "production_files_verified": 1721,
+    "kernel_dependency_lock": "unchanged historical frozen lock"
+  },
+  "plan_sha256": "224b64beacdc52b07564810290b0da04af40ba34050d9c87bbbd2d5fc8663e15",
+  "observed": 16,
+  "passed": 16,
+  "requests": 160000,
+  "formal_failures": [],
+  "plan_order": [
+    {
+      "cpu": 1,
+      "base_first": 2,
+      "head_first": 2,
+      "pairs": [
+        {
+          "block": 0,
+          "order": [
+            "base",
+            "head"
+          ],
+          "ids": [
+            0,
+            1
+          ]
+        },
+        {
+          "block": 1,
+          "order": [
+            "head",
+            "base"
+          ],
+          "ids": [
+            6,
+            7
+          ]
+        },
+        {
+          "block": 2,
+          "order": [
+            "base",
+            "head"
+          ],
+          "ids": [
+            8,
+            9
+          ]
+        },
+        {
+          "block": 3,
+          "order": [
+            "head",
+            "base"
+          ],
+          "ids": [
+            14,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "cpu": 4,
+      "base_first": 2,
+      "head_first": 2,
+      "pairs": [
+        {
+          "block": 0,
+          "order": [
+            "base",
+            "head"
+          ],
+          "ids": [
+            2,
+            3
+          ]
+        },
+        {
+          "block": 1,
+          "order": [
+            "head",
+            "base"
+          ],
+          "ids": [
+            4,
+            5
+          ]
+        },
+        {
+          "block": 2,
+          "order": [
+            "base",
+            "head"
+          ],
+          "ids": [
+            10,
+            11
+          ]
+        },
+        {
+          "block": 3,
+          "order": [
+            "head",
+            "base"
+          ],
+          "ids": [
+            12,
+            13
+          ]
+        }
+      ]
+    }
+  ],
+  "observed_order": [
+    {
+      "cpu": 1,
+      "base_first": 2,
+      "head_first": 2,
+      "pairs": [
+        {
+          "block": 0,
+          "order": [
+            "base",
+            "head"
+          ],
+          "ids": [
+            0,
+            1
+          ]
+        },
+        {
+          "block": 1,
+          "order": [
+            "head",
+            "base"
+          ],
+          "ids": [
+            6,
+            7
+          ]
+        },
+        {
+          "block": 2,
+          "order": [
+            "base",
+            "head"
+          ],
+          "ids": [
+            8,
+            9
+          ]
+        },
+        {
+          "block": 3,
+          "order": [
+            "head",
+            "base"
+          ],
+          "ids": [
+            14,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "cpu": 4,
+      "base_first": 2,
+      "head_first": 2,
+      "pairs": [
+        {
+          "block": 0,
+          "order": [
+            "base",
+            "head"
+          ],
+          "ids": [
+            2,
+            3
+          ]
+        },
+        {
+          "block": 1,
+          "order": [
+            "head",
+            "base"
+          ],
+          "ids": [
+            4,
+            5
+          ]
+        },
+        {
+          "block": 2,
+          "order": [
+            "base",
+            "head"
+          ],
+          "ids": [
+            10,
+            11
+          ]
+        },
+        {
+          "block": 3,
+          "order": [
+            "head",
+            "base"
+          ],
+          "ids": [
+            12,
+            13
+          ]
+        }
+      ]
+    }
+  ],
+  "images": {
+    "main": "acf7dcf5ebe6289b6d45554d370aa3ace7fbf4ca",
+    "base": {
+      "kernel_elf_sha256": "a87a0b76c05cb4075eef264eddd16da9caec6c12d04abbfcc969299b41aafbd5",
+      "boot_kernel_sha256": "f6e49989948146a302c1fd877cd30c468ad68504789545a2f61967a932c4645d",
+      "clean_image_sha256": "8580bf728a04416aa730192c3bc95455f98aa62fe4ca1300b8b64eb990f9a7da",
+      "root_region_sha256": "45cb89ca9d7fd4da3f59e94de859c50d2e32a5cadd0684bf9d89ea19457eda8d",
+      "kernel_lock_sha256": "fba84816dae6f6359437d943b3c955cda20b6bdbba31002c04f1183573d8a5a3"
+    },
+    "head": {
+      "kernel_elf_sha256": "df8c28b4c930fccf373b3985cb4b7469a42cfaa49519ea31e013fcdddeae946c",
+      "boot_kernel_sha256": "ba905de502c46f6a9c743b6e4e78328a4a1a94f6861133149cab75497647956e",
+      "clean_image_sha256": "8a4e3943a88afb3d51b8fa3b96a348d3601fc97e39af69cd3a33b9cd755967f9",
+      "root_region_sha256": "45cb89ca9d7fd4da3f59e94de859c50d2e32a5cadd0684bf9d89ea19457eda8d",
+      "kernel_lock_sha256": "fba84816dae6f6359437d943b3c955cda20b6bdbba31002c04f1183573d8a5a3"
+    },
+    "implementation": "76d81ac0d16aa8422f3f594a1519329785d478e2",
+    "benchmark": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
+    "production_files_verified": 1721,
+    "kernel_dependency_lock": "unchanged historical frozen lock",
+    "shared_root_sha256": "45cb89ca9d7fd4da3f59e94de859c50d2e32a5cadd0684bf9d89ea19457eda8d",
+    "commits": {
+      "main": "acf7dcf5ebe6289b6d45554d370aa3ace7fbf4ca",
+      "base": "acf7dcf5ebe6289b6d45554d370aa3ace7fbf4ca",
+      "head": "f48cf611fa6a78e27c374759957276555f6416e1",
+      "implementation": "76d81ac0d16aa8422f3f594a1519329785d478e2",
+      "benchmark": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
+      "production_files_verified": 1721,
+      "kernel_dependency_lock": "unchanged historical frozen lock"
+    }
+  },
+  "environment": {
+    "images": {
+      "main": "acf7dcf5ebe6289b6d45554d370aa3ace7fbf4ca",
+      "base": {
+        "kernel_elf_sha256": "a87a0b76c05cb4075eef264eddd16da9caec6c12d04abbfcc969299b41aafbd5",
+        "boot_kernel_sha256": "f6e49989948146a302c1fd877cd30c468ad68504789545a2f61967a932c4645d",
+        "clean_image_sha256": "8580bf728a04416aa730192c3bc95455f98aa62fe4ca1300b8b64eb990f9a7da",
+        "root_region_sha256": "45cb89ca9d7fd4da3f59e94de859c50d2e32a5cadd0684bf9d89ea19457eda8d",
+        "kernel_lock_sha256": "fba84816dae6f6359437d943b3c955cda20b6bdbba31002c04f1183573d8a5a3"
+      },
+      "head": {
+        "kernel_elf_sha256": "df8c28b4c930fccf373b3985cb4b7469a42cfaa49519ea31e013fcdddeae946c",
+        "boot_kernel_sha256": "ba905de502c46f6a9c743b6e4e78328a4a1a94f6861133149cab75497647956e",
+        "clean_image_sha256": "8a4e3943a88afb3d51b8fa3b96a348d3601fc97e39af69cd3a33b9cd755967f9",
+        "root_region_sha256": "45cb89ca9d7fd4da3f59e94de859c50d2e32a5cadd0684bf9d89ea19457eda8d",
+        "kernel_lock_sha256": "fba84816dae6f6359437d943b3c955cda20b6bdbba31002c04f1183573d8a5a3"
+      },
+      "implementation": "76d81ac0d16aa8422f3f594a1519329785d478e2",
+      "benchmark": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
+      "production_files_verified": 1721,
+      "kernel_dependency_lock": "unchanged historical frozen lock",
+      "shared_root_sha256": "45cb89ca9d7fd4da3f59e94de859c50d2e32a5cadd0684bf9d89ea19457eda8d",
+      "commits": {
+        "main": "acf7dcf5ebe6289b6d45554d370aa3ace7fbf4ca",
+        "base": "acf7dcf5ebe6289b6d45554d370aa3ace7fbf4ca",
+        "head": "f48cf611fa6a78e27c374759957276555f6416e1",
+        "implementation": "76d81ac0d16aa8422f3f594a1519329785d478e2",
+        "benchmark": "c0db432e39b50cd0f85a83c549ab65223cbe538b",
+        "production_files_verified": 1721,
+        "kernel_dependency_lock": "unchanged historical frozen lock"
+      }
+    },
+    "helper_sha256": "e03bb1fd834f93d3ed8feb49ef080ff38069013e63d04f905536a92fda3dfc28",
+    "host_cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 9 9950X 16-Core Processor\nCPU family:                              26\nModel:                                   68\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                0\nFrequency boost:                         enabled\nCPU(s) scaling MHz:                      85%\nCPU max MHz:                             5756.4521\nCPU min MHz:                             624.1940\nBogoMIPS:                                8599.99\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx_vnni avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid bus_lock_detect movdiri movdir64b overflow_recov succor smca fsrm avx512_vp2intersect flush_l1d amd_lbr_pmc_freeze\nVirtualization:                          AMD-V\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                64 MiB (2 instances)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Mitigation; IBPB on VMEXIT only\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB on VMEXIT\n",
+    "qemu": "QEMU emulator version 10.2.1\nCopyright (c) 2003-2025 Fabrice Bellard and the QEMU Project developers\n",
+    "allowed_cpus": [
+      3,
+      5,
+      6,
+      8,
+      9,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      19,
+      20,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31
+    ],
+    "workload_order": [
+      "redis-none",
+      "redis-churn",
+      "timerfd64",
+      "timerfd4096"
+    ]
+  },
+  "correctness": [
+    {
+      "variant": "base",
+      "test": "timer_lifecycle_regressions",
+      "command": [
+        "cargo",
+        "osdk",
+        "test",
+        "timer_lifecycle_regressions",
+        "--profile",
+        "release-lto",
+        "--initramfs=/root/asterinas/test/initramfs/build/initramfs.cpio.gz",
+        "--grub-mkrescue=/usr/bin/grub-mkrescue",
+        "--grub-boot-protocol=linux",
+        "--kcmd-args=earlycon",
+        "--kcmd-args=console=ttyS0",
+        "--qemu-args=-accel kvm"
+      ],
+      "exit": 1,
+      "actually_executed": true,
+      "expected_result": true,
+      "green": false,
+      "red": true,
+      "cpus": 4,
+      "result_lines": [
+        "test result: FAILED. 0 passed; 1 failed; 145 filtered out."
+      ]
+    },
+    {
+      "variant": "head",
+      "test": "timer_lifecycle_regressions",
+      "command": [
+        "cargo",
+        "osdk",
+        "test",
+        "timer_lifecycle_regressions",
+        "--profile",
+        "release-lto",
+        "--initramfs=/root/asterinas/test/initramfs/build/initramfs.cpio.gz",
+        "--grub-mkrescue=/usr/bin/grub-mkrescue",
+        "--grub-boot-protocol=linux",
+        "--kcmd-args=earlycon",
+        "--kcmd-args=console=ttyS0",
+        "--qemu-args=-accel kvm"
+      ],
+      "exit": 0,
+      "actually_executed": true,
+      "expected_result": true,
+      "green": true,
+      "red": false,
+      "cpus": 4,
+      "result_lines": [
+        "test result: ok. 1 passed; 0 failed; 145 filtered out."
+      ]
+    },
+    {
+      "variant": "head",
+      "test": "selected_old_generation_cannot_replace_a_same_deadline_rearm",
+      "command": [
+        "cargo",
+        "osdk",
+        "test",
+        "selected_old_generation_cannot_replace_a_same_deadline_rearm",
+        "--profile",
+        "release-lto",
+        "--initramfs=/root/asterinas/test/initramfs/build/initramfs.cpio.gz",
+        "--grub-mkrescue=/usr/bin/grub-mkrescue",
+        "--grub-boot-protocol=linux",
+        "--kcmd-args=earlycon",
+        "--kcmd-args=console=ttyS0",
+        "--qemu-args=-accel kvm"
+      ],
+      "exit": 0,
+      "actually_executed": true,
+      "expected_result": true,
+      "green": true,
+      "red": false,
+      "cpus": 4,
+      "result_lines": [
+        "test result: ok. 1 passed; 0 failed; 145 filtered out."
+      ]
+    },
+    {
+      "variant": "head",
+      "test": "concurrent_rearm_cancel_and_dispatch_preserve_generations",
+      "command": [
+        "cargo",
+        "osdk",
+        "test",
+        "concurrent_rearm_cancel_and_dispatch_preserve_generations",
+        "--profile",
+        "release-lto",
+        "--initramfs=/root/asterinas/test/initramfs/build/initramfs.cpio.gz",
+        "--grub-mkrescue=/usr/bin/grub-mkrescue",
+        "--grub-boot-protocol=linux",
+        "--kcmd-args=earlycon",
+        "--kcmd-args=console=ttyS0",
+        "--qemu-args=-accel kvm"
+      ],
+      "exit": 0,
+      "actually_executed": true,
+      "expected_result": true,
+      "green": true,
+      "red": false,
+      "cpus": 4,
+      "result_lines": [
+        "test result: ok. 1 passed; 0 failed; 145 filtered out."
+      ]
+    }
+  ],
+  "raw_values_unchanged": true,
+  "normalization": "Split request arrays into linked JSONL files and replace machine-local provenance paths with data-branch paths. Keep all raw timing/count/error fields; verify each exported request field against the original.",
+  "preflight_failures_retained_locally": [
+    "001: wrong multiboot boot wrapper; stopped before workload measurements and retained artifacts.",
+    "002: corrected Linux EFI preflight passed both guests; not included in formal results."
+  ],
+  "ci_control": {
+    "ci_support_base": "461280bdbe7cf77d0bcee36940c6938a56403897",
+    "ci_support_head": "1d94419a6",
+    "ci_base_url": "https://github.com/chinrw/asterinas/actions/runs/42601343803",
+    "ci_head_url": "https://github.com/chinrw/asterinas/actions/runs/42601348318",
+    "unmodified_base_failure_url": "https://github.com/chinrw/asterinas/actions/runs/42600238836"
+  },
+  "kernel_lock_sha256": "fba84816dae6f6359437d943b3c955cda20b6bdbba31002c04f1183573d8a5a3"
+}

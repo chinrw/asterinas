@@ -1,0 +1,41 @@
+ GET: rps=0.0 (overall: 0.0) avg_msec=0.000 (overall: 0.000)                                                            GET: rps=181076.0 (overall: 180354.6) avg_msec=0.098 (overall: 0.098)                                                                      GET: rps=199844.0 (overall: 190079.8) avg_msec=0.091 (overall: 0.094)                                                                      ====== GET ======
+  100000 requests completed in 0.52 seconds
+  20 parallel clients
+  3 bytes payload
+  keep alive: 1
+  host configuration "save": 
+  host configuration "appendonly": no
+  multi-thread: no
+
+Latency by percentile distribution:
+0.000% <= 0.031 milliseconds (cumulative count 2)
+50.000% <= 0.095 milliseconds (cumulative count 55992)
+75.000% <= 0.119 milliseconds (cumulative count 79960)
+87.500% <= 0.135 milliseconds (cumulative count 91774)
+93.750% <= 0.143 milliseconds (cumulative count 94360)
+96.875% <= 0.159 milliseconds (cumulative count 97184)
+98.438% <= 0.175 milliseconds (cumulative count 98640)
+99.219% <= 0.191 milliseconds (cumulative count 99481)
+99.609% <= 0.199 milliseconds (cumulative count 99656)
+99.805% <= 0.215 milliseconds (cumulative count 99849)
+99.902% <= 0.231 milliseconds (cumulative count 99929)
+99.951% <= 0.247 milliseconds (cumulative count 99956)
+99.976% <= 0.287 milliseconds (cumulative count 99977)
+99.988% <= 0.599 milliseconds (cumulative count 99990)
+99.994% <= 0.687 milliseconds (cumulative count 99999)
+99.999% <= 0.703 milliseconds (cumulative count 100000)
+100.000% <= 0.703 milliseconds (cumulative count 100000)
+
+Cumulative distribution of latencies:
+64.452% <= 0.103 milliseconds (cumulative count 64452)
+99.781% <= 0.207 milliseconds (cumulative count 99781)
+99.980% <= 0.303 milliseconds (cumulative count 99980)
+99.990% <= 0.607 milliseconds (cumulative count 99990)
+100.000% <= 0.703 milliseconds (cumulative count 100000)
+
+Summary:
+  throughput summary: 190839.70 requests per second
+  latency summary (msec):
+          avg       min       p50       p95       p99       max
+        0.094     0.024     0.095     0.151     0.183     0.703
+

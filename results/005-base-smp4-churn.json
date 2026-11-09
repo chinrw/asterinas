@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "system": "asterinas",
+  "condition": "churn",
+  "cpus": 4,
+  "host": "10.0.2.15",
+  "port": 6380,
+  "status": "success",
+  "failure": null,
+  "control": [
+    {
+      "command": [
+        "GET",
+        "timer-bench:ready"
+      ],
+      "started_ns": 3894985051680272,
+      "reply": null,
+      "finished_ns": 3894985051753113
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:ready"
+      ],
+      "started_ns": 3894985152082063,
+      "reply": "1",
+      "finished_ns": 3894985152159964
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:condition"
+      ],
+      "started_ns": 3894985152162584,
+      "reply": "churn",
+      "finished_ns": 3894985152219465
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:load-start"
+      ],
+      "started_ns": 3894985152221495,
+      "reply": "TIMERFD_CHURN_STARTED {\"pid\":274,\"start_ns\":101912531119,\"rate\":5000}",
+      "finished_ns": 3894985152274495
+    },
+    {
+      "command": [
+        "RPUSH",
+        "timer-bench:done",
+        "1"
+      ],
+      "started_ns": 3894990822223840,
+      "reply": 1,
+      "finished_ns": 3894990822368812
+    },
+    {
+      "command": [
+        "BLPOP",
+        "timer-bench:completed",
+        "15"
+      ],
+      "started_ns": 3894990822372002,
+      "reply": [
+        "timer-bench:completed",
+        "1"
+      ],
+      "finished_ns": 3894990957957386
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:status"
+      ],
+      "started_ns": 3894990957973837,
+      "reply": "complete",
+      "finished_ns": 3894990958115519
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:load-exit"
+      ],
+      "started_ns": 3894990958121219,
+      "reply": "0",
+      "finished_ns": 3894990958202370
+    },
+    {
+      "command": [
+        "GET",
+        "timer-bench:load-log"
+      ],
+      "started_ns": 3894990958204510,
+      "reply": "TIMERFD_CHURN_STARTED {\"pid\":274,\"start_ns\":101912531119,\"rate\":5000}\nTIMERFD_CHURN_FINISHED {\"pid\":274,\"start_ns\":101912531119,\"finish_ns\":107674886444,\"elapsed_ns\":5762355325,\"cycles\":28850,\"skipped_slots\":0,\"stop_requested\":true,\"rate\":5000}",
+      "finished_ns": 3894990958281831
+    },
+    {
+      "command": [
+        "RPUSH",
+        "timer-bench:ack",
+        "1"
+      ],
+      "started_ns": 3894990958344232,
+      "reply": 1,
+      "finished_ns": 3894990958437793
+    }
+  ],
+  "throughput": {
+    "log_path": "../throughput/005-base-smp4-churn.log",
+    "command": [
+      "redis-benchmark",
+      "-h",
+      "10.0.2.15",
+      "-p",
+      "6380",
+      "-n",
+      "100000",
+      "-c",
+      "20",
+      "-t",
+      "get"
+    ],
+    "requests": 100000,
+    "concurrency": 20,
+    "exit_code": 0,
+    "host_elapsed_ns": 564478133,
+    "rps": 187265.92
+  },
+  "fixed": {
+    "offered_rps": 1000,
+    "duration_s": 5,
+    "connections": 20,
+    "planned": 5000,
+    "started": 5000,
+    "completed": 5000,
+    "error_count": 0,
+    "failure": null,
+    "summaries": {
+      "service": {
+        "p999_ns": 187583,
+        "max_ns": 206013,
+        "error_count": 0,
+        "over_10ms_count": 0
+      },
+      "client_queue": {
+        "p999_ns": 1073993,
+        "max_ns": 1081833,
+        "error_count": 0,
+        "over_10ms_count": 0
+      },
+      "total": {
+        "p999_ns": 1217985,
+        "max_ns": 1251171,
+        "error_count": 0,
+        "over_10ms_count": 0
+      }
+    },
+    "records_file": "../requests/005-base-smp4-churn.jsonl"
+  },
+  "load": {
+    "start_raw": "TIMERFD_CHURN_STARTED {\"pid\":274,\"start_ns\":101912531119,\"rate\":5000}",
+    "exit_code": "0",
+    "log": "TIMERFD_CHURN_STARTED {\"pid\":274,\"start_ns\":101912531119,\"rate\":5000}\nTIMERFD_CHURN_FINISHED {\"pid\":274,\"start_ns\":101912531119,\"finish_ns\":107674886444,\"elapsed_ns\":5762355325,\"cycles\":28850,\"skipped_slots\":0,\"stop_requested\":true,\"rate\":5000}",
+    "start": {
+      "pid": 274,
+      "start_ns": 101912531119,
+      "rate": 5000
+    },
+    "finish": {
+      "pid": 274,
+      "start_ns": 101912531119,
+      "finish_ns": 107674886444,
+      "elapsed_ns": 5762355325,
+      "cycles": 28850,
+      "skipped_slots": 0,
+      "stop_requested": true,
+      "rate": 5000
+    },
+    "achieved_rate": 5006.633290181563
+  },
+  "shutdown_verified": true,
+  "export_schema_version": 1
+}
