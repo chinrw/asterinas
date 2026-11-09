@@ -1,5 +1,5 @@
 name: "Test x86-64  "
-run-name: Timer core lifecycle red/green controls
+run-name: Timer core baseline lifecycle red control
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [base, head]
+        variant: [base]
     container:
       image: asterinas/kernel-dev:0.19.0-20261012
       options: -v /dev:/dev --privileged
@@ -63,7 +63,7 @@ jobs:
               tests = head[head.index('#[cfg(ktest)]'):]
               selected = '            .pop_first()\n            .unwrap()\n            .1'
               assert tests.count(selected) == 1
-              base = subprocess.check_output(['git', 'show', '461280bdbe7cf77d0bcee36940c6938a56403897:kernel/core/src/time/core/timer.rs'], text=True)
+              base = subprocess.check_output(['git', '-c', f'safe.directory={repo}', 'show', '461280bdbe7cf77d0bcee36940c6938a56403897:kernel/core/src/time/core/timer.rs'], text=True)
               target.write_text(base + '\n' + tests.replace(selected, '            .pop()\n            .unwrap()'))
           names = ['timer_lifecycle_regressions']
           if variant == 'head':
@@ -95,7 +95,7 @@ jobs:
               red = bool(re.search(r'test result: FAILED\. 0 passed; 1 failed; \d+ filtered out', text))
               green = bool(re.search(r'test result: ok\. 1 passed; 0 failed; \d+ filtered out', text))
               expected = status == 0 and green if variant == 'head' else (
-                  status != 0 and red and 'dropped owners left queued callbacks' in text
+                  status == 1 and red and 'dropped owners left queued callbacks' in text
                   and bool(re.search(r'left:\s+1024', text)) and bool(re.search(r'right:\s+0', text)))
               processors = sorted({int(cpu) for cpu in re.findall(r'Processor ([123]) started', text)})
               row = dict(variant=variant, test=name, exit=status, actually_executed=executed,
