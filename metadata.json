@@ -446,5 +446,11 @@
       "Cargo.toml: unwinding version constraint"
     ]
   },
-  "kernel_lock_sha256": "fba84816dae6f6359437d943b3c955cda20b6bdbba31002c04f1183573d8a5a3"
+  "kernel_lock_sha256": "fba84816dae6f6359437d943b3c955cda20b6bdbba31002c04f1183573d8a5a3",
+  "core_controls": {
+    "head_job_url": "https://github.com/chinrw/asterinas/actions/runs/42609271301/job/129133184193",
+    "base_control_url": "https://github.com/chinrw/asterinas/actions/runs/42611066307",
+    "default_ktest_excludes_timer_cases": true,
+    "initial_base_setup_failure": "Git repository ownership check, before tests; retained in run 42609271301"
+  }
 }

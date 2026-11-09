@@ -1,6 +1,8 @@
 # Timer lifecycle measurements on current main
 
 These measurements compare main acf7dcf5e with timer fix f48cf611f.
+[Readable result tables](tables.md) separate operation costs, expiry lateness,
+Redis throughput and request tail latency.
 There are sixteen local Ryzen 9 9950X QEMU/KVM guests: four base/head pairs
 for each of one and four CPUs, with two pairs in each order. Every guest uses
 8GiB, TAP networking and VHOST=off. Both normal kernels use release-lto,
