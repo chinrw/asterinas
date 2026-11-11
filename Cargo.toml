@@ -26,6 +26,7 @@ members = [
     "ostd/libs/ostd-pod/macros",
     "ostd/libs/ostd-test",
     "ostd/libs/padding-struct",
+    "ostd/libs/timer-queue",
     "kernel",
     "kernel/comps/drm",
     "kernel/comps/i8042",
@@ -164,6 +165,7 @@ ostd-pod = { path = "ostd/libs/ostd-pod", version = "0.4.0" }
 ostd-pod-macros = { path = "ostd/libs/ostd-pod/macros", version = "0.4.0" }
 ostd-test = { path = "ostd/libs/ostd-test", version = "0.19.0" }
 padding-struct = { path = "ostd/libs/padding-struct", version = "0.2.0" }
+timer-queue = { path = "ostd/libs/timer-queue", version = "0.1.0" }
 
 aster-core = { path = "kernel/core", default-features = false }
 

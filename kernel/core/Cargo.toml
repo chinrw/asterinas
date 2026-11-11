@@ -59,6 +59,7 @@ sparse-id-alloc.workspace = true
 spin.workspace = true
 takeable.workspace = true
 time.workspace = true
+timer-queue.workspace = true
 typeflags-util.workspace = true
 typeflags.workspace = true
 xarray.workspace = true

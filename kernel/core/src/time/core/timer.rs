@@ -2,7 +2,6 @@
 
 use alloc::{
     boxed::Box,
-    collections::BTreeMap,
     sync::{Arc, Weak},
     vec::Vec,
 };
@@ -13,7 +12,10 @@ use core::{
 
 use ostd::sync::{LocalIrqDisabled, SpinLock, SpinLockGuard};
 
+use self::queue::{TimerFactory, TimerQueue};
 use super::Clock;
+
+mod queue;
 
 /// A timeout, represented in one of the two ways.
 #[derive(Clone, Debug)]
@@ -39,7 +41,7 @@ pub(crate) struct Timer {
 #[derive(Default)]
 struct TimerInner {
     interval: Duration,
-    timer_callback: Weak<TimerCallback>,
+    timer_callback: timer_queue::WeakHandle<TimerCallbackData>,
 }
 
 /// A guard that provides exclusive access to a `Timer`.
@@ -71,11 +73,15 @@ impl TimerGuard<'_> {
         };
 
         let timer_weak = Arc::downgrade(self.timer);
-        let new_timer_callback = Arc::new(TimerCallback::new(expired_time, timer_weak));
+        let new_timer_callback = self
+            .timer
+            .timer_manager
+            .callback_factory
+            .create(expired_time, TimerCallbackData::new(timer_weak));
 
         self.cancel();
 
-        self.inner.timer_callback = Arc::downgrade(&new_timer_callback);
+        self.inner.timer_callback = new_timer_callback.downgrade();
         self.timer.timer_manager.insert(new_timer_callback);
     }
 
@@ -92,7 +98,7 @@ impl TimerGuard<'_> {
     pub(crate) fn expired_time(&self) -> Duration {
         let timer_callback = self.inner.timer_callback.upgrade();
         timer_callback
-            .and_then(|callback| (!callback.is_cancelled()).then_some(callback.expired_time))
+            .and_then(|callback| (!callback.is_cancelled()).then_some(callback.deadline()))
             .unwrap_or(Duration::ZERO)
     }
 
@@ -163,15 +169,18 @@ impl Drop for Timer {
 /// will be actually dropped after all the created timers have been dropped.
 pub(crate) struct TimerManager {
     clock: Arc<dyn Clock>,
-    timer_callbacks: SpinLock<BTreeMap<TimerCallbackKey, Arc<TimerCallback>>>,
+    timer_callbacks: SpinLock<TimerQueue>,
+    callback_factory: TimerFactory,
 }
 
 impl TimerManager {
     /// Creates a `TimerManager` instance from a clock.
     pub(crate) fn new(clock: Arc<dyn Clock>) -> Arc<Self> {
+        let (queue, callback_factory) = TimerQueue::new();
         Arc::new(Self {
             clock,
-            timer_callbacks: SpinLock::new(BTreeMap::new()),
+            timer_callbacks: SpinLock::new(queue),
+            callback_factory,
         })
     }
 
@@ -191,24 +200,24 @@ impl TimerManager {
         }
     }
 
-    fn insert(&self, timer_callback: Arc<TimerCallback>) {
-        let key = timer_callback.key();
-        let replaced = self
+    fn insert(&self, timer_callback: timer_queue::NewNode<TimerCallbackData>) {
+        let inserted = self
             .timer_callbacks
             .disable_irq()
             .lock()
-            .insert(key, timer_callback);
-        debug_assert!(replaced.is_none());
+            .insert(timer_callback);
+        // This manager's factory is paired with this queue at construction.
+        debug_assert!(inserted.is_ok());
     }
 
-    fn retire(&self, timer_callback: &Arc<TimerCallback>) {
+    fn retire(&self, timer_callback: &TimerCallback) {
         // Cancel callbacks that a dispatcher has already selected.
         timer_callback.cancel();
         let retired = self
             .timer_callbacks
             .disable_irq()
             .lock()
-            .remove(&timer_callback.key());
+            .remove(timer_callback);
         // Drop the queue's reference after unlocking, including during Timer::drop.
         drop(retired);
     }
@@ -225,12 +234,12 @@ impl TimerManager {
 
             let mut callbacks = Vec::new();
             let current_time = self.clock.read_time();
-            while let Some(((expired_time, _), timer_callback)) = timeout_list.first_key_value() {
+            while let Some(timer_callback) = timeout_list.first() {
                 if timer_callback.is_cancelled() {
                     // Just ignore the cancelled callback
                     timeout_list.pop_first();
-                } else if *expired_time <= current_time {
-                    callbacks.push(timeout_list.pop_first().unwrap().1);
+                } else if timer_callback.deadline() <= current_time {
+                    callbacks.push(timeout_list.pop_first().unwrap());
                 } else {
                     break;
                 }
@@ -252,20 +261,18 @@ impl TimerManager {
     }
 }
 
-type TimerCallbackKey = (Duration, usize);
+type TimerCallback = timer_queue::Handle<TimerCallbackData>;
 
-/// A `TimerCallback` can be used to execute a timer callback function.
-struct TimerCallback {
-    expired_time: Duration,
+/// The callback payload shared by timer generation handles.
+struct TimerCallbackData {
     timer: Weak<Timer>,
     is_cancelled: AtomicBool,
 }
 
-impl TimerCallback {
-    /// Creates an instance of `TimerCallback`.
-    fn new(timeout: Duration, timer: Weak<Timer>) -> Self {
+impl TimerCallbackData {
+    /// Creates a callback payload before queue insertion.
+    fn new(timer: Weak<Timer>) -> Self {
         Self {
-            expired_time: timeout,
             timer,
             is_cancelled: AtomicBool::new(false),
         }
@@ -280,11 +287,6 @@ impl TimerCallback {
     // Returns whether the `TimerCallback` is cancelled.
     fn is_cancelled(&self) -> bool {
         self.is_cancelled.load(Ordering::Acquire)
-    }
-
-    fn key(self: &Arc<Self>) -> TimerCallbackKey {
-        // The Arc keeps this address unique while the callback is queued or selected.
-        (self.expired_time, Arc::as_ptr(self) as usize)
     }
 
     fn call(&self) {
@@ -328,17 +330,16 @@ mod tests {
     }
 
     fn pending(manager: &TimerManager) -> usize {
-        manager.timer_callbacks.disable_irq().lock().len()
+        manager.timer_callbacks.disable_irq().lock().count()
     }
 
-    fn selected_callback(manager: &TimerManager) -> Arc<TimerCallback> {
+    fn selected_callback(manager: &TimerManager) -> TimerCallback {
         manager
             .timer_callbacks
             .disable_irq()
             .lock()
             .pop_first()
             .unwrap()
-            .1
     }
 
     fn dropping_owners_retires_queued_entries() {

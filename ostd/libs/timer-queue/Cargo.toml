@@ -1,0 +1,13 @@
+[package]
+name = "timer-queue"
+version = "0.1.0"
+description = "An owned timer queue with checked callback handles"
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+intrusive-collections.workspace = true
+
+[lints]
+workspace = true
