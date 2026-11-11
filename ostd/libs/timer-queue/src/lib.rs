@@ -62,6 +62,18 @@ impl<P> Handle<P> {
     pub fn downgrade(&self) -> WeakHandle<P> {
         WeakHandle(Arc::downgrade(&self.0))
     }
+
+    /// Returns a stable identity for reference-model checks.
+    #[cfg(feature = "validation")]
+    pub fn identity(&self) -> usize {
+        Arc::as_ptr(&self.0) as usize
+    }
+
+    /// Returns membership for validation performed under the queue's lock.
+    #[cfg(feature = "validation")]
+    pub fn is_linked(&self) -> bool {
+        self.0.link.is_linked()
+    }
 }
 
 /// A weak reference to a callback generation, including one not yet queued.
@@ -96,7 +108,7 @@ impl<P> NewNode<P> {
     }
 }
 
-/// Creates generations belonging to one queue without acquiring its lock.
+/// A factory for generations belonging to one queue.
 pub struct Factory<P> {
     owner: Arc<()>,
     payload: PhantomData<fn() -> P>,
@@ -123,10 +135,11 @@ impl<P> Factory<P> {
     }
 }
 
-/// Orders callbacks by deadline and identity, with a cached minimum.
+/// A deadline-ordered callback queue with a cached minimum.
 ///
 /// Callers serialize mutations through exclusive access, normally a queue lock.
-/// Only this module can link nodes. A fixed, immutable key makes comparison
+/// Only this module can link nodes.
+/// A fixed, immutable key makes comparison
 /// non-panicking after the intrusive collection acquires a node's link.
 pub struct TimerQueue<P> {
     nodes: RBTree<NodeAdapter<P>>,
@@ -226,6 +239,24 @@ impl<P> TimerQueue<P> {
     pub fn count(&self) -> usize {
         self.nodes.iter().count()
     }
+
+    /// Returns strong references in key order for reference-model checks.
+    #[cfg(feature = "validation")]
+    pub fn snapshot(&self) -> alloc::vec::Vec<Handle<P>> {
+        let mut cursor = self.nodes.front();
+        let mut handles = alloc::vec::Vec::new();
+        while let Some(node) = cursor.clone_pointer() {
+            handles.push(Handle(node));
+            cursor.move_next();
+        }
+        handles
+    }
+
+    /// Returns the node payload layout, excluding its Arc allocation header.
+    #[cfg(feature = "validation")]
+    pub fn node_layout() -> core::alloc::Layout {
+        core::alloc::Layout::new::<Node<P>>()
+    }
 }
 
 #[cfg(test)]
@@ -298,23 +329,23 @@ mod tests {
             let mut handles = Vec::new();
             let mut live = BTreeMap::new();
             for step in 0..100000 {
-                let next = |state: &mut u64| {
+                let next_fn = |state: &mut u64| {
                     *state ^= *state << 13;
                     *state ^= *state >> 7;
                     *state ^= *state << 17;
                     *state
                 };
-                match next(&mut random) % 3 {
+                match next_fn(&mut random) % 3 {
                     0 => {
                         let node =
-                            factory.create(Duration::from_nanos(next(&mut random) % 256), step);
+                            factory.create(Duration::from_nanos(next_fn(&mut random) % 256), step);
                         let handle = node.downgrade().upgrade().unwrap();
                         live.insert(key(&handle), step);
                         assert!(queue.insert(node).is_ok());
                         handles.push(handle);
                     }
                     1 if !handles.is_empty() => {
-                        let handle = &handles[next(&mut random) as usize % handles.len()];
+                        let handle = &handles[next_fn(&mut random) as usize % handles.len()];
                         let expected = live.remove(&key(handle));
                         let removed = queue.remove(handle);
                         assert_eq!(removed.0.as_ref().map(|item| **item), expected);
@@ -339,6 +370,8 @@ mod tests {
                     })
                     .collect();
                 assert_eq!(keys, live.keys().copied().collect::<Vec<_>>());
+                #[cfg(feature = "validation")]
+                assert_eq!(queue.snapshot().iter().map(key).collect::<Vec<_>>(), keys);
                 assert_eq!(
                     queue.first().map(key),
                     live.first_key_value().map(|(key, _)| *key)
