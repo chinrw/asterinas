@@ -334,12 +334,7 @@ mod tests {
     }
 
     fn selected_callback(manager: &TimerManager) -> Arc<TimerCallback> {
-        manager
-            .timer_callbacks
-            .disable_irq()
-            .lock()
-            .pop()
-            .unwrap()
+        manager.timer_callbacks.disable_irq().lock().pop().unwrap()
     }
 
     fn dropping_owners_retires_queued_entries() {
