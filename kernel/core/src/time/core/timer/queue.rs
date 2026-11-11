@@ -379,7 +379,6 @@ mod tests {
     use alloc::{
         collections::{BTreeMap, BTreeSet},
         sync::Weak,
-        vec::Vec,
     };
     use core::time::Duration;
 
@@ -617,7 +616,7 @@ mod tests {
             assert!(callback.expired_time >= previous);
             previous = callback.expired_time;
             assert_eq!(callback.queue_position.load(Ordering::Relaxed), NOT_QUEUED);
-            if queue.len % 64 == 0 {
+            if queue.len.is_multiple_of(64) {
                 check(&queue);
             }
         }
