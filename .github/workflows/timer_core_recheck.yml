@@ -1,0 +1,59 @@
+name: Timer core recheck
+
+on:
+  push:
+    branches: [validate/timer-intrusive-rbtree]
+    paths: [.github/workflows/timer_core_recheck.yml]
+  workflow_dispatch:
+
+jobs:
+  timer-core:
+    name: Timer core (SMP ${{ matrix.cpus }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        cpus: [1]
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    env:
+      CONSOLE: ttyS0
+      OVMF: "on"
+      QEMU_DISPLAY: none
+      SMP: ${{ matrix.cpus }}
+      MEM: 4G
+      NETDEV: user
+      VHOST: "off"
+      BOOT_PROTOCOL: linux-efi-handover64
+    steps:
+      - name: Free disk space
+        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+      - uses: actions/checkout@v4
+      - name: Use the locally built OSDK
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build test prerequisites
+        run: make install_osdk initramfs
+      - name: Run the timer wrapper reference tests
+        if: matrix.cpus == 1
+        run: |
+          mkdir -p target/timer-wrapper-ci
+          cargo test -p timer-queue --lib --features validation --target x86_64-unknown-linux-gnu --release >target/timer-wrapper-ci/host-wrapper.log 2>&1 || { cat target/timer-wrapper-ci/host-wrapper.log; exit 1; }
+          cat target/timer-wrapper-ci/host-wrapper.log
+          grep -q 'test result: ok. 5 passed; 0 failed;' target/timer-wrapper-ci/host-wrapper.log
+      - name: Run the explicit timer test selection
+        run: python3 .github/timer-core/run.py
+      - name: Preserve timer test records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: timer-core-smp${{ matrix.cpus }}
+          path: |
+            target/timer-core-ci/*.log
+            target/timer-core-ci/*.json
+            target/timer-wrapper-ci/*.log

@@ -293,10 +293,10 @@ jobs:
       - name: Run the timer wrapper reference tests
         if: matrix.cpus == 1
         run: |
-          mkdir -p target/timer-core-ci
-          cargo test -p timer-queue --lib --features validation --target x86_64-unknown-linux-gnu --release >target/timer-core-ci/host-wrapper.log 2>&1 || { cat target/timer-core-ci/host-wrapper.log; exit 1; }
-          cat target/timer-core-ci/host-wrapper.log
-          grep -q 'test result: ok. 5 passed; 0 failed;' target/timer-core-ci/host-wrapper.log
+          mkdir -p target/timer-wrapper-ci
+          cargo test -p timer-queue --lib --features validation --target x86_64-unknown-linux-gnu --release >target/timer-wrapper-ci/host-wrapper.log 2>&1 || { cat target/timer-wrapper-ci/host-wrapper.log; exit 1; }
+          cat target/timer-wrapper-ci/host-wrapper.log
+          grep -q 'test result: ok. 5 passed; 0 failed;' target/timer-wrapper-ci/host-wrapper.log
       - name: Run the explicit timer test selection
         run: python3 .github/timer-core/run.py
       - name: Preserve timer test records
@@ -307,3 +307,4 @@ jobs:
           path: |
             target/timer-core-ci/*.log
             target/timer-core-ci/*.json
+            target/timer-wrapper-ci/*.log
