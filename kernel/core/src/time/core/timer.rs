@@ -2,18 +2,20 @@
 
 use alloc::{
     boxed::Box,
-    collections::BTreeMap,
     sync::{Arc, Weak},
     vec::Vec,
 };
 use core::{
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     time::Duration,
 };
 
 use ostd::sync::{LocalIrqDisabled, SpinLock, SpinLockGuard};
 
+use self::queue::TimerQueue;
 use super::Clock;
+
+mod queue;
 
 /// A timeout, represented in one of the two ways.
 #[derive(Clone, Debug)]
@@ -163,7 +165,7 @@ impl Drop for Timer {
 /// will be actually dropped after all the created timers have been dropped.
 pub(crate) struct TimerManager {
     clock: Arc<dyn Clock>,
-    timer_callbacks: SpinLock<BTreeMap<TimerCallbackKey, Arc<TimerCallback>>>,
+    timer_callbacks: SpinLock<TimerQueue>,
 }
 
 impl TimerManager {
@@ -171,7 +173,7 @@ impl TimerManager {
     pub(crate) fn new(clock: Arc<dyn Clock>) -> Arc<Self> {
         Arc::new(Self {
             clock,
-            timer_callbacks: SpinLock::new(BTreeMap::new()),
+            timer_callbacks: SpinLock::new(TimerQueue::new()),
         })
     }
 
@@ -192,24 +194,21 @@ impl TimerManager {
     }
 
     fn insert(&self, timer_callback: Arc<TimerCallback>) {
-        let key = timer_callback.key();
-        let replaced = self
-            .timer_callbacks
+        self.timer_callbacks
             .disable_irq()
             .lock()
-            .insert(key, timer_callback);
-        debug_assert!(replaced.is_none());
+            .insert(timer_callback);
     }
 
     fn retire(&self, timer_callback: &Arc<TimerCallback>) {
-        // Cancel callbacks that a dispatcher has already selected.
+        // Preserve cancellation for callbacks already selected by a dispatcher.
         timer_callback.cancel();
         let retired = self
             .timer_callbacks
             .disable_irq()
             .lock()
-            .remove(&timer_callback.key());
-        // Drop the queue's reference after unlocking, including during Timer::drop.
+            .remove(timer_callback);
+        // Release the callback after the queue guard, including when its owner is being dropped.
         drop(retired);
     }
 
@@ -225,12 +224,12 @@ impl TimerManager {
 
             let mut callbacks = Vec::new();
             let current_time = self.clock.read_time();
-            while let Some(((expired_time, _), timer_callback)) = timeout_list.first_key_value() {
+            while let Some(timer_callback) = timeout_list.first() {
                 if timer_callback.is_cancelled() {
                     // Just ignore the cancelled callback
-                    timeout_list.pop_first();
-                } else if *expired_time <= current_time {
-                    callbacks.push(timeout_list.pop_first().unwrap().1);
+                    timeout_list.pop();
+                } else if timer_callback.expired_time <= current_time {
+                    callbacks.push(timeout_list.pop().unwrap());
                 } else {
                     break;
                 }
@@ -259,6 +258,8 @@ struct TimerCallback {
     expired_time: Duration,
     timer: Weak<Timer>,
     is_cancelled: AtomicBool,
+    // Only the owning manager's queue lock permits access to this position.
+    queue_position: AtomicUsize,
 }
 
 impl TimerCallback {
@@ -268,6 +269,7 @@ impl TimerCallback {
             expired_time: timeout,
             timer,
             is_cancelled: AtomicBool::new(false),
+            queue_position: AtomicUsize::new(queue::NOT_QUEUED),
         }
     }
 
@@ -283,7 +285,7 @@ impl TimerCallback {
     }
 
     fn key(self: &Arc<Self>) -> TimerCallbackKey {
-        // The Arc keeps this address unique while the callback is queued or selected.
+        // The queued Arc keeps the allocation alive, so its address distinguishes equal deadlines.
         (self.expired_time, Arc::as_ptr(self) as usize)
     }
 
@@ -313,7 +315,7 @@ impl TimerCallback {
 #[cfg(ktest)]
 mod tests {
     use alloc::vec;
-    use core::sync::atomic::{AtomicU64, AtomicUsize};
+    use core::sync::atomic::AtomicU64;
 
     use ostd::prelude::ktest;
 
@@ -332,13 +334,7 @@ mod tests {
     }
 
     fn selected_callback(manager: &TimerManager) -> Arc<TimerCallback> {
-        manager
-            .timer_callbacks
-            .disable_irq()
-            .lock()
-            .pop_first()
-            .unwrap()
-            .1
+        manager.timer_callbacks.disable_irq().lock().pop().unwrap()
     }
 
     fn dropping_owners_retires_queued_entries() {
