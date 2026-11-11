@@ -79,3 +79,81 @@ impl TimerQueue {
         core::mem::replace(&mut self.earliest, earliest)
     }
 }
+
+#[cfg(ktest)]
+mod tests {
+    use alloc::{sync::Weak, vec::Vec};
+    use core::time::Duration;
+
+    use ostd::prelude::ktest;
+
+    use super::*;
+
+    fn callback(deadline: u64) -> Arc<TimerCallback> {
+        Arc::new(TimerCallback::new(
+            Duration::from_nanos(deadline),
+            Weak::new(),
+        ))
+    }
+
+    fn check_earliest(queue: &TimerQueue) {
+        match (queue.callbacks.first_key_value(), queue.first()) {
+            (Some((_, expected)), Some(actual)) => assert!(Arc::ptr_eq(expected, actual)),
+            (None, None) => {}
+            _ => panic!("cached head disagrees with queued generations"),
+        }
+    }
+
+    #[ktest]
+    fn cached_head_tracks_insert_remove_and_pop() {
+        let mut queue = TimerQueue::new();
+        check_earliest(&queue);
+        assert!(queue.pop_first().is_none());
+        let handles: Vec<_> = [30, 10, 20, 10].into_iter().map(callback).collect();
+        for handle in &handles {
+            queue.insert(handle.clone());
+            check_earliest(&queue);
+        }
+        assert!(queue.remove(&callback(5)).0.is_none());
+        check_earliest(&queue);
+        assert!(queue.remove(&handles[0]).0.is_some());
+        check_earliest(&queue);
+        assert!(queue.remove(&handles[0]).0.is_none());
+        check_earliest(&queue);
+        let first = queue.first().unwrap().clone();
+        assert!(queue.remove(&first).0.is_some());
+        check_earliest(&queue);
+        while let Some(expected) = queue.first().cloned() {
+            assert!(Arc::ptr_eq(&expected, &queue.pop_first().unwrap()));
+            check_earliest(&queue);
+        }
+        assert!(queue.is_empty());
+    }
+
+    #[ktest]
+    fn retirement_and_drop_release_cached_references() {
+        let mut queue = TimerQueue::new();
+        let entry = callback(10);
+        let weak = Arc::downgrade(&entry);
+        queue.insert(entry.clone());
+        let retired = queue.remove(&entry);
+        drop(entry);
+        assert!(weak.upgrade().is_some());
+        drop(retired);
+        assert!(weak.upgrade().is_none());
+        check_earliest(&queue);
+
+        let entry = callback(20);
+        let weak = Arc::downgrade(&entry);
+        queue.insert(entry);
+        let selected = queue.pop_first().unwrap();
+        drop(selected);
+        assert!(weak.upgrade().is_none());
+
+        let entry = callback(30);
+        let weak = Arc::downgrade(&entry);
+        queue.insert(entry);
+        drop(queue);
+        assert!(weak.upgrade().is_none());
+    }
+}
