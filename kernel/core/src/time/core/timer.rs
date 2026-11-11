@@ -315,7 +315,7 @@ impl TimerCallback {
 #[cfg(ktest)]
 mod tests {
     use alloc::vec;
-    use core::sync::atomic::{AtomicU64, AtomicUsize};
+    use core::sync::atomic::AtomicU64;
 
     use ostd::prelude::ktest;
 
