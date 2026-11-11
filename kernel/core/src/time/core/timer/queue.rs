@@ -10,6 +10,21 @@ use super::TimerCallback;
 pub(super) const NOT_QUEUED: usize = usize::MAX;
 const NONE: usize = NOT_QUEUED;
 
+#[derive(Clone, Copy)]
+enum Direction {
+    Left,
+    Right,
+}
+
+impl Direction {
+    fn opposite(self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+}
+
 struct Node {
     callback: Arc<TimerCallback>,
     parent: usize,
@@ -60,11 +75,15 @@ impl TimerQueue {
         let key = callback.key();
         let mut parent = NONE;
         let mut current = self.root;
-        let mut left = false;
+        let mut direction = Direction::Right;
         while current != NONE {
             parent = current;
-            left = key < self.node(current).callback.key();
-            current = self.child(current, left);
+            direction = if key < self.node(current).callback.key() {
+                Direction::Left
+            } else {
+                Direction::Right
+            };
+            current = self.child(current, direction);
         }
         let node = Node {
             callback,
@@ -90,7 +109,7 @@ impl TimerQueue {
         if parent == NONE {
             self.root = position;
         } else {
-            self.set_child(parent, left, position);
+            self.set_child(parent, direction, position);
         }
         self.node(position)
             .callback
@@ -131,21 +150,21 @@ impl TimerQueue {
         }
     }
 
-    fn child(&self, position: usize, left: bool) -> usize {
+    fn child(&self, position: usize, direction: Direction) -> usize {
         if position == NONE {
             NONE
-        } else if left {
-            self.node(position).left
         } else {
-            self.node(position).right
+            match direction {
+                Direction::Left => self.node(position).left,
+                Direction::Right => self.node(position).right,
+            }
         }
     }
 
-    fn set_child(&mut self, position: usize, left: bool, child: usize) {
-        if left {
-            self.node_mut(position).left = child;
-        } else {
-            self.node_mut(position).right = child;
+    fn set_child(&mut self, position: usize, direction: Direction, child: usize) {
+        match direction {
+            Direction::Left => self.node_mut(position).left = child,
+            Direction::Right => self.node_mut(position).right = child,
         }
     }
 
@@ -159,12 +178,11 @@ impl TimerQueue {
         }
     }
 
-    // Move the right child up for a left rotation, or the left child for a right one.
-    fn rotate(&mut self, position: usize, left: bool) {
-        let promoted = self.child(position, !left);
+    fn rotate(&mut self, position: usize, direction: Direction) {
+        let promoted = self.child(position, direction.opposite());
         debug_assert_ne!(promoted, NONE);
-        let middle = self.child(promoted, left);
-        self.set_child(position, !left, middle);
+        let middle = self.child(promoted, direction);
+        self.set_child(position, direction.opposite(), middle);
         if middle != NONE {
             self.node_mut(middle).parent = position;
         }
@@ -173,19 +191,30 @@ impl TimerQueue {
         if parent == NONE {
             self.root = promoted;
         } else {
-            let was_left = self.node(parent).left == position;
-            self.set_child(parent, was_left, promoted);
+            let side = if self.node(parent).left == position {
+                Direction::Left
+            } else {
+                Direction::Right
+            };
+            self.set_child(parent, side, promoted);
         }
-        self.set_child(promoted, left, position);
+        self.set_child(promoted, direction, position);
         self.node_mut(position).parent = promoted;
     }
 
+    // Balancing follows CLRS, Introduction to Algorithms (4th ed.), Chapter 13:
+    // https://mitpress.mit.edu/9780262046305/introduction-to-algorithms/
+    // NONE is a black leaf; deletion carries its parent separately.
     fn fix_insert(&mut self, mut position: usize) {
         while self.is_red(self.node(position).parent) {
             let mut parent = self.node(position).parent;
             let grandparent = self.node(parent).parent;
-            let parent_is_left = self.node(grandparent).left == parent;
-            let uncle = self.child(grandparent, !parent_is_left);
+            let parent_side = if self.node(grandparent).left == parent {
+                Direction::Left
+            } else {
+                Direction::Right
+            };
+            let uncle = self.child(grandparent, parent_side.opposite());
             if self.is_red(uncle) {
                 self.set_red(parent, false);
                 self.set_red(uncle, false);
@@ -193,14 +222,14 @@ impl TimerQueue {
                 position = grandparent;
                 continue;
             }
-            if position == self.child(parent, !parent_is_left) {
+            if position == self.child(parent, parent_side.opposite()) {
                 position = parent;
-                self.rotate(position, parent_is_left);
+                self.rotate(position, parent_side);
                 parent = self.node(position).parent;
             }
             self.set_red(parent, false);
             self.set_red(grandparent, true);
-            self.rotate(grandparent, !parent_is_left);
+            self.rotate(grandparent, parent_side.opposite());
         }
         self.set_red(self.root, false);
     }
@@ -231,7 +260,12 @@ impl TimerQueue {
         if parent == NONE {
             self.root = new;
         } else {
-            self.set_child(parent, self.node(parent).left == old, new);
+            let side = if self.node(parent).left == old {
+                Direction::Left
+            } else {
+                Direction::Right
+            };
+            self.set_child(parent, side, new);
         }
         if new != NONE {
             self.node_mut(new).parent = parent;
@@ -292,30 +326,36 @@ impl TimerQueue {
 
     fn fix_remove(&mut self, mut position: usize, mut parent: usize) {
         while position != self.root && !self.is_red(position) {
-            let position_is_left = self.node(parent).left == position;
-            let mut sibling = self.child(parent, !position_is_left);
+            let position_side = if self.node(parent).left == position {
+                Direction::Left
+            } else {
+                Direction::Right
+            };
+            let mut sibling = self.child(parent, position_side.opposite());
             if self.is_red(sibling) {
                 self.set_red(sibling, false);
                 self.set_red(parent, true);
-                self.rotate(parent, position_is_left);
-                sibling = self.child(parent, !position_is_left);
+                self.rotate(parent, position_side);
+                sibling = self.child(parent, position_side.opposite());
             }
-            if !self.is_red(self.child(sibling, true)) && !self.is_red(self.child(sibling, false)) {
+            if !self.is_red(self.child(sibling, Direction::Left))
+                && !self.is_red(self.child(sibling, Direction::Right))
+            {
                 self.set_red(sibling, true);
                 position = parent;
                 parent = self.node(position).parent;
                 continue;
             }
-            if !self.is_red(self.child(sibling, !position_is_left)) {
-                self.set_red(self.child(sibling, position_is_left), false);
+            if !self.is_red(self.child(sibling, position_side.opposite())) {
+                self.set_red(self.child(sibling, position_side), false);
                 self.set_red(sibling, true);
-                self.rotate(sibling, !position_is_left);
-                sibling = self.child(parent, !position_is_left);
+                self.rotate(sibling, position_side.opposite());
+                sibling = self.child(parent, position_side.opposite());
             }
             self.set_red(sibling, self.is_red(parent));
             self.set_red(parent, false);
-            self.set_red(self.child(sibling, !position_is_left), false);
-            self.rotate(parent, position_is_left);
+            self.set_red(self.child(sibling, position_side.opposite()), false);
+            self.rotate(parent, position_side);
             position = self.root;
         }
         self.set_red(position, false);
