@@ -1,0 +1,7 @@
+[
+  "aster_core::time::core::timer::tests::timer_lifecycle_regressions",
+  "aster_core::time::core::timer::tests::selected_old_generation_cannot_replace_a_same_deadline_rearm",
+  "aster_core::time::core::timer::tests::concurrent_rearm_cancel_and_dispatch_preserve_generations",
+  "aster_core::time::core::timer::tests::cancelled_future_head_is_removed_before_its_deadline",
+  "aster_core::time::core::timer::tests::shared_timer_queue_survives_smp_churn"
+]

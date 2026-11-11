@@ -519,10 +519,40 @@ mod tests {
         assert_eq!(pending(&manager), 0);
     }
 
+    #[ktest]
+    fn cancelled_future_head_is_removed_before_its_deadline() {
+        let clock = Arc::new(TestClock(AtomicU64::new(0)));
+        let manager = TimerManager::new(clock.clone());
+        let cancelled = manager.create_timer(|_| panic!("cancelled future callback fired"));
+        cancelled
+            .lock()
+            .set_timeout(Timeout::When(Duration::from_nanos(10)));
+        let fired = Arc::new(AtomicUsize::new(0));
+        let observed = fired.clone();
+        let future = manager.create_timer(move |_| {
+            observed.fetch_add(1, Ordering::Relaxed);
+        });
+        future
+            .lock()
+            .set_timeout(Timeout::When(Duration::from_nanos(20)));
+        let old = cancelled.lock().inner.timer_callback.upgrade().unwrap();
+        // Model dispatch between retirement's cancellation publication and removal.
+        old.cancel();
+        manager.process_expired_timers();
+        assert_eq!(pending(&manager), 1);
+        manager.retire(&old);
+        assert_eq!(pending(&manager), 1);
+        clock.0.store(20, Ordering::Relaxed);
+        manager.process_expired_timers();
+        assert_eq!(fired.load(Ordering::Relaxed), 1);
+        assert_eq!(pending(&manager), 0);
+    }
+
     struct ConcurrentTimers {
         manager: Arc<TimerManager>,
         observations: SpinLock<Vec<Arc<AtomicUsize>>>,
         completed: Vec<AtomicUsize>,
+        iterations_per_round: usize,
     }
 
     static CONCURRENT_TIMERS: SpinLock<Option<Arc<ConcurrentTimers>>> = SpinLock::new(None);
@@ -536,7 +566,7 @@ mod tests {
             .as_ref()
             .unwrap()
             .clone();
-        for iteration in 0..16 {
+        for iteration in 0..state.iterations_per_round {
             let fired = Arc::new(AtomicUsize::new(0));
             state.observations.disable_irq().lock().push(fired.clone());
             let timer = state.manager.create_timer(move |_| {
@@ -555,11 +585,25 @@ mod tests {
             drop(timer);
         }
         let cpu = ostd::irq::disable_local().current_cpu();
-        state.completed[u32::from(cpu) as usize].fetch_add(16, Ordering::Release);
+        state.completed[u32::from(cpu) as usize]
+            .fetch_add(state.iterations_per_round, Ordering::Release);
     }
 
     #[ktest]
     fn concurrent_rearm_cancel_and_dispatch_preserve_generations() {
+        check_concurrent_timers(16, 32, 512);
+    }
+
+    #[ktest]
+    fn shared_timer_queue_survives_smp_churn() {
+        check_concurrent_timers(125, 200, 25000);
+    }
+
+    fn check_concurrent_timers(
+        iterations_per_round: usize,
+        rounds: usize,
+        expected_per_cpu: usize,
+    ) {
         let clock = Arc::new(TestClock(AtomicU64::new(0)));
         let manager = TimerManager::new(clock);
         let mut sentinels = Vec::new();
@@ -576,9 +620,10 @@ mod tests {
             completed: (0..ostd::cpu::num_cpus())
                 .map(|_| AtomicUsize::new(0))
                 .collect(),
+            iterations_per_round,
         });
         *CONCURRENT_TIMERS.disable_irq().lock() = Some(state.clone());
-        for _ in 0..32 {
+        for _ in 0..rounds {
             ostd::smp::inter_processor_call(
                 &ostd::cpu::CpuSet::new_full(),
                 exercise_concurrent_timers,
@@ -588,10 +633,10 @@ mod tests {
         CONCURRENT_TIMERS.disable_irq().lock().take();
         manager.process_expired_timers();
         for count in &state.completed {
-            assert_eq!(count.load(Ordering::Acquire), 512);
+            assert_eq!(count.load(Ordering::Acquire), expected_per_cpu);
         }
         let observations = state.observations.disable_irq().lock();
-        assert_eq!(observations.len(), ostd::cpu::num_cpus() * 512);
+        assert_eq!(observations.len(), ostd::cpu::num_cpus() * expected_per_cpu);
         assert!(
             observations
                 .iter()
