@@ -227,3 +227,223 @@ impl<P> TimerQueue<P> {
         self.nodes.iter().count()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+
+    use std::{
+        collections::{BTreeMap, HashSet},
+        sync::{
+            Mutex,
+            atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst},
+        },
+        thread,
+        vec::Vec,
+    };
+
+    use super::*;
+
+    fn key<P>(handle: &Handle<P>) -> (Duration, usize) {
+        (handle.deadline(), Arc::as_ptr(&handle.0) as usize)
+    }
+
+    #[test]
+    fn foreign_nodes_and_handles_are_rejected() {
+        let (mut first, first_factory) = TimerQueue::new();
+        let (mut second, second_factory) = TimerQueue::new();
+        let node = first_factory.create(Duration::ZERO, 10);
+        let handle = node.downgrade().upgrade().unwrap();
+        let node = second.insert(node).err().unwrap();
+        assert!(first.insert(node).is_ok());
+        assert!(second.remove(&handle).0.is_none());
+        assert_eq!(first.count(), 1);
+        assert!(first.pop_first().unwrap().ptr_eq(&handle));
+        assert!(first.remove(&handle).0.is_none());
+        let other = second_factory.create(Duration::ZERO, 20);
+        assert!(second.insert(other).is_ok());
+        assert_eq!(**second.first().unwrap(), 20);
+    }
+
+    #[test]
+    fn old_owner_identity_survives_queue_drop() {
+        let (mut queue, factory) = TimerQueue::new();
+        let node = factory.create(Duration::ZERO, 1);
+        let handle = node.downgrade().upgrade().unwrap();
+        assert!(queue.insert(node).is_ok());
+        drop(queue);
+        drop(factory);
+        assert!(!handle.0.link.is_linked());
+        for _ in 0..4096 {
+            let (mut replacement, factory) = TimerQueue::new();
+            assert!(!Arc::ptr_eq(&replacement.owner, &handle.0.owner));
+            assert!(
+                replacement
+                    .insert(factory.create(Duration::ZERO, 2))
+                    .is_ok()
+            );
+            assert!(replacement.remove(&handle).0.is_none());
+            assert_eq!(**replacement.first().unwrap(), 2);
+        }
+        let weak = handle.downgrade();
+        drop(handle);
+        assert!(weak.upgrade().is_none());
+    }
+
+    #[test]
+    fn seeded_operations_match_an_ordered_reference() {
+        for seed in 0..8 {
+            let (mut queue, factory) = TimerQueue::new();
+            let mut random = 0x53104000_u64 + seed;
+            let mut handles = Vec::new();
+            let mut live = BTreeMap::new();
+            for step in 0..100000 {
+                let next = |state: &mut u64| {
+                    *state ^= *state << 13;
+                    *state ^= *state >> 7;
+                    *state ^= *state << 17;
+                    *state
+                };
+                match next(&mut random) % 3 {
+                    0 => {
+                        let node =
+                            factory.create(Duration::from_nanos(next(&mut random) % 256), step);
+                        let handle = node.downgrade().upgrade().unwrap();
+                        live.insert(key(&handle), step);
+                        assert!(queue.insert(node).is_ok());
+                        handles.push(handle);
+                    }
+                    1 if !handles.is_empty() => {
+                        let handle = &handles[next(&mut random) as usize % handles.len()];
+                        let expected = live.remove(&key(handle));
+                        let removed = queue.remove(handle);
+                        assert_eq!(removed.0.as_ref().map(|item| **item), expected);
+                        assert!(!handle.0.link.is_linked());
+                    }
+                    _ => {
+                        let expected = live.pop_first();
+                        let actual = queue.pop_first();
+                        assert_eq!(actual.as_ref().map(|item| (key(item), **item)), expected);
+                        if let Some(actual) = actual {
+                            assert!(!actual.0.link.is_linked());
+                        }
+                    }
+                }
+                let keys: Vec<_> = queue
+                    .nodes
+                    .iter()
+                    .map(|node| {
+                        assert!(node.link.is_linked());
+                        assert!(Arc::ptr_eq(&node.owner, &queue.owner));
+                        (node.deadline, node as *const Node<_> as usize)
+                    })
+                    .collect();
+                assert_eq!(keys, live.keys().copied().collect::<Vec<_>>());
+                assert_eq!(
+                    queue.first().map(key),
+                    live.first_key_value().map(|(key, _)| *key)
+                );
+            }
+            while let Some(expected) = live.pop_first() {
+                let actual = queue.pop_first().unwrap();
+                assert_eq!((key(&actual), *actual), expected);
+            }
+            assert!(queue.first().is_none());
+            assert!(queue.is_empty());
+            assert!(handles.iter().all(|handle| !handle.0.link.is_linked()));
+        }
+    }
+
+    struct ReleaseProbe {
+        queue: Weak<Mutex<TimerQueue<ReleaseProbe>>>,
+        drops: Arc<AtomicUsize>,
+        unlocked: Arc<AtomicBool>,
+    }
+
+    impl Drop for ReleaseProbe {
+        fn drop(&mut self) {
+            self.drops.fetch_add(1, SeqCst);
+            if let Some(queue) = self.queue.upgrade() {
+                self.unlocked.store(queue.try_lock().is_ok(), SeqCst);
+            }
+        }
+    }
+
+    #[test]
+    fn retirement_and_selection_leave_final_release_outside_the_lock() {
+        let (queue, factory) = TimerQueue::new();
+        let queue = Arc::new(Mutex::new(queue));
+        let drops = Arc::new(AtomicUsize::new(0));
+        let unlocked = Arc::new(AtomicBool::new(false));
+        for selected in [false, true] {
+            let node = factory.create(
+                Duration::ZERO,
+                ReleaseProbe {
+                    queue: Arc::downgrade(&queue),
+                    drops: drops.clone(),
+                    unlocked: unlocked.clone(),
+                },
+            );
+            let handle = node.downgrade().upgrade().unwrap();
+            assert!(queue.lock().unwrap().insert(node).is_ok());
+            let before = drops.load(SeqCst);
+            let retired = if selected {
+                (queue.lock().unwrap().pop_first(), None)
+            } else {
+                queue.lock().unwrap().remove(&handle)
+            };
+            drop(handle);
+            assert_eq!(drops.load(SeqCst), before);
+            unlocked.store(false, SeqCst);
+            drop(retired);
+            assert_eq!(drops.load(SeqCst), before + 1);
+            assert!(unlocked.load(SeqCst));
+        }
+    }
+
+    #[test]
+    fn shared_queue_never_removes_a_generation_twice() {
+        let (queue, factory) = TimerQueue::new();
+        let queue = Arc::new(Mutex::new(queue));
+        let completed = Arc::new(AtomicUsize::new(0));
+        let removed = Arc::new(Mutex::new(HashSet::new()));
+        let mut workers = Vec::new();
+        for worker in 0..4 {
+            let (queue, factory, completed, removed) = (
+                queue.clone(),
+                factory.clone(),
+                completed.clone(),
+                removed.clone(),
+            );
+            workers.push(thread::spawn(move || {
+                for index in 0..4000 {
+                    let node = factory.create(
+                        Duration::from_nanos((index % 17) as u64),
+                        worker * 4000 + index,
+                    );
+                    let handle = node.downgrade().upgrade().unwrap();
+                    assert!(queue.lock().unwrap().insert(node).is_ok());
+                    thread::yield_now();
+                    let retired = queue.lock().unwrap().remove(&handle);
+                    if let Some(actual) = retired.0.as_ref() {
+                        assert!(removed.lock().unwrap().insert(**actual));
+                    }
+                    drop(retired);
+                }
+                completed.fetch_add(1, SeqCst);
+            }));
+        }
+        while completed.load(SeqCst) != 4 || !queue.lock().unwrap().is_empty() {
+            let selected = queue.lock().unwrap().pop_first();
+            if let Some(actual) = selected {
+                assert!(removed.lock().unwrap().insert(*actual));
+            }
+            thread::yield_now();
+        }
+        for worker in workers {
+            worker.join().unwrap();
+        }
+        assert_eq!(removed.lock().unwrap().len(), 16000);
+        assert!(queue.lock().unwrap().first().is_none());
+    }
+}
