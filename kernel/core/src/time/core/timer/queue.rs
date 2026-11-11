@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Keeps the earliest queued callback available without traversing the tree.
+//! A timer callback queue with a cached earliest entry.
 
 use alloc::{collections::BTreeMap, sync::Arc};
 
@@ -89,9 +89,9 @@ mod tests {
 
     use super::*;
 
-    fn callback(deadline: u64) -> Arc<TimerCallback> {
+    fn callback(deadline_ns: u64) -> Arc<TimerCallback> {
         Arc::new(TimerCallback::new(
-            Duration::from_nanos(deadline),
+            Duration::from_nanos(deadline_ns),
             Weak::new(),
         ))
     }
