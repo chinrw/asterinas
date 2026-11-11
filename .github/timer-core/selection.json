@@ -1,0 +1,11 @@
+[
+  "aster_core::time::core::timer::tests::timer_lifecycle_regressions",
+  "aster_core::time::core::timer::tests::selected_old_generation_cannot_replace_a_same_deadline_rearm",
+  "aster_core::time::core::timer::tests::concurrent_rearm_cancel_and_dispatch_preserve_generations",
+  "aster_core::time::core::timer::tests::cancelled_future_head_is_removed_before_its_deadline",
+  "aster_core::time::core::timer::tests::shared_timer_queue_survives_smp_churn",
+  "aster_core::time::core::timer::queue::tests::all_small_arena_insertion_and_deletion_orders",
+  "aster_core::time::core::timer::queue::tests::arena_seeded_operations_match_an_ordered_reference",
+  "aster_core::time::core::timer::queue::tests::vacant_slots_do_not_resurrect_retired_arena_handles",
+  "aster_core::time::core::timer::queue::tests::arena_growth_and_drain_preserve_the_free_list"
+]

@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
+set -eu
+case "$PWD" in
+    */target/osdk/aster-core-test-base)
+        cp "$TIMER_CORE_LOCK" Cargo.lock
+        ;;
+esac
+exec "$TIMER_CORE_REAL_CARGO" "$@"
