@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 #
-# QEMU shared by the development shell and OSDK image.
+# The development shell and OSDK image share this QEMU package.
 # The binary is host-native; guest architectures run through TCG.
 { qemu, fetchurl }:
 
@@ -15,9 +15,8 @@
   # fix-qemu-ga.patch (dropped below) it would exec FHS paths that do not
   # exist on NixOS. Skip it and its `ga` output entirely.
   guestAgentSupport = false;
-  # Asterinas shows the guest display over VNC or not at all, and it never
-  # forwards guest audio or host smart cards. These backends would add about
-  # 900 MiB of GTK, SDL, SPICE and PipeWire libraries to the closure.
+  # Asterinas uses VNC or runs without a display. It does not forward guest
+  # audio or host smart cards, so these backends would add unused dependencies.
   gtkSupport = false;
   sdlSupport = false;
   spiceSupport = false;

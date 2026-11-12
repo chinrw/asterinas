@@ -1,0 +1,77 @@
+name: Validate PR 3982 Docker images
+
+on:
+  push:
+    branches: [validate/pr3982-images-20261112]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the image chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pr3982"
+          tag="pr3982-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          echo "PR3982_TAG=$tag" >> "$GITHUB_ENV"
+          rust_version=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          git rev-parse HEAD 'HEAD^{tree}' > "$RUNNER_TEMP/pr3982/source.txt"
+          uname -a >> "$RUNNER_TEMP/pr3982/source.txt"
+          docker version >> "$RUNNER_TEMP/pr3982/source.txt"
+          case "$(uname -m)" in
+            x86_64) arch=amd64 ;;
+            aarch64) arch=arm64 ;;
+            *) exit 1 ;;
+          esac
+          for image in osdk-dev prebuilt-nix-packages kernel-dev dev; do
+            case "$image" in
+              osdk-dev) dockerfile=osdk/tools/docker/Dockerfile ;;
+              prebuilt-nix-packages) dockerfile=tools/dev_env/docker/prebuilt-nix-packages/Dockerfile ;;
+              kernel-dev) dockerfile=tools/dev_env/docker/kernel-dev/Dockerfile ;;
+              dev) dockerfile=tools/dev_env/docker/Dockerfile ;;
+            esac
+            docker buildx build --builder default --load --progress=plain \
+              --platform "linux/$arch" --build-arg "BASE_VERSION=$tag" \
+              --build-arg "ASTER_RUST_VERSION=$rust_version" \
+              -f "$dockerfile" -t "asterinas/$image:$tag" . \
+              2>&1 | tee "$RUNNER_TEMP/pr3982/build-$image.log"
+            docker image inspect "asterinas/$image:$tag" > "$RUNNER_TEMP/pr3982/image-$image.json"
+            test "$(docker image inspect --format '{{.Architecture}}' "asterinas/$image:$tag")" = "$arch"
+          done
+      - name: Check GC and boot in the same container
+        shell: bash
+        run: |
+          set -euo pipefail
+          devices=()
+          enable_kvm=0
+          if [[ $(uname -m) == x86_64 ]]; then
+            devices=(--device /dev/kvm)
+            enable_kvm=1
+            test -c /dev/kvm
+          fi
+          docker run --rm --pull=never "${devices[@]}" \
+            --mount "type=bind,src=$PWD,dst=/root/asterinas" \
+            -e "PR3982_ENABLE_KVM=$enable_kvm" \
+            "asterinas/dev:$PR3982_TAG" bash tools/github_workflows/check_pr3982_image.sh \
+            2>&1 | tee "$RUNNER_TEMP/pr3982/gc-and-boot.log"
+          grep -F 'Successfully booted.' "$RUNNER_TEMP/pr3982/gc-and-boot.log"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr3982-${{ matrix.runner }}
+          path: ${{ runner.temp }}/pr3982
+          if-no-files-found: error

@@ -165,10 +165,9 @@ RUN apt update \
     && apt clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Nix here so downstream images can use the same store and package manager.
-# Installing Nix as root is not supported in single-user mode, so use `--daemon`.
-# The prebuilt image registers channels pinned by `flake.lock`, so skip the
-# installer's default `nixpkgs-unstable` channel.
+# Downstream images inherit this Nix installation and store. Root installation
+# requires `--daemon`. Skip the installer's default `nixpkgs-unstable` channel
+# because the prebuilt image registers channels pinned by `flake.lock`.
 RUN bash -c 'sh <(curl -L https://nixos.org/nix/install) --daemon --yes --no-channel-add'
 ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
 
@@ -201,10 +200,9 @@ RUN cargo install klint --git https://github.com/Rust-for-Linux/klint --rev d2a4
 
 COPY flake.nix flake.lock /tmp/asterinas/
 COPY tools/dev_env/nix /tmp/asterinas/tools/dev_env/nix
-# The prebuilt image clears automatic roots. Keep QEMU under a named root
-# so downstream garbage collection retains it and its runtime dependencies.
-# Collect garbage in the same layer, so the nixpkgs source and any QEMU build
-# inputs do not stay in the image.
+# The prebuilt image deletes automatic GC roots, so QEMU needs a named root
+# to retain its binaries and runtime dependencies. Collect garbage in this
+# layer to keep the nixpkgs source and unused build inputs out of the image.
 RUN nix --extra-experimental-features 'nix-command flakes' \
     build --accept-flake-config --no-update-lock-file \
     --out-link /nix/var/nix/gcroots/qemu path:/tmp/asterinas#qemu \
