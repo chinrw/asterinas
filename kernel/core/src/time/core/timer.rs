@@ -332,6 +332,7 @@ mod tests {
     }
 
     fn selected_callback(manager: &TimerManager) -> Arc<TimerCallback> {
+        // Keep the selected reference across cancel or rearm without relying on scheduling.
         manager
             .timer_callbacks
             .disable_irq()
@@ -344,6 +345,7 @@ mod tests {
     fn dropping_owners_retires_queued_entries() {
         let clock = Arc::new(TestClock(AtomicU64::new(0)));
         let manager = TimerManager::new(clock);
+
         for deadline in [Duration::ZERO, Duration::from_secs(3600)] {
             for _ in 0..1024 {
                 let timer = manager.create_timer(|_| panic!("dropped timer fired"));
@@ -351,22 +353,27 @@ mod tests {
             }
             assert_eq!(pending(&manager), 0, "dropped owners left queued callbacks");
         }
-        let active = manager.create_timer(|_| {});
+
+        // An earlier live timeout prevents head-only cleanup from reaching dropped timers.
+        let active = manager.create_timer(|_| panic!("future timer fired"));
         active
             .lock()
-            .set_timeout(Timeout::After(Duration::from_secs(7200)));
+            .set_timeout(Timeout::After(Duration::from_secs(3600)));
         for _ in 0..1024 {
-            let temporary = manager.create_timer(|_| {});
+            let temporary = manager.create_timer(|_| panic!("dropped timer fired"));
             temporary
                 .lock()
-                .set_timeout(Timeout::After(Duration::from_secs(3600)));
+                .set_timeout(Timeout::After(Duration::from_secs(7200)));
         }
         assert_eq!(pending(&manager), 1, "queue retained historical owners");
+        manager.process_expired_timers();
+        assert_eq!(pending(&manager), 1, "future timer was removed");
+
         drop(active);
         assert_eq!(pending(&manager), 0);
     }
 
-    fn cancelling_and_rearming_retire_old_entries() {
+    fn rearming_and_cancelling_retire_old_entries() {
         let clock = Arc::new(TestClock(AtomicU64::new(0)));
         let manager = TimerManager::new(clock.clone());
         let fired = Arc::new(AtomicUsize::new(0));
@@ -374,18 +381,26 @@ mod tests {
         let timer = manager.create_timer(move |_| {
             observed.fetch_add(1, Ordering::Relaxed);
         });
+
         for deadline in 1..=1024 {
             timer
                 .lock()
                 .set_timeout(Timeout::When(Duration::from_nanos(deadline)));
             assert_eq!(pending(&manager), 1, "rearm retained the old callback");
         }
+
         clock.0.store(1023, Ordering::Relaxed);
         manager.process_expired_timers();
-        assert_eq!(fired.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            fired.load(Ordering::Relaxed),
+            0,
+            "old deadline fired after rearm"
+        );
         clock.0.store(1024, Ordering::Relaxed);
         manager.process_expired_timers();
         assert_eq!(fired.load(Ordering::Relaxed), 1);
+        assert_eq!(pending(&manager), 0);
+
         for _ in 0..1024 {
             timer
                 .lock()
@@ -490,7 +505,8 @@ mod tests {
     #[ktest]
     fn timer_lifecycle_regressions() {
         dropping_owners_retires_queued_entries();
-        cancelling_and_rearming_retire_old_entries();
+        rearming_and_cancelling_retire_old_entries();
+
         cancellation_after_selection_prevents_execution();
         equal_deadlines_keep_distinct_callbacks();
         periodic_callbacks_survive_rearm_and_stop_on_retirement();
@@ -508,12 +524,22 @@ mod tests {
             guard.cancel();
         });
         timer.lock().set_interval(Duration::from_nanos(10));
+
         timer.lock().set_timeout(Timeout::When(Duration::ZERO));
         let old = selected_callback(&manager);
         timer.lock().set_timeout(Timeout::When(Duration::ZERO));
         old.call();
-        assert_eq!(fired.load(Ordering::Relaxed), 0);
-        assert_eq!(pending(&manager), 1);
+        assert_eq!(
+            fired.load(Ordering::Relaxed),
+            0,
+            "old generation fired after rearm"
+        );
+        assert_eq!(
+            pending(&manager),
+            1,
+            "old generation removed the new timeout"
+        );
+
         manager.process_expired_timers();
         assert_eq!(fired.load(Ordering::Relaxed), 1);
         assert_eq!(pending(&manager), 0);
@@ -587,20 +613,27 @@ mod tests {
         }
         CONCURRENT_TIMERS.disable_irq().lock().take();
         manager.process_expired_timers();
-        for count in &state.completed {
-            assert_eq!(count.load(Ordering::Acquire), 512);
+        for (cpu, count) in state.completed.iter().enumerate() {
+            assert_eq!(
+                count.load(Ordering::Acquire),
+                512,
+                "CPU {cpu} did not finish"
+            );
         }
         let observations = state.observations.disable_irq().lock();
         assert_eq!(observations.len(), ostd::cpu::num_cpus() * 512);
+        // Zero calls are valid when cancellation or owner destruction wins the race.
+        for (index, count) in observations.iter().enumerate() {
+            assert!(
+                count.load(Ordering::Relaxed) <= 1,
+                "callback {index} fired more than once"
+            );
+        }
         assert!(
             observations
                 .iter()
-                .all(|count| count.load(Ordering::Relaxed) <= 1)
-        );
-        assert!(
-            observations
-                .iter()
-                .any(|count| count.load(Ordering::Relaxed) == 1)
+                .any(|count| count.load(Ordering::Relaxed) == 1),
+            "no callback fired during concurrent dispatch"
         );
         assert_eq!(pending(&manager), sentinels.len());
         drop(sentinels);
