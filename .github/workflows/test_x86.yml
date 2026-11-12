@@ -1,4 +1,5 @@
 name: "Test x86-64  "
+run-name: Timer ktest polish b0e61f2cf
 
 on:
   workflow_dispatch:
@@ -256,3 +257,124 @@ jobs:
           conformance_test_suite: 'pjdfstest'
           release: true
           pjdfstest_fs_type: ${{ matrix.fs_type }}
+
+  timer-core-controls:
+    if: github.repository == 'chinrw/asterinas'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { variant: base, cpus: 4 }
+          - { variant: head, cpus: 1 }
+          - { variant: head, cpus: 4 }
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    env:
+      RUSTUP_HOME: /root/.rustup
+      CONSOLE: ttyS0
+      OVMF: "on"
+      QEMU_DISPLAY: none
+      SMP: ${{ matrix.cpus }}
+      MEM: 4G
+      NETDEV: user
+      VHOST: "off"
+      BOOT_PROTOCOL: linux-efi-handover64
+      TIMER_VARIANT: ${{ matrix.variant }}
+      TIMER_PRODUCTION_HEAD: b0e61f2cf02a3513ee2c1fb88438b3837192efba
+      CARGO_BUILD_JOBS: "2"
+    steps:
+      - name: Free runner disk space
+        shell: bash
+        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 8
+      - name: Use the locally built OSDK
+        shell: bash
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build the test prerequisites
+        shell: bash
+        run: make install_osdk initramfs
+      - name: Run named timer lifecycle controls
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re, shutil, signal, subprocess
+          from pathlib import Path
+          repo = Path.cwd()
+          output = repo / 'target/timer-core-ci'
+          output.mkdir(parents=True)
+          target = repo / 'kernel/core/src/time/core/timer.rs'
+          head = target.read_text()
+          assert hashlib.sha256(head.encode()).hexdigest() == '86ac4c20ac7f25f45692863fc835d65fd2a411b0f8b287e759ad858ae422f093'
+          variant = os.environ['TIMER_VARIANT']
+          if variant == 'base':
+              tests = head[head.index('#[cfg(ktest)]'):]
+              selected = '            .pop_first()\n            .unwrap()\n            .1'
+              assert tests.count(selected) == 1
+              base = subprocess.check_output(['git', '-c', f'safe.directory={repo}', 'show', 'acf7dcf5ebe6289b6d45554d370aa3ace7fbf4ca:kernel/core/src/time/core/timer.rs'], text=True)
+              target.write_text(base + '\n' + tests.replace(selected, '            .pop()\n            .unwrap()'))
+          names = ['timer_lifecycle_regressions']
+          if variant == 'head':
+              names += ['selected_old_generation_cannot_replace_a_same_deadline_rearm',
+                        'concurrent_rearm_cancel_and_dispatch_preserve_generations']
+          (output / 'timer-input.rs').write_text(target.read_text())
+          (output / 'inputs.json').write_text(json.dumps(dict(production_commit=os.environ['TIMER_PRODUCTION_HEAD'], ci_commit=os.environ['GITHUB_SHA'], variant=variant, cpus=int(os.environ['SMP']), input_sha256=hashlib.sha256(target.read_bytes()).hexdigest()), indent=2) + '\n')
+          results = []
+          for index, name in enumerate(names):
+              setup = repo / 'target/osdk/linux-bzimage-setup'
+              if setup.exists():
+                  shutil.move(str(setup), str(output / f'setup-before-{index}'))
+              command = ['cargo', 'osdk', 'test', name, '--profile', 'release-lto',
+                  f'--initramfs={repo}/test/initramfs/build/initramfs.cpio.gz',
+                  '--grub-mkrescue=' + shutil.which('grub-mkrescue'),
+                  '--grub-boot-protocol=linux', '--kcmd-args=earlycon',
+                  '--kcmd-args=console=ttyS0', '--qemu-args=-accel kvm']
+              log = output / f'{variant}-{name}.log'
+              with log.open('w') as stream:
+                  with subprocess.Popen(command, cwd=repo / 'kernel/core', stdout=stream,
+                          stderr=subprocess.STDOUT, start_new_session=True) as process:
+                      try:
+                          status = process.wait(timeout=1200)
+                      except subprocess.TimeoutExpired:
+                          os.killpg(process.pid, signal.SIGKILL)
+                          process.wait()
+                          status = 124
+              text = re.sub(r'\x1b\[[0-9;]*m', '', log.read_text(errors='replace'))
+              print(text, flush=True)
+              executed = f'test aster_core::time::core::timer::tests::{name} ...' in text
+              red = bool(re.search(r'test result: FAILED\. 0 passed; 1 failed; \d+ filtered out', text))
+              green = bool(re.search(r'test result: ok\. 1 passed; 0 failed; \d+ filtered out', text))
+              expected = status == 0 and green if variant == 'head' else (
+                  status == 1 and red and 'dropped owners left queued callbacks' in text
+                  and bool(re.search(r'left:\s+1024', text)) and bool(re.search(r'right:\s+0', text)))
+              processors = sorted({int(cpu) for cpu in re.findall(r'Processor (\d+) started', text)})
+              row = dict(variant=variant, test=name, exit=status, actually_executed=executed,
+                         expected_result=expected, processors=processors,
+                         counts=re.findall(r'test result: [^\r\n]+', text))
+              results.append(row)
+              (output / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
+              lock = repo / 'target/osdk/aster-core-test-base/Cargo.lock'
+              shutil.copyfile(lock, output / f'{variant}-{index}.lock')
+              assert executed and expected and processors == list(range(1, int(os.environ['SMP']))), row
+          PY
+      - name: Preserve timer control logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: timer-core-controls-${{ matrix.variant }}-smp${{ matrix.cpus }}
+          path: |
+            target/timer-core-ci/*.log
+            target/timer-core-ci/*.json
+            target/timer-core-ci/*.rs
+            target/timer-core-ci/*.lock
