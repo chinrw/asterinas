@@ -35,6 +35,84 @@ jobs:
           auto_test: 'general'
           runs_on: 'ubuntu-latest'
 
+  aster-core-ktest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        smp: [1, 4]
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    env:
+      RUSTUP_HOME: /root/.rustup
+      CONSOLE: ttyS0
+      OVMF: "on"
+      QEMU_DISPLAY: none
+      SMP: ${{ matrix.smp }}
+      MEM: 4G
+      NETDEV: user
+      VHOST: "off"
+      BOOT_PROTOCOL: linux-efi-handover64
+      CARGO_BUILD_JOBS: "2"
+    steps:
+      - name: Free disk space
+        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+      - uses: actions/checkout@v4
+      - name: Run aster-core ktests
+        shell: bash
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          mkdir -p target/aster-core-ktest
+          make install_osdk initramfs
+          cd kernel/core
+          # release-lto retains the aster-core ktests missing from the default CI build.
+          timeout 20m cargo osdk test --profile release-lto \
+            --initramfs="$GITHUB_WORKSPACE/test/initramfs/build/initramfs.cpio.gz" \
+            --grub-mkrescue="$(command -v grub-mkrescue)" \
+            --grub-boot-protocol=linux \
+            --kcmd-args=earlycon --kcmd-args=console=ttyS0 \
+            --qemu-args="-accel kvm" 2>&1 | tee "$GITHUB_WORKSPACE/target/aster-core-ktest/core.log"
+      - name: Verify timer regression coverage
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+
+          output = Path('target/aster-core-ktest')
+          text = re.sub(r'\x1b\[[0-9;]*m', '', (output / 'core.log').read_text())
+          names = [
+              'timer_lifecycle_regressions',
+              'selected_old_generation_cannot_replace_a_same_deadline_rearm',
+              'concurrent_rearm_cancel_and_dispatch_preserve_generations',
+          ]
+          for name in names:
+              assert f'test aster_core::time::core::timer::tests::{name} ...' in text, name
+          summaries = re.findall(r'test result: ok\. (\d+) passed; 0 failed; 0 filtered out\.', text)
+          assert len(summaries) == 1 and int(summaries[0]) >= len(names), summaries
+          cpus = int(os.environ['SMP'])
+          processors = sorted({int(cpu) for cpu in re.findall(r'Processor (\d+) started', text)})
+          assert processors == list(range(1, cpus)), processors
+          result = dict(commit=os.environ['GITHUB_SHA'], cpus=cpus,
+                        passed=int(summaries[0]), timer_tests=names, processors=processors)
+          (output / 'results.json').write_text(json.dumps(result, indent=2) + '\n')
+          print(json.dumps(result))
+          PY
+      - name: Preserve aster-core ktest logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aster-core-ktest-smp${{ matrix.smp }}
+          path: target/aster-core-ktest/
+
   osdk-test:
     runs-on: ubuntu-latest
     container:
