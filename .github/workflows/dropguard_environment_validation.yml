@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: DropGuard environment validation in fork
+
+on:
+  push:
+    branches: [ci/dropguard-environment]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
+
+jobs:
+  evaluate:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+      - name: Check the pinned Nix sources and flake
+        shell: bash
+        run: |
+          set -euo pipefail
+          flake_source="$(nix flake archive --json --no-update-lock-file . | jq -r '.inputs.nixpkgs.path')"
+          legacy_source="$(nix-instantiate --eval --strict --json --expr 'toString (import ./distro/nixpkgs.nix {}).path' | jq -r .)"
+          test "$legacy_source" = "$flake_source"
+          nix flake check --no-build --all-systems --no-update-lock-file
+          for system in x86_64-linux aarch64-linux; do
+            nix-instantiate --eval --strict --argstr system "$system" test/initramfs/nix/check-host-clients.nix > /dev/null
+          done
+
+  dev-shell:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs_on: ubuntu-latest
+            enable_kvm: 1
+          - runs_on: ubuntu-24.04-arm
+            enable_kvm: 0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: aster-nixos-dev
+          skipPush: true
+      - name: Run the complete check in the Nix development shell
+        run: nix develop --accept-flake-config --ignore-environment --keep HOME --command make check
+      - name: Build and boot through the Nix development shell
+        run: nix develop --accept-flake-config --ignore-environment --keep HOME --keep NIX_USER_CONF_FILES --command make run_kernel AUTO_TEST=boot ENABLE_KVM=${{ matrix.enable_kvm }}
+
+  devcontainer:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Check the image version
+        shell: bash
+        run: |
+          expected=$(cat DOCKER_IMAGE_VERSION)
+          grep -q "asterinas/dev:${expected}" .devcontainer/devcontainer.json
+      - uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: rustc --version && cargo --version && make --version
