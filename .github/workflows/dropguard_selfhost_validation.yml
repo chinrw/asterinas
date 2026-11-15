@@ -4,7 +4,7 @@ name: DropGuard preserved self-hosted validation in fork
 
 on:
   push:
-    branches: [ci/dropguard-selfhost]
+    branches: [ci/dropguard-selfhost, ci/dropguard-selfhost-iso]
 
 permissions:
   contents: read
@@ -16,6 +16,12 @@ concurrency:
 env:
   SOURCE_SHA: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
   BASE_IMAGE: asterinas/kernel-dev:0.19.0-20261012
+  NIX_CACHE_VOLUME: dropguard-nix-43697474710-1
+  NIX_CACHE_RUN: '43697474710'
+  NIX_CACHE_ATTEMPT: '1'
+  CARGO_CACHE_VOLUME: dropguard-cargo-1f5b68b5658cecbb93ba8781a8bcb95205257f1d
+  INHERIT_METHODS_URL: https://github.com/asterinas/inherit-methods-macro
+  INHERIT_METHODS_REV: 98f7e3eb9efdac98faf5a7076f154f30894b9b02
   DROPGUARD_RUN_SCRIPT: |
     #!/bin/bash
     set -euo pipefail
@@ -23,7 +29,8 @@ env:
     stage=${1:?validation stage is required}
     workspace=$(realpath -m -- "$GITHUB_WORKSPACE")
     evidence="$(dirname "$workspace")/dropguard-evidence-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"
-    volume="dropguard-nix-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+    volume=$NIX_CACHE_VOLUME
+    cargo_volume=$CARGO_CACHE_VOLUME
     prefix="dropguard-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"
     owner_uid=$(id -u)
     owner_gid=$(id -g)
@@ -103,6 +110,25 @@ env:
     trap 'exit 143' TERM
 
     case "$stage" in
+      dependencies)
+        budget=20m
+        command=$(cat <<'DEPENDENCIES'
+    probe=$(mktemp -d /root/.cargo/dropguard-git-probe.XXXXXX)
+    git -c credential.helper= -c core.askPass=/bin/false -c http.sslVerify=true init "$probe"
+    timeout 120s git -c credential.helper= -c core.askPass=/bin/false -c http.sslVerify=true \
+      -C "$probe" fetch --no-tags --depth=1 "$INHERIT_METHODS_URL" "$INHERIT_METHODS_REV"
+    test "$(git -C "$probe" rev-parse FETCH_HEAD)" = "$INHERIT_METHODS_REV"
+    echo "Container pinned Git revision probe passed."
+    cargo fetch --locked --manifest-path Cargo.toml
+    cargo fetch --locked --manifest-path osdk/Cargo.toml
+    cargo fetch --locked --manifest-path test/nixos/Cargo.toml
+    DEPENDENCIES
+    )
+        ;;
+      xfstests-build)
+        budget=60m
+        command='make kernel AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=xfstests RELEASE=1 MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=full.list XFSTESTS_DISK_SIZE=12G'
+        ;;
       xfstests)
         budget=90m
         command='make run_kernel AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=xfstests RELEASE=1 MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=full.list XFSTESTS_DISK_SIZE=12G'
@@ -125,10 +151,51 @@ env:
         ;;
     esac
 
+    network_args=(--network bridge)
+    proxy_args=()
+    extra_env=(-e CARGO_NET_GIT_FETCH_WITH_CLI=true -e GIT_TERMINAL_PROMPT=0 -e GIT_ASKPASS=/bin/false
+      -e GIT_CONFIG_COUNT=2 -e GIT_CONFIG_KEY_0=credential.helper -e GIT_CONFIG_VALUE_0=
+      -e GIT_CONFIG_KEY_1=http.sslVerify -e GIT_CONFIG_VALUE_1=true)
+    case "$stage" in
+      dependencies|xfstests-build|iso-build)
+        network_args=(--network host)
+        extra_env+=(-e CARGO_NET_OFFLINE=false)
+        for variable in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
+          if [[ -v "$variable" ]]; then
+            printf '%s: present\n' "$variable"
+            proxy_args+=(-e "$variable")
+          else
+            printf '%s: absent\n' "$variable"
+          fi
+        done
+        ;;
+      *)
+        # The earlier host-network build resolves build-std and generated-crate dependencies.
+        extra_env+=(-e CARGO_NET_OFFLINE=true)
+        ;;
+    esac
+    if [[ "$stage" == dependencies ]]; then
+      export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false
+      unset GIT_TRACE GIT_TRACE_PACKET GIT_TRACE_CURL GIT_CURL_VERBOSE GIT_TRACE2 GIT_TRACE2_EVENT GIT_TRACE2_PERF
+      set +e
+      (
+        set -euo pipefail
+        probe="$evidence/host-git-probe"
+        git -c credential.helper= -c core.askPass=/bin/false -c http.sslVerify=true init "$probe"
+        timeout 120s git -c credential.helper= -c core.askPass=/bin/false -c http.sslVerify=true \
+          -C "$probe" fetch --no-tags --depth=1 "$INHERIT_METHODS_URL" "$INHERIT_METHODS_REV"
+        test "$(git -C "$probe" rev-parse FETCH_HEAD)" = "$INHERIT_METHODS_REV"
+      ) > "$evidence/host-git-probe.log" 2>&1
+      host_probe_status=$?
+      set -e
+      printf 'Host pinned Git revision probe exit: %s\n' "$host_probe_status" | tee "$evidence/host-git-probe-status.log"
+      extra_env+=(-e INHERIT_METHODS_URL -e INHERIT_METHODS_REV)
+    fi
+
     printf '%s\n' "$stage" >> "$evidence/stages-started.log"
     set +e
     timeout --foreground --signal=TERM --kill-after=30s "$budget" \
-      docker run --name "$prefix-$stage" --privileged \
+      docker run --name "$prefix-$stage" --privileged "${network_args[@]}" "${proxy_args[@]}" "${extra_env[@]}" \
         --label io.asterinas.dropguard.task=selfhost-validation \
         --label "io.asterinas.dropguard.workspace=$workspace" \
         --label "io.asterinas.dropguard.source=$SOURCE_SHA" \
@@ -137,8 +204,9 @@ env:
         --label "io.asterinas.dropguard.job=$GITHUB_JOB" \
         --mount "type=bind,source=$workspace,target=/root/asterinas" \
         --mount "type=volume,source=$volume,target=/nix" \
+        --mount "type=volume,source=$cargo_volume,target=/root/.cargo" \
         -v /dev:/dev -w /root/asterinas -e RUSTUP_HOME=/root/.rustup \
-        --entrypoint /bin/bash "$BASE_IMAGE" -lc "set -euo pipefail; $command" \
+        --entrypoint /bin/bash "$BASE_IMAGE" -lc "set -euo pipefail; unset GIT_TRACE GIT_TRACE_PACKET GIT_TRACE_CURL GIT_CURL_VERBOSE GIT_TRACE2 GIT_TRACE2_EVENT GIT_TRACE2_PERF; $command" \
         2>&1 | tee "$evidence/$stage.log"
     results=("${PIPESTATUS[@]}")
     set -e
@@ -184,7 +252,8 @@ env:
 
     output('evidence_path', evidence)
     output('cache_image', base_image)
-    output('nix_volume', f'dropguard-nix-{run_id}-{attempt}')
+    output('nix_volume', os.environ['NIX_CACHE_VOLUME'])
+    output('cargo_volume', os.environ['CARGO_CACHE_VOLUME'])
     runner_script = evidence / 'run-container.sh'
     runner_script.write_text(os.environ['DROPGUARD_RUN_SCRIPT'])
     runner_script.chmod(0o700)
@@ -281,27 +350,36 @@ env:
     workspace.mkdir(mode=0o755)
     (evidence / '.workspace-ready').touch()
 
-    volume = f'dropguard-nix-{run_id}-{attempt}'
+    volume = os.environ['NIX_CACHE_VOLUME']
     labels = {
         'io.asterinas.dropguard.task': 'selfhost-validation',
-        'io.asterinas.dropguard.run': run_id,
-        'io.asterinas.dropguard.attempt': attempt,
+        'io.asterinas.dropguard.run': os.environ['NIX_CACHE_RUN'],
+        'io.asterinas.dropguard.attempt': os.environ['NIX_CACHE_ATTEMPT'],
         'io.asterinas.dropguard.source': source_sha,
     }
-    if volume not in docker('volume', 'ls', '--format', '{{.Name}}').stdout.splitlines():
-        args = ['volume', 'create']
-        for key, value in labels.items():
-            args += ['--label', f'{key}={value}']
-        docker(*args, volume)
     observed = json.loads(docker('volume', 'inspect', '--format', '{{json .Labels}}', volume).stdout) or {}
     if any(observed.get(key) != value for key, value in labels.items()):
-        raise RuntimeError('Refusing a volume not owned by this validation run')
+        raise RuntimeError('Refusing a Nix volume that differs from the approved prior-run asset')
+    cargo_volume = os.environ['CARGO_CACHE_VOLUME']
+    cargo_labels = {
+        'io.asterinas.dropguard.task': 'selfhost-validation',
+        'io.asterinas.dropguard.source': source_sha,
+        'io.asterinas.dropguard.cache': 'cargo',
+    }
+    if cargo_volume not in docker('volume', 'ls', '--format', '{{.Name}}').stdout.splitlines():
+        args = ['volume', 'create']
+        for key, value in cargo_labels.items():
+            args += ['--label', f'{key}={value}']
+        docker(*args, cargo_volume)
+    observed_cargo = json.loads(docker('volume', 'inspect', '--format', '{{json .Labels}}', cargo_volume).stdout) or {}
+    if any(observed_cargo.get(key) != value for key, value in cargo_labels.items()):
+        raise RuntimeError('Refusing a Cargo cache not owned by this task and source revision')
     (evidence / 'workspace-preservation.json').write_text(json.dumps({
         'workspace': str(workspace), 'backup_path': str(backup) if backup.exists() else None,
-        'cache_image': base_image, 'nix_volume': volume, 'owned_container_ids': [record['id'] for record in owned],
+        'cache_image': base_image, 'nix_volume': volume, 'cargo_volume': cargo_volume, 'owned_container_ids': [record['id'] for record in owned],
     }, indent=2) + '\n')
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
-        stream.write(f'Preserved workspace: `{backup}`\n\nLocal Nix cache volume: `{volume}`\n\nBase image: `{base_image}`\n')
+        stream.write(f'Preserved workspace: `{backup}`\n\nLocal Nix cache volume: `{volume}`\n\nLocal Cargo cache volume: `{cargo_volume}`\n\nBase image: `{base_image}`\n')
 
 jobs:
   recovery:
@@ -311,6 +389,7 @@ jobs:
     outputs:
       cache_image: ${{ steps.preserve.outputs.cache_image }}
       nix_volume: ${{ steps.preserve.outputs.nix_volume }}
+      cargo_volume: ${{ steps.preserve.outputs.cargo_volume }}
       backup_path: ${{ steps.preserve.outputs.backup_path }}
     steps:
       - &preserve-workspace
@@ -354,9 +433,9 @@ jobs:
   xfstests:
     name: xfstests-full
     needs: recovery
-    if: github.repository == 'chinrw/asterinas' && needs.recovery.result == 'success'
+    if: github.repository == 'chinrw/asterinas' && github.ref == 'refs/heads/ci/dropguard-selfhost' && needs.recovery.result == 'success'
     runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
-    timeout-minutes: 140
+    timeout-minutes: 240
     outputs:
       workspace_ready: ${{ steps.preserve.outcome == 'success' }}
     steps:
@@ -370,6 +449,15 @@ jobs:
         name: Verify the tested revision
         shell: bash
         run: test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$SOURCE_SHA"
+      - &prepare-dependencies
+        name: Probe the pinned Git revision and fetch locked dependencies
+        shell: bash
+        timeout-minutes: 30
+        run: '"$DROPGUARD_RUNNER_SCRIPT" dependencies'
+      - name: Build the unchanged full-list kernel with host-network dependency access
+        shell: bash
+        timeout-minutes: 70
+        run: '"$DROPGUARD_RUNNER_SCRIPT" xfstests-build'
       - name: Run the unchanged ext2 full.list with a 90-minute execution window
         shell: bash
         timeout-minutes: 100
@@ -385,13 +473,14 @@ jobs:
 
   iso:
     needs: [recovery, xfstests]
-    if: always() && !cancelled() && github.repository == 'chinrw/asterinas' && needs.recovery.result == 'success' && needs.xfstests.outputs.workspace_ready == 'true'
+    if: always() && !cancelled() && github.repository == 'chinrw/asterinas' && github.ref == 'refs/heads/ci/dropguard-selfhost-iso' && needs.recovery.result == 'success' && (needs.xfstests.result == 'skipped' || needs.xfstests.outputs.workspace_ready == 'true')
     runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
-    timeout-minutes: 200
+    timeout-minutes: 230
     steps:
       - *preserve-workspace
       - *checkout-product
       - *verify-product
+      - *prepare-dependencies
       - name: Build the hello ISO with an independent cold-build budget
         shell: bash
         timeout-minutes: 100
