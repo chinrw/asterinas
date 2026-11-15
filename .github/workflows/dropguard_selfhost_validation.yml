@@ -1,0 +1,408 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: DropGuard preserved self-hosted validation in fork
+
+on:
+  push:
+    branches: [ci/dropguard-selfhost]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dropguard-selfhost-validation
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
+  BASE_IMAGE: asterinas/kernel-dev:0.19.0-20261012
+  DROPGUARD_RUN_SCRIPT: |
+    #!/bin/bash
+    set -euo pipefail
+
+    stage=${1:?validation stage is required}
+    workspace=$(realpath -m -- "$GITHUB_WORKSPACE")
+    evidence="$(dirname "$workspace")/dropguard-evidence-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"
+    volume="dropguard-nix-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+    prefix="dropguard-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"
+    owner_uid=$(id -u)
+    owner_gid=$(id -g)
+    mkdir -p "$evidence"
+
+    cleanup() {
+      local original=$1 cleanup_status=0 container owner_name listing writers_stopped=1
+      local -a containers=()
+      if ! listing=$(docker ps -aq \
+        --filter 'label=io.asterinas.dropguard.task=selfhost-validation' \
+        --filter "label=io.asterinas.dropguard.workspace=$workspace" \
+        --filter "label=io.asterinas.dropguard.source=$SOURCE_SHA" \
+        --filter "label=io.asterinas.dropguard.run=$GITHUB_RUN_ID" \
+        --filter "label=io.asterinas.dropguard.attempt=$GITHUB_RUN_ATTEMPT" \
+        --filter "label=io.asterinas.dropguard.job=$GITHUB_JOB" \
+        2>> "$evidence/container-list-errors.log"); then
+        printf 'original_exit=%s cleanup_exit=1 enumeration_failed\n' "$original" >> "$evidence/cleanup-results.log"
+        if (( original != 0 )); then return "$original"; fi
+        return 1
+      fi
+      if [[ -n "$listing" ]]; then
+        mapfile -t containers <<< "$listing"
+      fi
+      for container in "${containers[@]}"; do
+        docker stop --time 5 "$container" >> "$evidence/stopped-containers.log" 2>&1 || { cleanup_status=1; writers_stopped=0; }
+        docker logs --timestamps "$container" > "$evidence/$container-container.log" 2>&1 || cleanup_status=1
+        docker inspect --format \
+          '{"id":{{json .Id}},"image":{{json .Config.Image}},"running":{{json .State.Running}},"exit_code":{{json .State.ExitCode}}}' \
+          "$container" > "$evidence/$container-metadata.json" || cleanup_status=1
+        for log in qemu.log qemu-serial.log kernel/qemu.log kernel/qemu-serial.log; do
+          docker cp "$container:/root/asterinas/$log" \
+            "$evidence/$container-$stage-${log//\//-}" 2>> "$evidence/optional-qemu-copy.log" || true
+        done
+      done
+      if (( writers_stopped == 0 )); then
+        printf 'original_exit=%s cleanup_exit=1 writer_stop_failed\n' "$original" >> "$evidence/cleanup-results.log"
+        if (( original != 0 )); then return "$original"; fi
+        return 1
+      fi
+      owner_name="$prefix-owner-$$"
+      docker run --rm --name "$owner_name" \
+        --label io.asterinas.dropguard.task=selfhost-validation \
+        --label "io.asterinas.dropguard.workspace=$workspace" \
+        --label "io.asterinas.dropguard.source=$SOURCE_SHA" \
+        --label "io.asterinas.dropguard.run=$GITHUB_RUN_ID" \
+        --label "io.asterinas.dropguard.attempt=$GITHUB_RUN_ATTEMPT" \
+        --label "io.asterinas.dropguard.job=$GITHUB_JOB" \
+        --mount "type=bind,source=$workspace,target=/managed" \
+        --entrypoint /bin/chown "$BASE_IMAGE" -hR "$owner_uid:$owner_gid" /managed \
+        >> "$evidence/restore-owner.log" 2>&1 || cleanup_status=1
+      for log in qemu.log qemu-serial.log kernel/qemu.log kernel/qemu-serial.log; do
+        if [[ -f "$workspace/$log" ]]; then
+          cp -- "$workspace/$log" "$evidence/$stage-${log//\//-}" || cleanup_status=1
+        fi
+      done
+      printf 'original_exit=%s cleanup_exit=%s\n' "$original" "$cleanup_status" >> "$evidence/cleanup-results.log"
+      if (( original != 0 )); then
+        return "$original"
+      fi
+      return "$cleanup_status"
+    }
+
+    if [[ "$stage" == cleanup ]]; then
+      cleanup "${2:-0}"
+      exit $?
+    fi
+
+    finish() {
+      local original=$?
+      trap - EXIT INT TERM
+      set +e
+      cleanup "$original"
+      exit $?
+    }
+    trap finish EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
+    case "$stage" in
+      xfstests)
+        budget=90m
+        command='make run_kernel AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=xfstests RELEASE=1 MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=full.list XFSTESTS_DISK_SIZE=12G'
+        ;;
+      iso-build)
+        budget=90m
+        command='make iso NIXOS_TEST_SUITE=hello'
+        ;;
+      iso-install)
+        budget=30m
+        command='make run_iso || true; tail --lines 10 qemu.log | grep -q "^Congratulations!"'
+        ;;
+      iso-hello)
+        budget=10m
+        command='make run_nixos NIXOS_TEST_SUITE=hello'
+        ;;
+      *)
+        echo "Unknown validation stage: $stage" >&2
+        exit 2
+        ;;
+    esac
+
+    printf '%s\n' "$stage" >> "$evidence/stages-started.log"
+    set +e
+    timeout --foreground --signal=TERM --kill-after=30s "$budget" \
+      docker run --name "$prefix-$stage" --privileged \
+        --label io.asterinas.dropguard.task=selfhost-validation \
+        --label "io.asterinas.dropguard.workspace=$workspace" \
+        --label "io.asterinas.dropguard.source=$SOURCE_SHA" \
+        --label "io.asterinas.dropguard.run=$GITHUB_RUN_ID" \
+        --label "io.asterinas.dropguard.attempt=$GITHUB_RUN_ATTEMPT" \
+        --label "io.asterinas.dropguard.job=$GITHUB_JOB" \
+        --mount "type=bind,source=$workspace,target=/root/asterinas" \
+        --mount "type=volume,source=$volume,target=/nix" \
+        -v /dev:/dev -w /root/asterinas -e RUSTUP_HOME=/root/.rustup \
+        --entrypoint /bin/bash "$BASE_IMAGE" -lc "set -euo pipefail; $command" \
+        2>&1 | tee "$evidence/$stage.log"
+    results=("${PIPESTATUS[@]}")
+    set -e
+    if (( results[0] != 0 )); then
+      exit "${results[0]}"
+    fi
+    if (( results[1] != 0 )); then
+      exit "${results[1]}"
+    fi
+    if [[ "$stage" == iso-hello ]]; then
+      grep -F "Test case 'hello' passed" "$evidence/$stage.log"
+    fi
+    printf '%s\n' "$stage" >> "$evidence/stages-passed.log"
+  DROPGUARD_PREPARE_PY: |
+    from datetime import datetime
+    import json
+    import os
+    from pathlib import Path
+    import re
+    import subprocess
+
+    workspace = Path(os.environ['GITHUB_WORKSPACE'])
+    base_image = os.environ['BASE_IMAGE']
+    source_sha = os.environ['SOURCE_SHA']
+    run_id = os.environ['GITHUB_RUN_ID']
+    attempt = os.environ['GITHUB_RUN_ATTEMPT']
+    job = os.environ['GITHUB_JOB']
+    if (not workspace.is_absolute() or workspace.is_symlink() or workspace.parent == Path('/')
+            or (workspace.exists() and not workspace.is_dir())):
+        raise RuntimeError('Refusing an unsafe workspace path')
+    workspace = Path(os.path.realpath(workspace))
+    evidence = workspace.parent / f'dropguard-evidence-{run_id}-{attempt}-{job}'
+    backup = workspace.parent / f'dropguard-preserved-{run_id}-{attempt}-{job}'
+    if evidence.is_symlink():
+        raise RuntimeError('Refusing a symlink as the evidence directory')
+    evidence.mkdir(mode=0o700, exist_ok=True)
+
+
+    def output(key, value):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+            stream.write(f'{key}={value}\n')
+
+
+    output('evidence_path', evidence)
+    output('cache_image', base_image)
+    output('nix_volume', f'dropguard-nix-{run_id}-{attempt}')
+    runner_script = evidence / 'run-container.sh'
+    runner_script.write_text(os.environ['DROPGUARD_RUN_SCRIPT'])
+    runner_script.chmod(0o700)
+    with open(os.environ['GITHUB_ENV'], 'a') as stream:
+        stream.write(f'DROPGUARD_RUNNER_SCRIPT={runner_script}\n')
+
+
+    def docker(*args, check=True):
+        result = subprocess.run(['docker', *args], capture_output=True, text=True, timeout=120)
+        if check and result.returncode:
+            raise RuntimeError(f'Docker {args[0]} failed: {result.stderr.strip()}')
+        return result
+
+
+    def overlaps(source):
+        candidate = Path(os.path.realpath(source))
+        return candidate == workspace or candidate in workspace.parents or workspace in candidate.parents
+
+
+    def inventory():
+        records = []
+        # Query only identity, mounts and task labels; never retrieve container environments.
+        template = (
+            '{"id":{{json .Id}},"image":{{json .Config.Image}},'
+            '"created":{{json .Created}},"running":{{json .State.Running}},"mounts":{{json .Mounts}},'
+            '"task":{{json (index .Config.Labels "io.asterinas.dropguard.task")}},'
+            '"workspace":{{json (index .Config.Labels "io.asterinas.dropguard.workspace")}},'
+            '"source":{{json (index .Config.Labels "io.asterinas.dropguard.source")}}}'
+        )
+        for cid in docker('ps', '-aq', '--no-trunc').stdout.split():
+            record = json.loads(docker('inspect', '--format', template, cid).stdout)
+            mounts = [mount for mount in record['mounts'] if mount.get('Source') and overlaps(mount['Source'])]
+            if not mounts:
+                continue
+            record['mounts'] = [{key: mount.get(key) for key in ['Source', 'Destination', 'RW']} for mount in mounts]
+            exact_workspace_mount = any(
+                Path(os.path.realpath(mount['Source'])) == workspace and mount['RW'] for mount in mounts
+            )
+            exact_mount = any(
+                Path(os.path.realpath(mount['Source'])) == workspace
+                and mount['Destination'] == '/root/asterinas' and mount['RW']
+                for mount in mounts
+            )
+            labeled = (exact_workspace_mount and record['task'] == 'selfhost-validation'
+                       and record['workspace'] == str(workspace) and record['source'] == source_sha)
+            legacy_iso = False
+            if record['running'] and exact_mount and not labeled and record['image'] == base_image:
+                # Bound the unlabeled legacy match to the failed ISO job's recorded window.
+                created = datetime.fromisoformat(record['created'].replace('Z', '+00:00'))
+                legacy_start = datetime.fromisoformat('2026-11-15T07:22:24+00:00')
+                legacy_end = datetime.fromisoformat('2026-11-15T08:22:40+00:00')
+                command = json.loads(docker('inspect', '--format', '{{json .Config.Cmd}}', cid).stdout)
+                command_text = '\n'.join(command or [])
+                legacy_iso = bool(legacy_start <= created <= legacy_end
+                                  and re.search(r'\brestore_owner\s*\(\s*\)', command_text)
+                                  and 'make iso NIXOS_TEST_SUITE=hello' in command_text)
+            record['owned'] = labeled or legacy_iso
+            record['legacy_iso_match'] = legacy_iso
+            record['writer'] = record['running'] and any(mount['RW'] for mount in mounts)
+            records.append(record)
+        return records
+
+
+    records = inventory()
+    (evidence / 'container-inventory.json').write_text(json.dumps(records, indent=2) + '\n')
+    unknown = [record['id'] for record in records if record['writer'] and not record['owned']]
+    if unknown:
+        raise RuntimeError(f'Refusing unknown workspace writers: {unknown}')
+    if os.path.lexists(backup):
+        raise RuntimeError(f'Refusing to overwrite preservation directory: {backup}')
+
+    # Freeze container IDs before collecting evidence or stopping any writer.
+    owned = [record for record in records if record['owned'] and record['running']]
+    for record in owned:
+        cid = record['id']
+        logs = subprocess.run(['docker', 'logs', '--timestamps', cid], capture_output=True, timeout=120)
+        (evidence / f'{cid}-before-stop.log').write_bytes(logs.stdout + logs.stderr)
+        if logs.returncode:
+            raise RuntimeError(f'Cannot preserve logs for owned container {cid}')
+        for name in ['qemu.log', 'qemu-serial.log', 'kernel/qemu.log', 'kernel/qemu-serial.log']:
+            result = docker('cp', f'{cid}:/root/asterinas/{name}', str(evidence / f'{cid}-{name.replace("/", "-")}'), check=False)
+            if result.returncode:
+                with (evidence / 'optional-qemu-copy.log').open('a') as stream:
+                    stream.write(f'{cid} {name}: {result.stderr}')
+    for record in owned:
+        docker('stop', '--time', '10', record['id'])
+
+    remaining = [record['id'] for record in inventory() if record['writer']]
+    if remaining:
+        raise RuntimeError(f'Workspace writers remain or appeared during recovery: {remaining}')
+    if workspace.exists():
+        workspace.rename(backup)
+        output('backup_path', backup)
+    workspace.mkdir(mode=0o755)
+    (evidence / '.workspace-ready').touch()
+
+    volume = f'dropguard-nix-{run_id}-{attempt}'
+    labels = {
+        'io.asterinas.dropguard.task': 'selfhost-validation',
+        'io.asterinas.dropguard.run': run_id,
+        'io.asterinas.dropguard.attempt': attempt,
+        'io.asterinas.dropguard.source': source_sha,
+    }
+    if volume not in docker('volume', 'ls', '--format', '{{.Name}}').stdout.splitlines():
+        args = ['volume', 'create']
+        for key, value in labels.items():
+            args += ['--label', f'{key}={value}']
+        docker(*args, volume)
+    observed = json.loads(docker('volume', 'inspect', '--format', '{{json .Labels}}', volume).stdout) or {}
+    if any(observed.get(key) != value for key, value in labels.items()):
+        raise RuntimeError('Refusing a volume not owned by this validation run')
+    (evidence / 'workspace-preservation.json').write_text(json.dumps({
+        'workspace': str(workspace), 'backup_path': str(backup) if backup.exists() else None,
+        'cache_image': base_image, 'nix_volume': volume, 'owned_container_ids': [record['id'] for record in owned],
+    }, indent=2) + '\n')
+    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+        stream.write(f'Preserved workspace: `{backup}`\n\nLocal Nix cache volume: `{volume}`\n\nBase image: `{base_image}`\n')
+
+jobs:
+  recovery:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
+    timeout-minutes: 30
+    outputs:
+      cache_image: ${{ steps.preserve.outputs.cache_image }}
+      nix_volume: ${{ steps.preserve.outputs.nix_volume }}
+      backup_path: ${{ steps.preserve.outputs.backup_path }}
+    steps:
+      - &preserve-workspace
+        name: Preserve the prior workspace before checkout
+        id: preserve
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        timeout-minutes: 20
+        run: |
+          #!/bin/bash
+          set -euo pipefail
+          evidence="$(dirname "$GITHUB_WORKSPACE")/dropguard-evidence-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"
+          finish_preparation() {
+            local original=$? cleanup_status=0
+            trap - EXIT INT TERM
+            if [[ -f "$evidence/.workspace-ready" ]]; then
+              set +e
+              "$evidence/run-container.sh" cleanup "$original"
+              cleanup_status=$?
+            fi
+            if (( original != 0 )); then
+              exit "$original"
+            fi
+            exit "$cleanup_status"
+          }
+          trap finish_preparation EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          python3 -c "$DROPGUARD_PREPARE_PY"
+
+      - &upload-evidence
+        name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dropguard-selfhost-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.preserve.outputs.evidence_path }}
+          if-no-files-found: warn
+          retention-days: 30
+
+  xfstests:
+    name: xfstests-full
+    needs: recovery
+    if: github.repository == 'chinrw/asterinas' && needs.recovery.result == 'success'
+    runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
+    timeout-minutes: 140
+    outputs:
+      workspace_ready: ${{ steps.preserve.outcome == 'success' }}
+    steps:
+      - *preserve-workspace
+      - &checkout-product
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - &verify-product
+        name: Verify the tested revision
+        shell: bash
+        run: test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Run the unchanged ext2 full.list with a 90-minute execution window
+        shell: bash
+        timeout-minutes: 100
+        run: '"$DROPGUARD_RUNNER_SCRIPT" xfstests'
+      - &cleanup-workspace
+        name: Stop owned containers and restore workspace ownership
+        if: always() && steps.preserve.outcome == 'success'
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        timeout-minutes: 5
+        run: '"$DROPGUARD_RUNNER_SCRIPT" cleanup'
+      - *upload-evidence
+
+  iso:
+    needs: [recovery, xfstests]
+    if: always() && !cancelled() && github.repository == 'chinrw/asterinas' && needs.recovery.result == 'success' && needs.xfstests.outputs.workspace_ready == 'true'
+    runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
+    timeout-minutes: 200
+    steps:
+      - *preserve-workspace
+      - *checkout-product
+      - *verify-product
+      - name: Build the hello ISO with an independent cold-build budget
+        shell: bash
+        timeout-minutes: 100
+        run: '"$DROPGUARD_RUNNER_SCRIPT" iso-build'
+      - name: Install the ISO and require the original Congratulations marker
+        shell: bash
+        timeout-minutes: 40
+        run: '"$DROPGUARD_RUNNER_SCRIPT" iso-install'
+      - name: Boot the installed image and require the hello case
+        shell: bash
+        timeout-minutes: 20
+        run: '"$DROPGUARD_RUNNER_SCRIPT" iso-hello'
+      - *cleanup-workspace
+      - *upload-evidence
