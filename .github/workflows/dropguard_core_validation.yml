@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: dropguard-core-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   SOURCE_SHA: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
 
@@ -28,6 +32,7 @@ jobs:
     env:
       RUSTUP_HOME: /root/.rustup
       CARGO_HOME: /root/.cargo
+      OSTD_TASK_STACK_SIZE_IN_PAGES: 64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,8 +68,9 @@ jobs:
           fi
           (cd kernel/core && "$osdk" "${args[@]}") 2>&1 | tee target/dropguard-core.log
       - name: Require the complete core result and new rollback cases
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           import pathlib
           import re
           text = pathlib.Path('target/dropguard-core.log').read_text()
@@ -77,6 +83,7 @@ jobs:
               'block_alloc_indirect_conflict_rolls_back_cache',
           ]:
               assert name in text, name
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
