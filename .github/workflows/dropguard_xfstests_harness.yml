@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: DropGuard full xfstests with validated exclusion loading
+
+on:
+  push:
+    branches: [ci/dropguard-xfstests-harness]
+
+permissions:
+  contents: read
+
+env:
+  RUST_PRODUCT_SHA: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
+  HARNESS_SHA: be00b24387ef067dce3bc8ce8f26eb9becf99152
+
+jobs:
+  xfstests-full:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    env:
+      RUSTUP_HOME: /root/.rustup
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - name: Free the standard runner tool directories
+        run: |
+          rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+          df -h .
+          free -h
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.HARNESS_SHA }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify Rust identity and unchanged test lists
+        shell: bash
+        run: |
+          set -euo pipefail
+          git_safe=(git -c safe.directory="$GITHUB_WORKSPACE")
+          test "$("${git_safe[@]}" rev-parse HEAD)" = "$HARNESS_SHA"
+          "${git_safe[@]}" diff --exit-code "$RUST_PRODUCT_SHA" HEAD -- '*.rs' '**/Cargo.toml' '**/Cargo.lock' Cargo.toml Cargo.lock rust-toolchain.toml
+          "${git_safe[@]}" diff --exit-code "$RUST_PRODUCT_SHA" HEAD -- test/initramfs/src/conformance/xfstests/ext2/run_list/full.list test/initramfs/src/conformance/xfstests/ext2/run_list/block.list
+      - name: Run the original ext2 full.list and original exclusion file
+        run: make run_kernel AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=xfstests RELEASE=1 MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=full.list XFSTESTS_DISK_SIZE=12G
+      - name: Verify the complete intended case set actually ran
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          root = pathlib.Path('test/initramfs/src/conformance/xfstests/ext2/run_list')
+          def names(path):
+              return {line.split('#')[0].strip() for line in path.read_text().splitlines()
+                      if re.fullmatch(r'[a-z]+/[0-9]{3}', line.split('#')[0].strip())}
+          requested = names(root / 'full.list')
+          excluded = names(root / 'block.list')
+          text = pathlib.Path('qemu.log').read_text()
+          text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', text).replace('\r', '')
+          executed = set(re.findall(r'^([a-z]+/[0-9]{3})\b', text, re.MULTILINE))
+          assert not executed & excluded, sorted(executed & excluded)
+          assert executed == requested - excluded, (sorted((requested - excluded) - executed), sorted(executed - requested))
+          assert 'All conformance tests passed.' in text
+          print(f'Intended full-list cases observed: {len(executed)}')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xfstests-harness-full-logs
+          path: |
+            qemu.log
+            qemu-serial.log
