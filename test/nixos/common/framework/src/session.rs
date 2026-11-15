@@ -2,6 +2,7 @@
 
 use std::{
     borrow::Cow,
+    mem::DropGuard,
     time::{Duration, Instant},
 };
 
@@ -251,17 +252,16 @@ impl Session {
     where
         F: FnOnce(&mut Session) -> Result<(), Error>,
     {
-        let old_desc = std::mem::replace(&mut self.desc, desc);
+        let (res, exit_cmd) = {
+            let old_desc = std::mem::replace(&mut self.desc, desc);
+            let mut session = DropGuard::new(&mut *self, |session| session.desc = old_desc);
 
-        if let Err(e) = self.run_cmd(&self.desc.enter_cmd.clone()) {
-            self.desc = old_desc;
-            return Err(e);
-        }
+            let enter_cmd = session.desc.enter_cmd.clone();
+            session.run_cmd(&enter_cmd)?;
 
-        let res = test_ops(self);
-
-        let exit_cmd = self.desc.exit_cmd.clone();
-        self.desc = old_desc;
+            let res = test_ops(&mut session);
+            (res, session.desc.exit_cmd.clone())
+        };
         let exit_res = self.run_cmd(&exit_cmd);
 
         res?;
@@ -594,7 +594,164 @@ const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 #[cfg(test)]
 mod tests {
-    use super::{Error, Session};
+    use std::{
+        panic::{AssertUnwindSafe, catch_unwind},
+        process::Command,
+    };
+
+    use super::{Error, Session, SessionDesc};
+
+    const OUTER_PROMPT: &str = "outer> ";
+    const INNER_PROMPT: &str = "inner> ";
+
+    fn shell_session() -> Session {
+        let mut command = Command::new("bash");
+        command
+            .args(["--noprofile", "--norc", "-i"])
+            .env("PS1", OUTER_PROMPT)
+            .env("TERM", "dumb")
+            .env_remove("PROMPT_COMMAND");
+        let mut pty = rexpect::session::spawn_command(command, Some(2_000)).unwrap();
+        pty.exp_string(OUTER_PROMPT).unwrap();
+        // rexpect disables terminal echo, but Session consumes each echoed command.
+        pty.send_line("set +o emacs +o vi; stty echo").unwrap();
+        pty.exp_string(OUTER_PROMPT).unwrap();
+
+        let mut session = Session::new(SessionDesc::new(OUTER_PROMPT, "", "exit"), pty);
+        session.run_cmd("set +o emacs +o vi; scope=outer").unwrap();
+        session
+    }
+
+    fn nested_shell(prompt: &'static str) -> SessionDesc {
+        SessionDesc::new(
+            prompt,
+            format!("PS1='{prompt}' bash --noprofile --norc -i"),
+            "exit",
+        )
+    }
+
+    #[test]
+    fn enter_session_failure_restores_outer_descriptor() {
+        let mut session = shell_session();
+        let mut body_called = false;
+        let result =
+            session.enter_session_and_run(SessionDesc::new("missing> ", "true", "exit"), |_| {
+                body_called = true;
+                Ok(())
+            });
+
+        match result {
+            Err(Error::Timeout {
+                expected, timeout, ..
+            }) => {
+                assert_eq!(expected, "\"missing> \"");
+                assert_eq!(timeout, std::time::Duration::from_secs(2));
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+        assert!(!body_called);
+        assert_eq!(session.desc.prompt, OUTER_PROMPT);
+        assert_eq!(session.desc.enter_cmd, "");
+        assert_eq!(session.desc.exit_cmd, "exit");
+        session
+            .run_cmd_and_expect("printf '%s\\n' \"$scope\"", "outer")
+            .unwrap();
+        session.shutdown().unwrap();
+    }
+
+    #[test]
+    fn nested_sessions_restore_each_parent() {
+        let mut session = shell_session();
+        session
+            .enter_session_and_run(nested_shell(INNER_PROMPT), |inner| {
+                inner.run_cmd("scope=inner")?;
+                inner.enter_session_and_run(nested_shell("deep> "), |deep| {
+                    deep.run_cmd("scope=deep")?;
+                    deep.run_cmd_and_expect("printf '%s\\n' \"$scope\"", "deep")
+                })?;
+                inner.run_cmd_and_expect("printf '%s\\n' \"$scope\"", "inner")
+            })
+            .unwrap();
+
+        assert_eq!(session.desc.prompt, OUTER_PROMPT);
+        session
+            .run_cmd_and_expect("printf '%s\\n' \"$scope\"", "outer")
+            .unwrap();
+        session.shutdown().unwrap();
+    }
+
+    #[test]
+    fn session_body_error_still_exits_nested_shell() {
+        let mut session = shell_session();
+        let result = session.enter_session_and_run(nested_shell(INNER_PROMPT), |inner| {
+            inner.run_cmd("scope=inner")?;
+            Err(Error::Protocol {
+                reason: "body failed".to_string(),
+                got: "inner result".to_string(),
+            })
+        });
+
+        match result {
+            Err(Error::Protocol { reason, got }) => {
+                assert_eq!(reason, "body failed");
+                assert_eq!(got, "inner result");
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+        assert_eq!(session.desc.prompt, OUTER_PROMPT);
+        session
+            .run_cmd_and_expect("printf '%s\\n' \"$scope\"", "outer")
+            .unwrap();
+        session.shutdown().unwrap();
+    }
+
+    #[test]
+    fn session_body_error_takes_precedence_over_exit_error() {
+        let mut session = shell_session();
+        let mut desc = nested_shell(INNER_PROMPT);
+        // This command leaves the inner shell running, so waiting for the
+        // outer prompt times out.
+        desc.exit_cmd = "true".into();
+        let result = session.enter_session_and_run(desc, |_| {
+            Err(Error::Protocol {
+                reason: "body failed".to_string(),
+                got: "inner result".to_string(),
+            })
+        });
+
+        match result {
+            Err(Error::Protocol { reason, got }) => {
+                assert_eq!(reason, "body failed");
+                assert_eq!(got, "inner result");
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+        assert_eq!(session.desc.prompt, OUTER_PROMPT);
+        session.run_cmd("exit").unwrap();
+        session
+            .run_cmd_and_expect("printf '%s\\n' \"$scope\"", "outer")
+            .unwrap();
+        session.shutdown().unwrap();
+    }
+
+    #[test]
+    fn session_unwind_restores_descriptor_without_exiting_shell() {
+        let mut session = shell_session();
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            session.enter_session_and_run(nested_shell(INNER_PROMPT), |_| {
+                panic!("session body panicked");
+            })
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(session.desc.prompt, OUTER_PROMPT);
+        // Restoring the descriptor does not exit the nested shell. Leave it explicitly.
+        session.run_cmd("exit").unwrap();
+        session
+            .run_cmd_and_expect("printf '%s\\n' \"$scope\"", "outer")
+            .unwrap();
+        session.shutdown().unwrap();
+    }
 
     #[test]
     fn parse_command_output_extracts_status_from_marker() {
