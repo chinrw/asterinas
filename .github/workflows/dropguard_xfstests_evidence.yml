@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Recheck the completed full xfstests evidence
+
+on:
+  push:
+    branches: [ci/dropguard-xfstests-evidence]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify-original-execution:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Download the fixed original execution and artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="$GITHUB_API_URL/repos/chinrw/asterinas/actions"
+          curl --fail --silent --show-error --header "Authorization: Bearer $GH_TOKEN" "$api/artifacts/14160720493" --output original-artifact-metadata.json
+          curl --fail --silent --show-error --header "Authorization: Bearer $GH_TOKEN" "$api/jobs/132795070702" --output original-job-metadata.json
+          curl --fail --silent --show-error --location --header "Authorization: Bearer $GH_TOKEN" "$api/artifacts/14160720493/zip" --output original-artifact.zip
+          curl --fail --silent --show-error --location --header "Authorization: Bearer $GH_TOKEN" "$api/jobs/132795070702/logs" --output original-job.log
+          echo 'd8c397248c61311685ae57ae48483fe538f0b74dfe717a29e9da57110d2aeae0  original-artifact.zip' | sha256sum --check
+          echo '5588f2323b88771707e1e6a1ee6c53da9b3c84ef053b96de25e9839b9b8c391d  original-job.log' | sha256sum --check
+          unzip -q original-artifact.zip -d original-artifact
+          echo 'c52608e379948a87816afc9f2d27580488703928ee6bfbbc8b6660efba7960df  original-artifact/qemu.log' | sha256sum --check
+      - name: Verify original provenance and unchanged test inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code 1f5b68b5658cecbb93ba8781a8bcb95205257f1d HEAD -- '*.rs' '**/Cargo.toml' '**/Cargo.lock' Cargo.toml Cargo.lock rust-toolchain.toml test/initramfs/src/conformance/xfstests/ext2/run_list/full.list test/initramfs/src/conformance/xfstests/ext2/run_list/block.list
+          python3 - <<'PY'
+          import json
+          import pathlib
+          artifact = json.loads(pathlib.Path('original-artifact-metadata.json').read_text())
+          job = json.loads(pathlib.Path('original-job-metadata.json').read_text())
+          assert artifact['id'] == 14160720493 and artifact['workflow_run']['id'] == 43708615560
+          assert artifact['workflow_run']['head_sha'] == '1fc42d9aad343762366b7e739e9e0094a81a012f'
+          assert artifact['digest'] == 'sha256:d8c397248c61311685ae57ae48483fe538f0b74dfe717a29e9da57110d2aeae0'
+          assert job['id'] == 132795070702 and job['run_id'] == 43708615560
+          assert job['head_sha'] == '1fc42d9aad343762366b7e739e9e0094a81a012f'
+          assert job['conclusion'] == 'failure'
+          steps = {step['name']: step['conclusion'] for step in job['steps']}
+          assert steps['Verify Rust identity and unchanged test lists'] == 'success'
+          assert steps['Run the original ext2 full.list and original exclusion file'] == 'success'
+          assert [name for name, conclusion in steps.items() if conclusion == 'failure'] == ['Verify the complete intended case set actually ran']
+          log = pathlib.Path('original-job.log').read_text(encoding='utf-8-sig')
+          assert 'be00b24387ef067dce3bc8ce8f26eb9becf99152' in log
+          print('Verifying existing execution43708615560; Rust product1f5b68b; harness be00b243; this job does not rerun filesystem cases.')
+          PY
+      - name: Require the exact complete case set in the original output
+        run: |
+          python3 .github/scripts/verify_dropguard_xfstests.py original-artifact/qemu.log test/initramfs/src/conformance/xfstests/ext2/run_list/full.list test/initramfs/src/conformance/xfstests/ext2/run_list/block.list > verified-coverage.json
+          cat verified-coverage.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rechecked-original-xfstests-evidence
+          path: |
+            original-artifact.zip
+            original-artifact-metadata.json
+            original-job.log
+            original-job-metadata.json
+            verified-coverage.json
