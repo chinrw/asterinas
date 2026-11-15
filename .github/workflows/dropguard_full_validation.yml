@@ -146,61 +146,76 @@ jobs:
     if: needs.prerequisites.outputs.vmx == 'true'
     runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
     timeout-minutes: 60
-    container:
-      image: asterinas/kernel-dev:0.19.0-20261012
-      options: -v /dev:/dev --privileged
-    env:
-      RUSTUP_HOME: /root/.rustup
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
-      - name: Verify nested Intel VMX prerequisites
+      - name: Run nested Intel VMX tests in Docker
+        shell: bash
         run: |
-          test -c /dev/kvm
-          grep -qw vmx /proc/cpuinfo
-          grep -Eq '^(Y|1)$' /sys/module/kvm_intel/parameters/nested
-      - run: make ktest ENABLE_KVM=1 NETDEV=tap
-      - run: make test_osdk
+          docker run --rm --privileged -v /dev:/dev \
+            -v "$GITHUB_WORKSPACE:/root/asterinas" -w /root/asterinas \
+            -e RUSTUP_HOME=/root/.rustup \
+            -e VALIDATION_UID="$(id -u)" -e VALIDATION_GID="$(id -g)" \
+            --entrypoint /bin/bash asterinas/kernel-dev:0.19.0-20261012 -lc '
+              set -euo pipefail
+              restore_owner() { chown -hR "$VALIDATION_UID:$VALIDATION_GID" /root/asterinas; }
+              trap restore_owner EXIT
+              test -c /dev/kvm
+              grep -qw vmx /proc/cpuinfo
+              grep -Eq "^(Y|1)$" /sys/module/kvm_intel/parameters/nested
+              make ktest ENABLE_KVM=1 NETDEV=tap
+              make test_osdk
+            '
 
   xfstests-full:
     needs: prerequisites
     if: needs.prerequisites.outputs.heavy == 'true'
     runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
     timeout-minutes: 90
-    container:
-      image: asterinas/kernel-dev:0.19.0-20261012
-      options: -v /dev:/dev --privileged
-    env:
-      RUSTUP_HOME: /root/.rustup
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
       - name: Run the unmodified ext2 full.list
-        run: make run_kernel AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=xfstests RELEASE=1 MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=full.list XFSTESTS_DISK_SIZE=12G
+        shell: bash
+        run: |
+          docker run --rm --privileged -v /dev:/dev \
+            -v "$GITHUB_WORKSPACE:/root/asterinas" -w /root/asterinas \
+            -e RUSTUP_HOME=/root/.rustup \
+            -e VALIDATION_UID="$(id -u)" -e VALIDATION_GID="$(id -g)" \
+            --entrypoint /bin/bash asterinas/kernel-dev:0.19.0-20261012 -lc '
+              set -euo pipefail
+              restore_owner() { chown -hR "$VALIDATION_UID:$VALIDATION_GID" /root/asterinas; }
+              trap restore_owner EXIT
+              make run_kernel AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=xfstests RELEASE=1 MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=full.list XFSTESTS_DISK_SIZE=12G
+            '
 
   iso:
     needs: prerequisites
     if: needs.prerequisites.outputs.heavy == 'true'
     runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
     timeout-minutes: 60
-    container:
-      image: asterinas/kernel-dev:0.19.0-20261012
-      options: -v /dev:/dev --privileged
-    env:
-      RUSTUP_HOME: /root/.rustup
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
-      - run: make iso NIXOS_TEST_SUITE=hello
       - name: Install and boot the ISO
         shell: bash
         run: |
-          make run_iso || true
-          tail --lines 10 qemu.log | grep -q '^Congratulations!'
-          make run_nixos NIXOS_TEST_SUITE=hello
+          docker run --rm --privileged -v /dev:/dev \
+            -v "$GITHUB_WORKSPACE:/root/asterinas" -w /root/asterinas \
+            -e RUSTUP_HOME=/root/.rustup \
+            -e VALIDATION_UID="$(id -u)" -e VALIDATION_GID="$(id -g)" \
+            --entrypoint /bin/bash asterinas/kernel-dev:0.19.0-20261012 -lc '
+              set -euo pipefail
+              restore_owner() { chown -hR "$VALIDATION_UID:$VALIDATION_GID" /root/asterinas; }
+              trap restore_owner EXIT
+              make iso NIXOS_TEST_SUITE=hello
+              make run_iso || true
+              tail --lines 10 qemu.log | grep -q "^Congratulations!"
+              make run_nixos NIXOS_TEST_SUITE=hello
+            '
