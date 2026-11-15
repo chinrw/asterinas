@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Complete remaining RISC-V debug cases in the fork
+
+on:
+  push:
+    branches: [ci/dropguard-riscv-remainder]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
+
+jobs:
+  remaining:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+      SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Build the original complete image and preserve its command list
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$SOURCE_SHA"
+          make kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0
+          cp test/initramfs/build/initramfs/opt/ltp/runtest/syscalls original-runtest.txt
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          rows = pathlib.Path('original-runtest.txt').read_text().splitlines()
+          names = [row.split()[0] for row in rows]
+          assert len(names) == len(set(names)) == 563
+          digest = hashlib.sha256(('\n'.join(sorted(names)) + '\n').encode()).hexdigest()
+          assert digest == '3a5d1f747a6ab7c155f3f2373e9acf54ee6672ba0e6a868dccf91b9831e2a957', digest
+          # These cases have individual results in the original candidate run 43697860816.
+          completed = set('''
+          access02 access03 alarm03 alarm05 alarm06 alarm07 bind03 bind04 brk01 brk02 capget02 capset03
+          capset04 chdir01 chdir02 chdir04 chmod01 chmod03 chmod05 chmod06 chmod07 chmod08 chown01
+          chown05 chroot02 chroot04 clock_nanosleep01 clock_nanosleep04 clone01 clone02 clone03
+          clone04 clone05 clone06 clone07 clone10 clone304 close01 close02 close_range02 confstr01
+          creat01 creat03 dup01 dup04 dup05 dup07 dup202 dup203 dup204 dup205 dup206 dup207 dup3_01
+          dup3_02 epoll01 epoll_create01 epoll_create02 epoll_create1_01 epoll_create1_02
+          epoll_ctl01 epoll_ctl03 epoll_pwait01 epoll_pwait02 epoll_pwait04 epoll_pwait05
+          epoll_pwait06 epoll_wait01 epoll_wait03 epoll_wait04 epoll_wait07 eventfd2_01 eventfd2_02
+          eventfd2_03 exit01 exit02 exit_group01 faccessat01 faccessat02 faccessat201 fallocate01
+          fallocate03 fchdir01 fchdir02 fchdir03 fchmod01 fchmod02 fchmod03 fchmod04 fchmod05
+          fchmod06 fchmodat01 fchmodat02 fchmodat2_02 fchown01 fchown05 fchownat01 fchownat02
+          fcntl01 fcntl01_64 fcntl02 fcntl02_64 fcntl03 fcntl03_64 fcntl04 fcntl04_64 fcntl05
+          fcntl05_64 fcntl08 fcntl08_64 fcntl09 fcntl09_64 fcntl10 fcntl10_64 fcntl13 fcntl13_64
+          fcntl14 fcntl14_64 fcntl16 fcntl16_64 fcntl22 fcntl22_64 fcntl29 fcntl29_64
+          posix_fadvise02 posix_fadvise02_64 posix_fadvise03 posix_fadvise03_64
+          '''.split())
+          assert len(completed) == 128 and completed <= set(names)
+          remaining = [name for name in names if name not in completed]
+          groups = [remaining[index::4] for index in range(4)]
+          assert len(remaining) == 435
+          assert set().union(*(set(group) for group in groups)) == set(names) - completed
+          assert sum(map(len, groups)) == len(remaining)
+          selected = groups[int(os.environ['SHARD'])]
+          manifest = {'source_sha': os.environ['SOURCE_SHA'], 'full_set_sha256': digest,
+                      'original_names': names, 'prior_result_names': sorted(completed),
+                      'shard': int(os.environ['SHARD']), 'selected': selected,
+                      'grouping_limit': 'Fresh-boot coverage supplements the failed original single full sequence.'}
+          pathlib.Path('case-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          pathlib.Path('expected-runtest.txt').write_text(''.join(row + '\n' for row in rows if row.split()[0] in set(selected)))
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write('CONFORMANCE_TEST_SELECTOR=' + ','.join(selected) + '\n')
+          print(f'Original 563 cases; prior 128; remaining 435; this group {len(selected)}')
+          PY
+      - name: Build selected cases and compare every original command and argument
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          set -euo pipefail
+          make kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0 CONFORMANCE_TEST_SELECTOR="$CONFORMANCE_TEST_SELECTOR"
+          cp test/initramfs/build/initramfs/opt/ltp/runtest/syscalls selected-runtest.txt
+          cmp expected-runtest.txt selected-runtest.txt
+      - name: Run remaining cases with the original per-case and Kirk limits
+        timeout-minutes: 85
+        shell: bash
+        run: timeout --signal=TERM --kill-after=30s 80m make run_kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0 CONFORMANCE_TEST_SELECTOR="$CONFORMANCE_TEST_SELECTOR"
+      - name: Record actual case coverage and preserve failures
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import collections
+          import json
+          import pathlib
+          import re
+          manifest = json.loads(pathlib.Path('case-manifest.json').read_text())
+          text = pathlib.Path('qemu.log').read_text()
+          text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', text).replace('\r', '')
+          results = re.findall(r'^([A-Za-z0-9_]+): (pass|skip|fail|broken)\s+\(', text, re.MULTILINE)
+          names = [name for name, status in results]
+          expected = set(manifest['selected'])
+          coverage = {'source_sha': manifest['source_sha'], 'shard': manifest['shard'],
+                      'selected': manifest['selected'], 'results': dict(results),
+                      'counts': dict(collections.Counter(status for name, status in results)),
+                      'missing': sorted(expected - set(names)), 'extra': sorted(set(names) - expected),
+                      'final_success_marker': 'All conformance tests passed.' in text}
+          pathlib.Path('case-coverage.json').write_text(json.dumps(coverage, indent=2) + '\n')
+          print(json.dumps(coverage, indent=2))
+          assert len(names) == len(set(names)) == len(expected)
+          assert set(names) == expected
+          assert not any(status in {'fail', 'broken'} for name, status in results)
+          assert coverage['final_success_marker']
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: riscv-debug-remainder-${{ matrix.shard }}
+          path: |
+            qemu.log
+            qemu-serial.log
+            original-runtest.txt
+            expected-runtest.txt
+            selected-runtest.txt
+            case-manifest.json
+            case-coverage.json
