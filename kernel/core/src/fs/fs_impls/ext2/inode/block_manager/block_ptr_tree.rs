@@ -4,6 +4,8 @@
 
 #![short_vis_path::add(inode)]
 
+use core::mem::DropGuard;
+
 use device_id::{decode_device_numbers, encode_device_numbers};
 use ostd::mm::io::util::HasVmReaderWriter;
 use smallvec::SmallVec;
@@ -758,64 +760,52 @@ impl BlockPtrTree {
         let hole_level = walk.hole_level();
         let chain_root_bid = indirect_blocks[0];
         let mut indirect_blocks_manager = self.indirect_blocks_manager.lock();
-
-        let result = (|| -> Result<()> {
-            // Build the indirect blocks chain: each block points to the next;
-            // the leaf block points to the allocated data range.
-            debug_assert_eq!(
-                indirect_blocks.len() as u32,
-                walk.subtree_indirect_levels(hole_level)
-            );
-            let mut child_levels = walk.child_levels(hole_level);
-            for (indirect_blk_idx, new_bid) in indirect_blocks.iter().copied().enumerate() {
-                let level = child_levels
-                    .next()
-                    .expect("one child level per allocated indirect block");
-
-                let mut block = IndirectBlock::alloc_new(new_bid)?;
-                let start_slot = walk.slot_at(level) as usize;
-                if indirect_blk_idx + 1 == indirect_blocks.len() {
-                    Self::write_data_range_to_indirect_block(&mut block, start_slot, data_blocks)?;
-                } else {
-                    block.write_bid(start_slot, indirect_blocks[indirect_blk_idx + 1])?;
-                }
-                indirect_blocks_manager.insert(block)?;
+        let mut cache_guard = DropGuard::new(&mut *indirect_blocks_manager, |manager| {
+            for &bid in indirect_blocks {
+                manager.remove(bid);
             }
+        });
 
-            // Splice the chain root into the parent pointer.
-            if hole_level == 0 {
-                let slot = walk.root_slot() as usize;
-                if self.raw_block_ptrs.block_ptrs[slot] != 0 {
-                    return_errno_with_message!(
-                        Errno::EIO,
-                        "block pointer changed during allocation"
-                    );
-                }
-                self.raw_block_ptrs.block_ptrs[slot] = chain_root_bid;
+        // Build the indirect blocks chain: each block points to the next;
+        // the leaf block points to the allocated data range.
+        debug_assert_eq!(
+            indirect_blocks.len() as u32,
+            walk.subtree_indirect_levels(hole_level)
+        );
+        let mut child_levels = walk.child_levels(hole_level);
+        for (indirect_blk_idx, new_bid) in indirect_blocks.iter().copied().enumerate() {
+            let level = child_levels
+                .next()
+                .expect("one child level per allocated indirect block");
+
+            let mut block = IndirectBlock::alloc_new(new_bid)?;
+            let start_slot = walk.slot_at(level) as usize;
+            if indirect_blk_idx + 1 == indirect_blocks.len() {
+                Self::write_data_range_to_indirect_block(&mut block, start_slot, data_blocks)?;
             } else {
-                let parent_bid = walk.parent_bid_at(hole_level);
-                let parent_block = indirect_blocks_manager.find_mut(parent_bid)?;
-                let slot = walk.slot_at(hole_level) as usize;
-                if parent_block.read_bid(slot)? != 0 {
-                    return_errno_with_message!(
-                        Errno::EIO,
-                        "block pointer changed during allocation"
-                    );
-                }
-                parent_block.write_bid(slot, chain_root_bid)?;
+                block.write_bid(start_slot, indirect_blocks[indirect_blk_idx + 1])?;
             }
-
-            Ok(())
-        })();
-
-        if let Err(err) = result {
-            // Evict any indirect blocks already inserted into the cache.
-            for &bid in indirect_blocks.iter() {
-                indirect_blocks_manager.remove(bid);
-            }
-            return Err(err);
+            cache_guard.insert(block)?;
         }
 
+        // Splice the chain root into the parent pointer.
+        if hole_level == 0 {
+            let slot = walk.root_slot() as usize;
+            if self.raw_block_ptrs.block_ptrs[slot] != 0 {
+                return_errno_with_message!(Errno::EIO, "block pointer changed during allocation");
+            }
+            self.raw_block_ptrs.block_ptrs[slot] = chain_root_bid;
+        } else {
+            let parent_bid = walk.parent_bid_at(hole_level);
+            let parent_block = cache_guard.find_mut(parent_bid)?;
+            let slot = walk.slot_at(hole_level) as usize;
+            if parent_block.read_bid(slot)? != 0 {
+                return_errno_with_message!(Errno::EIO, "block pointer changed during allocation");
+            }
+            parent_block.write_bid(slot, chain_root_bid)?;
+        }
+
+        DropGuard::dismiss(cache_guard);
         Ok(())
     }
 
@@ -1187,7 +1177,7 @@ mod test {
 
     use super::*;
     use crate::{
-        fs::fs_impls::ext2::test_utils::{Ext2FixtureBuilder, write_indirect_ptr},
+        fs::fs_impls::ext2::test_utils::{Ext2FixtureBuilder, assert_errno, write_indirect_ptr},
         time::clocks,
     };
 
@@ -1614,6 +1604,54 @@ mod test {
             SECTORS_PER_BLOCK * 5
         );
         assert_eq!(free_before - free_after, 5);
+    }
+
+    #[ktest]
+    fn block_alloc_indirect_conflict_rolls_back_cache() {
+        let ptrs = PTRS_PER_BLOCK as u32;
+        for (iblock, root_slot, indirect_blks) in [
+            (12, 12, 1),
+            (12 + ptrs, 13, 2),
+            (12 + ptrs + ptrs * ptrs, 14, 3),
+        ] {
+            let f = Ext2FixtureBuilder::new(1, 256)
+                .with_free_blocks(64, 64)
+                .build()
+                .unwrap();
+            let mut tree = make_block_ptr_tree([0; RAW_BLOCK_PTRS_LEN], 0, &f.ext2);
+            let walk = tree.walk_at(iblock).unwrap();
+            let occupied_bid = f.ext2.alloc_blocks(1, 0).unwrap().start;
+
+            // Simulate a parent-slot conflict after the hole was located.
+            tree.raw_block_ptrs.block_ptrs[root_slot] = occupied_bid;
+            tree.raw_block_ptrs.sector_count = SECTORS_PER_BLOCK;
+            tree.indirect_blocks_manager
+                .lock()
+                .insert(IndirectBlock::alloc_new(occupied_bid).unwrap())
+                .unwrap();
+
+            let free_before = f.ext2.super_block().free_blocks_count();
+            let allocation = tree
+                .allocate_blocks(&f.ext2, indirect_blks, 1, &walk)
+                .unwrap();
+            assert_errno!(tree.link_allocated_blocks(&allocation, &walk), Errno::EIO);
+
+            assert_eq!(tree.raw_block_ptrs.block_ptrs[root_slot], occupied_bid);
+            assert_eq!(tree.raw_block_ptrs.sector_count, SECTORS_PER_BLOCK);
+            {
+                let mut manager = tree.indirect_blocks_manager.lock();
+                for &bid in &allocation.indirect_blocks {
+                    assert!(manager.remove(bid).is_none());
+                }
+                assert!(manager.remove(occupied_bid).is_some());
+            }
+            assert_eq!(
+                f.ext2.super_block().free_blocks_count(),
+                free_before - indirect_blks - 1
+            );
+            drop(allocation);
+            assert_eq!(f.ext2.super_block().free_blocks_count(), free_before);
+        }
     }
 
     #[ktest]

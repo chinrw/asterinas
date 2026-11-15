@@ -9,6 +9,8 @@
 
 #![short_vis_path::add(ext2)]
 
+use core::mem::DropGuard;
+
 use ostd::mm::io::util::HasVmReaderWriter;
 
 use super::{super::Ext2, FileFlags, Inode, InodeInner, io_range::IoRange};
@@ -146,34 +148,21 @@ impl Inode {
             inner.ensure_size_within_limit(&fs, end)?;
         }
 
-        match mode {
-            FallocMode::Allocate => {
-                if let Err(err) = inner.allocate_range_blocks(offset, end) {
-                    inner.rollback_fallocate(old_size);
-                    return Err(err);
-                }
-                if end > old_size
-                    && let Err(err) = inner.expand(&fs, end)
-                {
-                    inner.rollback_fallocate(old_size);
-                    return Err(err);
-                }
-            }
-            FallocMode::AllocateKeepSize => {
-                if let Err(err) = inner.allocate_range_blocks(offset, end) {
-                    inner.rollback_fallocate(old_size);
-                    return Err(err);
-                }
-            }
-            _ => {
-                return_errno_with_message!(
-                    Errno::EOPNOTSUPP,
-                    "fallocate with the specified flags is not supported"
-                );
-            }
+        if !matches!(mode, FallocMode::Allocate | FallocMode::AllocateKeepSize) {
+            return_errno_with_message!(
+                Errno::EOPNOTSUPP,
+                "fallocate with the specified flags is not supported"
+            );
         }
 
-        inner.set_mtime_ctime(utils::now());
+        let mut allocation_guard =
+            DropGuard::new(&mut *inner, |inner| inner.rollback_fallocate(old_size));
+        allocation_guard.allocate_range_blocks(offset, end)?;
+        if mode == FallocMode::Allocate && end > old_size {
+            allocation_guard.expand(&fs, end)?;
+        }
+
+        DropGuard::dismiss(allocation_guard).set_mtime_ctime(utils::now());
         Ok(())
     }
 }
@@ -254,19 +243,14 @@ impl InodeInner {
             .ok_or_else(|| Error::with_message(Errno::EINVAL, "write range overflow"))?;
         let old_size = self.file_size();
 
-        if let Err(err) = self.prepare_write(fs, offset, end) {
-            self.rollback_write(old_size, end);
-            return Err(err);
-        }
+        let mut write_guard = DropGuard::new(self, |inode| inode.rollback_write(old_size, end));
+        write_guard.prepare_write(fs, offset, end)?;
+        write_guard.page_cache().write(offset, reader)?;
 
-        if let Err(err) = self.page_cache().write(offset, reader) {
-            self.rollback_write(old_size, end);
-            return Err(err.into());
-        }
-
-        self.set_mtime_ctime(utils::now());
+        let inode = DropGuard::dismiss(write_guard);
+        inode.set_mtime_ctime(utils::now());
         if end > old_size {
-            self.set_file_size(end);
+            inode.set_file_size(end);
         }
         Ok(write_len)
     }
@@ -508,6 +492,37 @@ mod test {
     }
 
     #[ktest]
+    fn file_buffered_write_enospc_rollback() {
+        clocks::init_for_ktest();
+
+        let f = Ext2FixtureBuilder::new(1, 256)
+            .with_free_blocks(2, 2)
+            .with_free_inodes(1000, 1000)
+            .with_group0_used_dirs(1)
+            .build()
+            .unwrap();
+        let file = create_file(&f.root(), "buffered_enospc");
+        let base_data = vec![0x44u8; BLOCK_SIZE];
+        let mut reader = VmReader::from(base_data.as_slice()).to_fallible();
+        file.write_at(0, &mut reader).unwrap();
+
+        let free_before_fail = f.ext2.super_block().free_blocks_count();
+        let cache_size_before_fail = file.page_cache().unwrap().size();
+        assert_eq!(free_before_fail, 1);
+        let fail_payload = vec![0x66u8; BLOCK_SIZE * 2];
+        let mut fail_reader = VmReader::from(fail_payload.as_slice()).to_fallible();
+        assert_errno!(file.write_at(BLOCK_SIZE, &mut fail_reader), Errno::ENOSPC);
+
+        assert_eq!(file.file_size(), BLOCK_SIZE);
+        assert_eq!(file.page_cache().unwrap().size(), cache_size_before_fail);
+        assert_eq!(f.ext2.super_block().free_blocks_count(), free_before_fail);
+        let mut readback = vec![0u8; BLOCK_SIZE];
+        let mut writer = VmWriter::from(readback.as_mut_slice()).to_fallible();
+        assert_eq!(file.read_at(0, &mut writer).unwrap(), BLOCK_SIZE);
+        assert_eq!(readback, base_data);
+    }
+
+    #[ktest]
     fn file_sparse_buffered_write_preserves_mmap_dirty_tail() {
         clocks::init_for_ktest();
 
@@ -577,5 +592,75 @@ mod test {
         );
         assert_eq!(f.ext2.super_block().free_blocks_count(), 0);
         assert_eq!(file.file_size(), BLOCK_SIZE * 2);
+    }
+
+    #[ktest]
+    fn falloc_unsupported_preserves_keep_size_allocation() {
+        clocks::init_for_ktest();
+
+        let f = Ext2FixtureBuilder::new(1, 256)
+            .with_free_blocks(2, 2)
+            .build()
+            .unwrap();
+        let file = make_live_file_inode(
+            &f.ext2,
+            69,
+            0,
+            0,
+            FileFlags::empty(),
+            [0; RAW_BLOCK_PTRS_LEN],
+        );
+        file.fallocate(FallocMode::AllocateKeepSize, 0, BLOCK_SIZE)
+            .unwrap();
+        let block_manager = file.inner.read().block_manager().unwrap().clone();
+        let allocated_block = block_manager.lookup_block(0).unwrap();
+        let free_before_fail = f.ext2.super_block().free_blocks_count();
+        assert!(allocated_block.is_some());
+        assert_eq!(free_before_fail, 1);
+
+        assert_errno!(
+            file.fallocate(FallocMode::PunchHoleKeepSize, 0, BLOCK_SIZE),
+            Errno::EOPNOTSUPP
+        );
+
+        assert_eq!(file.file_size(), 0);
+        assert_eq!(block_manager.lookup_block(0).unwrap(), allocated_block);
+        assert_eq!(f.ext2.super_block().free_blocks_count(), free_before_fail);
+    }
+
+    #[ktest]
+    fn falloc_keep_size_enospc_rollback() {
+        clocks::init_for_ktest();
+
+        let f = Ext2FixtureBuilder::new(1, 256)
+            .with_free_blocks(1, 1)
+            .build()
+            .unwrap();
+        let file = make_live_file_inode(
+            &f.ext2,
+            69,
+            0,
+            0,
+            FileFlags::empty(),
+            [0; RAW_BLOCK_PTRS_LEN],
+        );
+        let free_before_fail = f.ext2.super_block().free_blocks_count();
+
+        assert_errno!(
+            file.fallocate(FallocMode::AllocateKeepSize, 0, BLOCK_SIZE * 2),
+            Errno::ENOSPC
+        );
+
+        assert_eq!(file.file_size(), 0);
+        assert_eq!(f.ext2.super_block().free_blocks_count(), free_before_fail);
+        assert_eq!(
+            file.inner
+                .read()
+                .block_manager()
+                .unwrap()
+                .lookup_block(0)
+                .unwrap(),
+            None
+        );
     }
 }
