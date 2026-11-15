@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: DropGuard RISC-V epoll comparison in fork
+
+on:
+  push:
+    branches: [ci/dropguard-riscv-epoll]
+
+permissions:
+  contents: read
+
+jobs:
+  full-baseline:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a0de2258c56b03ba1a6aa417a05f10bdc0f54ff4
+          persist-credentials: false
+      - name: Repeat the complete debug SMP4 LTP baseline
+        run: make run_kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: riscv-full-baseline
+          path: qemu.log
+
+  epoll01:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: baseline
+            sha: a0de2258c56b03ba1a6aa417a05f10bdc0f54ff4
+          - name: candidate
+            sha: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.sha }}
+          persist-credentials: false
+      - name: Run the unchanged epoll01 assertions with the same debug SMP4 setup
+        run: make run_kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp CONFORMANCE_TEST_SELECTOR=epoll01 SMP=4 RELEASE=0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: riscv-epoll01-${{ matrix.name }}
+          path: qemu.log
