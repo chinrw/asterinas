@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: MPL-2.0
 
-name: DropGuard full RISC-V debug validation in fork
+name: DropGuard RISC-V debug baseline and fcntl diagnostics in fork
 
 on:
   push:
-    branches: [ci/dropguard-riscv-full]
+    branches: [ci/dropguard-riscv-full-baseline]
 
 permissions:
   contents: read
 
 env:
-  SOURCE_SHA: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
+  SOURCE_SHA: a0de2258c56b03ba1a6aa417a05f10bdc0f54ff4
 
 jobs:
-  debug-smp4-ltp:
+  full-baseline:
     if: github.repository == 'chinrw/asterinas'
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -40,7 +40,50 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: riscv-debug-smp4-full-logs
+          name: riscv-debug-smp4-full-baseline-logs
+          path: |
+            qemu.log
+            qemu-serial.log
+
+  fcntl-details:
+    name: fcntl diagnostics (${{ matrix.version }})
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: baseline
+            source_sha: a0de2258c56b03ba1a6aa417a05f10bdc0f54ff4
+          - version: candidate
+            source_sha: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      SOURCE_SHA: ${{ matrix.source_sha }}
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Verify revision and prepare the original fcntl cases
+        shell: bash
+        timeout-minutes: 45
+        run: |
+          test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$SOURCE_SHA"
+          # KIRK_VERBOSE only enables Kirk's verbose UI for both revisions.
+          make kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp CONFORMANCE_TEST_SELECTOR=fcntl14,fcntl14_64 SMP=4 RELEASE=0 CMDLINE=KIRK_VERBOSE=1
+      - name: Run the original fcntl cases with verbose logging only
+        shell: bash
+        timeout-minutes: 125
+        run: timeout --signal=TERM --kill-after=30s 120m make run_kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp CONFORMANCE_TEST_SELECTOR=fcntl14,fcntl14_64 SMP=4 RELEASE=0 CMDLINE=KIRK_VERBOSE=1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: riscv-fcntl-${{ matrix.version }}-logs
           path: |
             qemu.log
             qemu-serial.log
