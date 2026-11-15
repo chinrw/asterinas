@@ -1,0 +1,206 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: DropGuard full validation in fork
+
+on:
+  push:
+    branches: [ci/dropguard-full]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dropguard-full-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOURCE_SHA: 1f5b68b5658cecbb93ba8781a8bcb95205257f1d
+
+jobs:
+  framework:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: asterinas/kernel-dev:0.19.0-20261012
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Verify tested revision
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Run the complete NixOS test workspace host tests
+        run: cargo test --manifest-path test/nixos/Cargo.toml --workspace --locked
+
+  ktest-smp4:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [0, 1]
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Run all default-member kernel tests with four CPUs
+        run: make ktest NETDEV=tap SMP=4 RELEASE=${{ matrix.release }}
+
+  riscv-smp4:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [0, 1]
+        auto_test: [boot, conformance]
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Run RISC-V with explicit SMP and release options
+        run: make run_kernel TARGET_ARCH=riscv64 AUTO_TEST=${{ matrix.auto_test }} CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=${{ matrix.release }}
+
+  docs:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: asterinas/kernel-dev:0.19.0-20261012
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - run: make docs
+
+  licenses:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - uses: apache/skywalking-eyes@v0.5.0
+
+  prerequisites:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
+    timeout-minutes: 5
+    outputs:
+      vmx: ${{ steps.host.outputs.vmx }}
+      heavy: ${{ steps.host.outputs.heavy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Inspect hardware and resource prerequisites
+        id: host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm
+          nproc
+          free -h
+          df -h "$GITHUB_WORKSPACE"
+          vmx=false
+          if grep -qw vmx /proc/cpuinfo && grep -Eq '^(Y|1)$' /sys/module/kvm_intel/parameters/nested; then
+            vmx=true
+          fi
+          heavy=false
+          memory_kib=$(awk '/MemAvailable:/ { print $2 }' /proc/meminfo)
+          disk_kib=$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')
+          if (( memory_kib >= 16 * 1024 * 1024 && disk_kib >= 70 * 1024 * 1024 )); then
+            heavy=true
+          fi
+          echo "vmx=$vmx" >> "$GITHUB_OUTPUT"
+          echo "heavy=$heavy" >> "$GITHUB_OUTPUT"
+          {
+            echo "Tested source: $SOURCE_SHA"
+            echo "Nested Intel VMX prerequisites: $vmx"
+            echo "At least 16 GiB available RAM and 70 GiB free disk: $heavy"
+            echo "TDX runtime requires a separately verified TDX host."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  vmx:
+    needs: prerequisites
+    if: needs.prerequisites.outputs.vmx == 'true'
+    runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
+    timeout-minutes: 60
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Verify nested Intel VMX prerequisites
+        run: |
+          test -c /dev/kvm
+          grep -qw vmx /proc/cpuinfo
+          grep -Eq '^(Y|1)$' /sys/module/kvm_intel/parameters/nested
+      - run: make ktest ENABLE_KVM=1 NETDEV=tap
+      - run: make test_osdk
+
+  xfstests-full:
+    needs: prerequisites
+    if: needs.prerequisites.outputs.heavy == 'true'
+    runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
+    timeout-minutes: 90
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Run the unmodified ext2 full.list
+        run: make run_kernel AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=xfstests RELEASE=1 MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=full.list XFSTESTS_DISK_SIZE=12G
+
+  iso:
+    needs: prerequisites
+    if: needs.prerequisites.outputs.heavy == 'true'
+    runs-on: [self-hosted, asterinas-selfhost, trusted, kvm]
+    timeout-minutes: 60
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - run: make iso NIXOS_TEST_SUITE=hello
+      - name: Install and boot the ISO
+        shell: bash
+        run: |
+          make run_iso || true
+          tail --lines 10 qemu.log | grep -q '^Congratulations!'
+          make run_nixos NIXOS_TEST_SUITE=hello
