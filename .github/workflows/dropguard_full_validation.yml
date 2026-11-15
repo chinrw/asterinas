@@ -120,15 +120,15 @@ jobs:
           set -euo pipefail
           test -c /dev/kvm
           nproc
-          free -h
+          grep -E '^(MemTotal|MemAvailable):' /proc/meminfo
           df -h "$GITHUB_WORKSPACE"
           vmx=false
           if grep -qw vmx /proc/cpuinfo && grep -Eq '^(Y|1)$' /sys/module/kvm_intel/parameters/nested; then
             vmx=true
           fi
           heavy=false
-          memory_kib=$(awk '/MemAvailable:/ { print $2 }' /proc/meminfo)
-          disk_kib=$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')
+          read -r memory_label memory_kib memory_unit < <(grep '^MemAvailable:' /proc/meminfo)
+          disk_kib=$(df --output=avail -k "$GITHUB_WORKSPACE" | tail -n 1)
           if (( memory_kib >= 16 * 1024 * 1024 && disk_kib >= 70 * 1024 * 1024 )); then
             heavy=true
           fi
