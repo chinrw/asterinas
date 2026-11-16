@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Prepared DropGuard strict RISC-V NVMe results
+
+on:
+  push:
+    branches: [ci/dropguard-prepared-20261116]
+
+permissions:
+  contents: read
+
+jobs:
+  nvme:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+      SOURCE_SHA: 564bd54533c8b012f441f7fca2863cdde6b57434
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - name: Run only the original NVMe crate with the original Make parameters
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$SOURCE_SHA"
+          cat > /tmp/dropguard-nvme.mk <<'MAKE'
+          include Makefile
+          .RECIPEPREFIX := >
+          .PHONY: dropguard_nvme
+          dropguard_nvme: CONSOLE = ttyS0
+          dropguard_nvme: initramfs $(CARGO_OSDK)
+          >cd kernel/core/comps/nvme && cargo osdk test $(CARGO_OSDK_TEST_ARGS)
+          MAKE
+          make -f /tmp/dropguard-nvme.mk dropguard_nvme TARGET_ARCH=riscv64 NETDEV=tap |& tee nvme-test.log
+      - name: Verify actual results even if the original wrapper reports success
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          text = pathlib.Path('nvme-test.log').read_text()
+          text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', text).replace('\r', '')
+          expected = {'initialize', 'write_then_read', 'multi_segment_bio_uses_queue_depth',
+                      'two_page_transfer_uses_prp2', 'four_page_transfer_fills_prp_list',
+                      'single_page_transfer_uses_prp1_only', 'six_hundred_page_transfer_chains_prp_list'}
+          results = re.findall(r'^test aster_nvme::[^\n]*::([A-Za-z0-9_]+) \.\.\..*?\b(ok|FAILED)\b', text, re.MULTILINE | re.DOTALL)
+          actual = {name: status for name, status in results}
+          summary = {'source_sha': os.environ['SOURCE_SHA'], 'results': actual, 'missing': sorted(expected - actual.keys()),
+                     'extra': sorted(actual.keys() - expected), 'failure_summary_present': bool(re.search(r'test result: FAILED\.', text))}
+          pathlib.Path('nvme-results.json').write_text(json.dumps(summary, indent=2) + '\n')
+          print(json.dumps(summary, indent=2))
+          assert len(results) == len(actual) == 7
+          assert actual.keys() == expected
+          assert 'Skip nvme ktest' not in text
+          assert not summary['failure_summary_present']
+          assert all(status == 'ok' for status in actual.values())
+          assert 'test result: ok. 7 passed; 0 failed; 0 filtered out.' in text
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-riscv-nvme
+          path: |
+            tested-source.txt
+            nvme-test.log
+            nvme-results.json
+            qemu.log
+            qemu-serial.log

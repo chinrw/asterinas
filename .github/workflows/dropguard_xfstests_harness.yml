@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Prepared DropGuard full xfstests with validated exclusion loading
+
+on:
+  push:
+    branches: [ci/dropguard-prepared-20261116]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 564bd54533c8b012f441f7fca2863cdde6b57434
+  HARNESS_SHA: 372ac7f04de1ea0b7414422332bd217ec02937ea
+
+jobs:
+  xfstests-full:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    env:
+      RUSTUP_HOME: /root/.rustup
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - name: Free the standard runner tool directories
+        run: |
+          rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+          df -h .
+          free -h
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.HARNESS_SHA }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify Rust identity and unchanged test lists
+        shell: bash
+        run: |
+          set -euo pipefail
+          git_safe=(git -c safe.directory="$GITHUB_WORKSPACE")
+          test "$("${git_safe[@]}" rev-parse HEAD)" = "$HARNESS_SHA"
+          printf "product=%s\nharness=%s\n" "$SOURCE_SHA" "$HARNESS_SHA" | tee tested-source.txt
+          "${git_safe[@]}" diff --exit-code "$SOURCE_SHA" HEAD -- '*.rs' '**/Cargo.toml' '**/Cargo.lock' Cargo.toml Cargo.lock rust-toolchain.toml
+          "${git_safe[@]}" diff --exit-code "$SOURCE_SHA" HEAD -- test/initramfs/src/conformance/xfstests/ext2/run_list/full.list test/initramfs/src/conformance/xfstests/ext2/run_list/block.list
+      - name: Check out the strict verifier from this controller
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .dropguard-controller
+          sparse-checkout: .github/scripts/verify_dropguard_xfstests.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Run the original ext2 full.list and original exclusion file
+        shell: bash
+        run: |
+          set -euo pipefail
+          make run_kernel AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=xfstests RELEASE=1 MEM=12G XFSTESTS_FS_TYPE=ext2 XFSTESTS_RUNLIST=full.list XFSTESTS_DISK_SIZE=12G |& tee xfstests-full.log
+      - name: Verify every intended case passed and exclusions stayed excluded
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .dropguard-controller/.github/scripts/verify_dropguard_xfstests.py \
+            qemu.log \
+            test/initramfs/src/conformance/xfstests/ext2/run_list/full.list \
+            test/initramfs/src/conformance/xfstests/ext2/run_list/block.list \
+            --expected-count 86 | tee xfstests-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xfstests-harness-full-logs
+          path: |
+            tested-source.txt
+            qemu.log
+            qemu-serial.log
+            xfstests-full.log
+            xfstests-results.json
+            test/initramfs/src/conformance/xfstests/ext2/run_list/full.list
+            test/initramfs/src/conformance/xfstests/ext2/run_list/block.list

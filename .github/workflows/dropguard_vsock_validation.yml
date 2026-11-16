@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Prepared DropGuard vsock validation in fork
+
+on:
+  push:
+    branches: [ci/dropguard-prepared-20261116]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 564bd54533c8b012f441f7fca2863cdde6b57434
+  VALIDATION_IMAGE: asterinas/kernel-dev:0.19.0-20261012
+
+jobs:
+  vsock:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - name: Prepare the image and build before timing guest readiness
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          sudo modprobe vhost_vsock
+          sudo apt-get update
+          sudo apt-get install -y socat
+          docker pull "$VALIDATION_IMAGE" |& tee vsock-image-pull.log
+          docker run --rm --privileged -v /dev:/dev \
+            -v "$GITHUB_WORKSPACE:/root/asterinas" -w /root/asterinas \
+            -e RUSTUP_HOME=/root/.rustup --entrypoint /bin/bash "$VALIDATION_IMAGE" -lc \
+            'make kernel AUTO_TEST=vsock ENABLE_KVM=0 SCHEME=microvm RELEASE_MODE=1' |& tee vsock-build.log
+      - name: Run the existing bidirectional test after the guest listens
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          set -euo pipefail
+          validation_container="dropguard-vsock-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          host_server_pid=""
+          cleanup() {
+            docker rm -f "$validation_container" >/dev/null 2>&1 || true
+            if [[ -n "$host_server_pid" ]]; then
+              kill "$host_server_pid" 2>/dev/null || true
+              wait "$host_server_pid" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+          socat -ddd VSOCK-LISTEN:1234,fork \
+            SYSTEM:'while read cmd; do result=$(eval "$cmd" 2>&1); echo "$result"; done' \
+            > host-vsock.log 2>&1 &
+          host_server_pid=$!
+          docker run --rm --name "$validation_container" \
+            --privileged --network=host -v /dev:/dev \
+            -v "$GITHUB_WORKSPACE:/root/asterinas" -w /root/asterinas \
+            -e RUSTUP_HOME=/root/.rustup --entrypoint /bin/bash "$VALIDATION_IMAGE" -lc \
+            'make run_kernel AUTO_TEST=vsock ENABLE_KVM=0 SCHEME=microvm RELEASE_MODE=1' \
+            > guest-vsock.log 2>&1 &
+          guest_runner_pid=$!
+          deadline=$((SECONDS + 360))
+          until grep -qF 'Listen socket successfully' qemu.log 2>/dev/null; do
+            if ! kill -0 "$guest_runner_pid" 2>/dev/null; then
+              cat guest-vsock.log
+              wait "$guest_runner_pid"
+              exit 1
+            fi
+            if (( SECONDS >= deadline )); then
+              cat guest-vsock.log
+              exit 1
+            fi
+            sleep 1
+          done
+          printf 'Hello from host\n' | timeout 20s socat -dd - vsock-connect:3:4321 | tee host-vsock-reply.log
+          grep -qF 'Hello from asterinas' host-vsock-reply.log
+          wait "$guest_runner_pid"
+          grep -q '^Vsock test passed\.' qemu.log
+      - name: Retain test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dropguard-vsock-logs
+          path: |
+            tested-source.txt
+            qemu.log
+            host-vsock.log
+            host-vsock-reply.log
+            guest-vsock.log
+            vsock-image-pull.log
+            vsock-build.log

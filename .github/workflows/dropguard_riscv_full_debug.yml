@@ -1,0 +1,132 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Prepared DropGuard full RISC-V debug cases in the fork
+
+on:
+  push:
+    branches: [ci/dropguard-prepared-20261116]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 564bd54533c8b012f441f7fca2863cdde6b57434
+
+jobs:
+  all-cases:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+      SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - name: Build the original complete image and preserve its command list
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$SOURCE_SHA"
+          make kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0 |& tee original-build.log
+          cp test/initramfs/build/initramfs/opt/ltp/runtest/syscalls original-runtest.txt
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          rows = pathlib.Path('original-runtest.txt').read_text().splitlines()
+          names = [row.split()[0] for row in rows]
+          assert len(names) == len(set(names)) == 563
+          digest = hashlib.sha256(('\n'.join(sorted(names)) + '\n').encode()).hexdigest()
+          assert digest == '3a5d1f747a6ab7c155f3f2373e9acf54ee6672ba0e6a868dccf91b9831e2a957', digest
+          groups = [names[index::8] for index in range(8)]
+          assert set().union(*(set(group) for group in groups)) == set(names)
+          assert sum(map(len, groups)) == len(names)
+          assert all(not set(left) & set(right) for index, left in enumerate(groups)
+                     for right in groups[index + 1:])
+          selected = groups[int(os.environ['SHARD'])]
+          manifest = {'source_sha': os.environ['SOURCE_SHA'], 'full_set_sha256': digest,
+                      'original_names': names, 'all_groups': groups,
+                      'shard': int(os.environ['SHARD']), 'selected': selected,
+                      'grouping_limit': 'Eight fresh boots cover every original case; this does not prove a single uninterrupted sequence.'}
+          pathlib.Path('case-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          pathlib.Path('expected-runtest.txt').write_text(''.join(row + '\n' for row in rows if row.split()[0] in set(selected)))
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write('CONFORMANCE_TEST_SELECTOR=' + ','.join(selected) + '\n')
+          print(f'Original 563 cases in eight disjoint groups; this group {len(selected)}')
+          PY
+      - name: Build selected cases and compare every original command and argument
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          set -euo pipefail
+          make kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0 CONFORMANCE_TEST_SELECTOR="$CONFORMANCE_TEST_SELECTOR" |& tee selected-build.log
+          cp test/initramfs/build/initramfs/opt/ltp/runtest/syscalls selected-runtest.txt
+          cmp expected-runtest.txt selected-runtest.txt
+      - name: Run all selected cases with the original per-case and Kirk limits
+        timeout-minutes: 85
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=30s 80m make run_kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0 CONFORMANCE_TEST_SELECTOR="$CONFORMANCE_TEST_SELECTOR" |& tee selected-run.log
+      - name: Record actual case coverage and preserve failures
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import collections
+          import json
+          import pathlib
+          import re
+          manifest = json.loads(pathlib.Path('case-manifest.json').read_text())
+          text = pathlib.Path('qemu.log').read_text()
+          text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', text).replace('\r', '')
+          results = re.findall(r'^([A-Za-z0-9_]+): (pass|skip|fail|broken)\s+\(', text, re.MULTILINE)
+          names = [name for name, status in results]
+          expected = set(manifest['selected'])
+          coverage = {'source_sha': manifest['source_sha'], 'shard': manifest['shard'],
+                      'selected': manifest['selected'], 'results': dict(results),
+                      'counts': dict(collections.Counter(status for name, status in results)),
+                      'missing': sorted(expected - set(names)), 'extra': sorted(set(names) - expected),
+                      'final_success_marker': 'All conformance tests passed.' in text}
+          pathlib.Path('case-coverage.json').write_text(json.dumps(coverage, indent=2) + '\n')
+          print(json.dumps(coverage, indent=2))
+          assert len(names) == len(set(names)) == len(expected)
+          assert set(names) == expected
+          assert not any(status in {'fail', 'broken'} for name, status in results)
+          assert coverage['final_success_marker']
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-riscv-debug-all563-${{ matrix.shard }}
+          path: |
+            tested-source.txt
+            qemu.log
+            qemu-serial.log
+            original-runtest.txt
+            expected-runtest.txt
+            selected-runtest.txt
+            case-manifest.json
+            case-coverage.json
+            original-build.log
+            selected-build.log
+            selected-run.log

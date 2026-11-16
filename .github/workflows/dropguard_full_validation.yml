@@ -1,0 +1,207 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Prepared DropGuard supplementary validation in fork
+
+on:
+  push:
+    branches: [ci/dropguard-prepared-20261116]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dropguard-full-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOURCE_SHA: 564bd54533c8b012f441f7fca2863cdde6b57434
+
+jobs:
+  ktest-smp4:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [0, 1]
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - name: Run all default-member kernel tests with four CPUs
+        shell: bash
+        run: |
+          set -euo pipefail
+          make ktest NETDEV=tap SMP=4 RELEASE=${{ matrix.release }} |& tee ktest-smp4.log
+      - name: Preserve failures hidden by the kernel test wrapper
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          text = pathlib.Path('ktest-smp4.log').read_text()
+          text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', text)
+          summaries = re.findall(r'^test result: (ok|FAILED)\..*$', text, re.MULTILINE)
+          assert summaries, 'No kernel test summaries were recorded.'
+          assert all(status == 'ok' for status in summaries), 'A kernel test crate reported failure.'
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-ktest-smp4-release${{ matrix.release }}
+          path: |
+            tested-source.txt
+            ktest-smp4.log
+            qemu.log
+            qemu-serial.log
+
+  riscv-smp4:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {release: 0, auto_test: boot}
+          - {release: 1, auto_test: boot}
+          - {release: 1, auto_test: conformance}
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - name: Run RISC-V with explicit SMP and release options
+        shell: bash
+        run: |
+          set -euo pipefail
+          make run_kernel TARGET_ARCH=riscv64 AUTO_TEST=${{ matrix.auto_test }} CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=${{ matrix.release }} |& tee riscv-smp4.log
+      - name: Verify every original release LTP case has a result
+        if: always() && matrix.auto_test == 'conformance'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import collections
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+          original = pathlib.Path('test/initramfs/build/initramfs/opt/ltp/runtest/syscalls')
+          pathlib.Path('release-runtest.txt').write_bytes(original.read_bytes())
+          names = [row.split()[0] for row in original.read_text().splitlines()]
+          digest = hashlib.sha256(('\n'.join(sorted(names)) + '\n').encode()).hexdigest()
+          assert len(names) == len(set(names)) == 563
+          assert digest == '3a5d1f747a6ab7c155f3f2373e9acf54ee6672ba0e6a868dccf91b9831e2a957', digest
+          text = pathlib.Path('qemu.log').read_text()
+          text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', text).replace('\r', '')
+          results = re.findall(r'^([A-Za-z0-9_]+): (pass|skip|fail|broken)\s+\(', text, re.MULTILINE)
+          observed = [name for name, status in results]
+          expected = set(names)
+          coverage = {'source_sha': os.environ['SOURCE_SHA'], 'full_set_sha256': digest,
+                      'results': dict(results), 'counts': dict(collections.Counter(status for name, status in results)),
+                      'missing': sorted(expected - set(observed)), 'extra': sorted(set(observed) - expected),
+                      'final_success_marker': 'All conformance tests passed.' in text}
+          pathlib.Path('release-coverage.json').write_text(json.dumps(coverage, indent=2) + '\n')
+          print(json.dumps(coverage, indent=2))
+          assert len(observed) == len(set(observed)) == len(expected)
+          assert set(observed) == expected
+          assert not any(status in {'fail', 'broken'} for name, status in results)
+          assert coverage['final_success_marker']
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-riscv-smp4-${{ matrix.auto_test }}-release${{ matrix.release }}
+          path: |
+            tested-source.txt
+            riscv-smp4.log
+            qemu.log
+            qemu-serial.log
+            release-runtest.txt
+            release-coverage.json
+
+  docs:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: asterinas/kernel-dev:0.19.0-20261012
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - name: Build all documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          make docs |& tee documentation-build.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-docs
+          path: |
+            tested-source.txt
+            documentation-build.log
+
+  licenses:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - uses: apache/skywalking-eyes@v0.5.0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-license-inputs
+          path: |
+            tested-source.txt
+            .licenserc.yaml
+            LICENSE

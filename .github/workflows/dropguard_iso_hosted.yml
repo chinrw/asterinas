@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Prepared DropGuard ISO validation on hosted runner
+
+on:
+  push:
+    branches: [ci/dropguard-prepared-20261116]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 564bd54533c8b012f441f7fca2863cdde6b57434
+
+jobs:
+  iso:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    env:
+      RUSTUP_HOME: /root/.rustup
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - name: Free the standard runner tool directories
+        run: |
+          rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+          df -h .
+          free -h
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - name: Verify the product revision
+        run: test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Build the original hello installer
+        timeout-minutes: 60
+        shell: bash
+        run: |
+          set -euo pipefail
+          make iso NIXOS_TEST_SUITE=hello |& tee iso-build.log
+      - name: Install the original ISO
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -o pipefail
+          make run_iso |& tee iso-install.log || true
+          tail --lines 10 qemu.log | grep -q '^Congratulations!'
+          cp qemu.log iso-install-qemu.log
+      - name: Boot the installed system and run hello
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          make run_nixos NIXOS_TEST_SUITE=hello |& tee iso-hello.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hosted-iso-validation-logs
+          path: |
+            tested-source.txt
+            qemu.log
+            qemu-serial.log
+            iso-install-qemu.log
+            iso-build.log
+            iso-install.log
+            iso-hello.log

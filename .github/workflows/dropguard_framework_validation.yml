@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Prepared DropGuard framework validation in fork
+
+on:
+  push:
+    branches: [ci/dropguard-prepared-20261116]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 564bd54533c8b012f441f7fca2863cdde6b57434
+
+jobs:
+  framework:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: asterinas/kernel-dev:0.19.0-20261012
+    env:
+      RUSTUP_HOME: /root/.rustup
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - name: Verify tested revision
+        shell: bash
+        run: test "$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Run the complete NixOS test workspace host tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --manifest-path test/nixos/Cargo.toml --workspace --locked |& tee framework-tests.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-framework-tests
+          path: |
+            tested-source.txt
+            framework-tests.log

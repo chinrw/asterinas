@@ -1,0 +1,139 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Prepared DropGuard environment validation in fork
+
+on:
+  push:
+    branches: [ci/dropguard-prepared-20261116]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 564bd54533c8b012f441f7fca2863cdde6b57434
+
+jobs:
+  evaluate:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - uses: cachix/install-nix-action@v31
+      - name: Check the pinned Nix sources and flake
+        shell: bash
+        run: |
+          set -euo pipefail
+          exec > >(tee environment-evaluate.log) 2>&1
+          flake_source="$(nix flake archive --json --no-update-lock-file . | jq -r '.inputs.nixpkgs.path')"
+          legacy_source="$(nix-instantiate --eval --strict --json --expr 'toString (import ./distro/nixpkgs.nix {}).path' | jq -r .)"
+          test "$legacy_source" = "$flake_source"
+          nix flake check --no-build --all-systems --no-update-lock-file
+          for system in x86_64-linux aarch64-linux; do
+            nix-instantiate --eval --strict --argstr system "$system" test/initramfs/nix/check-host-clients.nix > /dev/null
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-environment-evaluate
+          path: |
+            tested-source.txt
+            environment-evaluate.log
+
+  dev-shell:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs_on: ubuntu-latest
+            enable_kvm: 1
+          - runs_on: ubuntu-24.04-arm
+            enable_kvm: 0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: aster-nixos-dev
+          skipPush: true
+      - name: Run the complete check in the Nix development shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix develop --accept-flake-config --ignore-environment --keep HOME --command make check |& tee nix-shell-check.log
+      - name: Build and boot through the Nix development shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix develop --accept-flake-config --ignore-environment --keep HOME --keep NIX_USER_CONF_FILES --command make run_kernel AUTO_TEST=boot ENABLE_KVM=${{ matrix.enable_kvm }} |& tee nix-shell-boot.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-dev-shell-${{ matrix.runs_on }}
+          path: |
+            tested-source.txt
+            nix-shell-check.log
+            nix-shell-boot.log
+            qemu.log
+            qemu-serial.log
+
+  devcontainer:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Record the actual tested product revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf '%s\n' "$actual" | tee tested-source.txt
+      - name: Check the image version
+        shell: bash
+        run: |
+          expected=$(cat DOCKER_IMAGE_VERSION)
+          grep -q "asterinas/dev:${expected}" .devcontainer/devcontainer.json
+      - uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            set -eu
+            { rustc --version && cargo --version && make --version; } > devcontainer-tools.log 2>&1
+            cat devcontainer-tools.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-devcontainer-tools
+          path: |
+            tested-source.txt
+            devcontainer-tools.log
