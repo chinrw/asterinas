@@ -14,15 +14,15 @@ jobs:
     if: github.repository == 'chinrw/asterinas'
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    env:
-      QUIET_OUTPUT: ${{ runner.temp }}/dropguard-pipe13-quiet
     steps:
       - name: Start the bounded host budget
         shell: bash
         run: |
           python3 - <<'PYTHON'
           import json,os,pathlib,time
-          output=pathlib.Path(os.environ['QUIET_OUTPUT'])
+          output=pathlib.Path(os.environ['RUNNER_TEMP'])/'dropguard-pipe13-quiet'
+          with open(os.environ['GITHUB_ENV'],'a') as env:
+              env.write(f'QUIET_OUTPUT={output}\n')
           output.mkdir()
           started=time.monotonic()
           state={'host_boot_id':pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
