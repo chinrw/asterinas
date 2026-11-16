@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use core::mem::DropGuard;
+
 use aster_rights::ReadWriteOp;
 #[cfg(target_arch = "x86_64")]
 use ostd::arch::cpu::context::{FsBase, GsBase};
@@ -256,19 +258,23 @@ fn wait_other_threads_exit(ctx: &Context) -> Result<()> {
         // Wait until any signal comes or any other thread exits.
         let (waiter, waker) = Waiter::new_pair();
 
-        ctx.posix_thread
-            .set_signalled_waker(waker.clone(), PauseReason::Sleep);
-        if ctx.has_pending_sigkill() {
-            ctx.posix_thread.clear_signalled_waker();
-            return_errno_with_message!(Errno::EAGAIN, "the current thread has received SIGKILL");
+        {
+            ctx.posix_thread
+                .set_signalled_waker(waker.clone(), PauseReason::Sleep);
+            let _signalled_waker_guard =
+                DropGuard::new(ctx.posix_thread, |thread| thread.clear_signalled_waker());
+            if ctx.has_pending_sigkill() {
+                return_errno_with_message!(
+                    Errno::EAGAIN,
+                    "the current thread has received SIGKILL"
+                );
+            }
+
+            tasks.set_execve_waker(waker);
+            drop(tasks);
+
+            waiter.wait();
         }
-
-        tasks.set_execve_waker(waker);
-        drop(tasks);
-
-        waiter.wait();
-
-        ctx.posix_thread.clear_signalled_waker();
 
         tasks = ctx.process.tasks().lock();
         tasks.clear_execve_waker();
