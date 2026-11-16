@@ -22,6 +22,7 @@
 //! for complete documentation on creating and running test suites.
 
 #![deny(unsafe_code)]
+#![feature(drop_guard)]
 
 use std::{env, fmt, time::Duration};
 
