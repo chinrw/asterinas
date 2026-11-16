@@ -520,8 +520,13 @@ def round_run(number):
         expected_sdk = json.loads((OUTPUT / f"preparation/{version}/sdk.json").read_text())
         assert before["sdk_sha256"] == expected_sdk["sdk_sha256"]
         for other in ["baseline", "candidate"]:
-            _, processes = command(["docker", "top", container_name(other), "-eo", "comm,args"])
-            assert not re.search(r"^(?:qemu-system|cargo|rustc)\S*\s", processes, re.MULTILINE), processes
+            _, processes = command(["docker", "top", container_name(other), "-eo", "pid,comm,args"])
+            commands = []
+            for line in processes.splitlines()[1:]:
+                fields = line.split(None, 1)
+                assert len(fields) == 2 and fields[0].isdigit(), line
+                commands.append(fields[1])
+            assert not re.search(r"^(?:qemu-system|cargo|rustc|make)\S*\s", "\n".join(commands), re.MULTILINE), processes
         records = json.loads((OUTPUT / "preparation/common-disks.json").read_text())
         for item in records:
             path = item["file"]
