@@ -1,0 +1,334 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Repeat the original quiet pipe13 group on one fork runner
+
+on:
+  push:
+    branches: [ci/dropguard-pipe13-quiet-20261116]
+
+permissions:
+  contents: read
+
+jobs:
+  quiet-comparison:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      QUIET_OUTPUT: ${{ runner.temp }}/dropguard-pipe13-quiet
+    steps:
+      - name: Start the bounded host budget
+        shell: bash
+        run: |
+          python3 - <<'PYTHON'
+          import json,os,pathlib,time
+          output=pathlib.Path(os.environ['QUIET_OUTPUT'])
+          output.mkdir()
+          started=time.monotonic()
+          state={'host_boot_id':pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                 'started_monotonic':started,'deadline_monotonic':started+350*60,
+                 'planned_maximum_rounds':24,'minimum_rounds':12,'pair_reserve_minutes':175}
+          (output/'state.json').write_text(json.dumps(state,indent=2)+'\n')
+          PYTHON
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: controller
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: a0de2258c56b03ba1a6aa417a05f10bdc0f54ff4
+          path: checkouts/baseline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 564bd54533c8b012f441f7fca2863cdde6b57434
+          path: checkouts/candidate
+          persist-credentials: false
+      - name: Prepare both versions through the original Make workflow
+        id: prepare
+        timeout-minutes: 185
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py prepare
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-preparation
+          path: ${{ env.QUIET_OUTPUT }}/preparation/
+      - name: Round 01 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round01-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-01-baseline/
+          if-no-files-found: ignore
+      - name: Round 02 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round02-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-02-candidate/
+          if-no-files-found: ignore
+      - name: Round 03 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round03-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-03-candidate/
+          if-no-files-found: ignore
+      - name: Round 04 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 4
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round04-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-04-baseline/
+          if-no-files-found: ignore
+      - name: Round 05 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 5
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round05-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-05-baseline/
+          if-no-files-found: ignore
+      - name: Round 06 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 6
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round06-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-06-candidate/
+          if-no-files-found: ignore
+      - name: Round 07 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round07-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-07-candidate/
+          if-no-files-found: ignore
+      - name: Round 08 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 8
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round08-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-08-baseline/
+          if-no-files-found: ignore
+      - name: Round 09 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 9
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round09-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-09-baseline/
+          if-no-files-found: ignore
+      - name: Round 10 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 10
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round10-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-10-candidate/
+          if-no-files-found: ignore
+      - name: Round 11 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 11
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round11-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-11-candidate/
+          if-no-files-found: ignore
+      - name: Round 12 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 12
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round12-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-12-baseline/
+          if-no-files-found: ignore
+      - name: Round 13 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 13
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round13-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-13-baseline/
+          if-no-files-found: ignore
+      - name: Round 14 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round14-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-14-candidate/
+          if-no-files-found: ignore
+      - name: Round 15 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 15
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round15-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-15-candidate/
+          if-no-files-found: ignore
+      - name: Round 16 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 16
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round16-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-16-baseline/
+          if-no-files-found: ignore
+      - name: Round 17 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 17
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round17-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-17-baseline/
+          if-no-files-found: ignore
+      - name: Round 18 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 18
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round18-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-18-candidate/
+          if-no-files-found: ignore
+      - name: Round 19 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 19
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round19-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-19-candidate/
+          if-no-files-found: ignore
+      - name: Round 20 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 20
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round20-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-20-baseline/
+          if-no-files-found: ignore
+      - name: Round 21 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 21
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round21-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-21-baseline/
+          if-no-files-found: ignore
+      - name: Round 22 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 22
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round22-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-22-candidate/
+          if-no-files-found: ignore
+      - name: Round 23 (candidate)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 23
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round23-candidate
+          path: ${{ env.QUIET_OUTPUT }}/round-23-candidate/
+          if-no-files-found: ignore
+      - name: Round 24 (baseline)
+        if: ${{ !cancelled() && steps.prepare.conclusion == 'success' }}
+        timeout-minutes: 85
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py round 24
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-round24-baseline
+          path: ${{ env.QUIET_OUTPUT }}/round-24-baseline/
+          if-no-files-found: ignore
+      - name: Record all observations and retain original failures
+        if: always()
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py finalize
+      - name: Stop only this run's private containers
+        if: always()
+        shell: bash
+        run: python3 controller/.github/scripts/dropguard_pipe13_quiet.py cleanup
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-pipe13-complete
+          path: ${{ env.QUIET_OUTPUT }}/

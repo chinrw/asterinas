@@ -1,0 +1,2575 @@
+{
+  "source_shas": {
+    "baseline": "a0de2258c56b03ba1a6aa417a05f10bdc0f54ff4",
+    "candidate": "564bd54533c8b012f441f7fca2863cdde6b57434"
+  },
+  "image": {
+    "tag": "asterinas/kernel-dev:0.19.0-20261012",
+    "digest": "sha256:97d370e2260fec73f59d9ee02a128edb84141789248e4c1c4b18f05da8bf4e51",
+    "image_container_os": "Ubuntu 24.4.0 (noble), from exact-digest CLI probe",
+    "original_host_os": "Ubuntu 26.04.1 LTS",
+    "original_host_image": "ubuntu-26.04 20261111.196.1",
+    "original_host_region": "Azure westus",
+    "original_host_runner_name": "GitHub Actions 1000023475",
+    "original_host_runner_version": "2.338.2",
+    "original_host_cpu_model": null,
+    "original_host_nproc": null,
+    "host_cpu_limit": "No --cpus or --memory option is present in original Docker create; host CPU model/count/cgroup limits were not recorded.",
+    "physical_original_runner_reusable": false
+  },
+  "container": {
+    "workdir": "/__w/asterinas/asterinas",
+    "options": [
+      "--privileged",
+      "-v /dev:/dev"
+    ],
+    "network": "GHA-created default Docker bridge network; not host network",
+    "env": {
+      "HOME": "/github/home",
+      "RUSTUP_HOME": "/root/.rustup",
+      "SHARD": "1",
+      "PATH": "/root/asterinas/target/bin:/root/.local/bin:/nix/var/nix/profiles/default/bin:/usr/local/grub/bin:/usr/local/qemu/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "LD_LIBRARY_PATH": "/usr/local/qemu/lib/amd64-linux-gnu",
+      "VDSO_LIBRARY_DIR": "/root/linux_vdso",
+      "GVISOR_PREBUILT_DIR": "/root/syscall_test_bins",
+      "CI": "true",
+      "GITHUB_ACTIONS": "true"
+    },
+    "must_remain_unset": [
+      "CARGO_HOME",
+      "CARGO_TARGET_DIR",
+      "CMDLINE",
+      "KIRK_VERBOSE",
+      "CARGO_OSDK",
+      "RUSTFLAGS",
+      "RUSTC_WRAPPER",
+      "OSTD_TASK_STACK_SIZE_IN_PAGES",
+      "NIX_REMOTE"
+    ],
+    "home_mount": "The original GHA host home bind mount masks the image built-in /github/home/.cargo -> /root/.cargo symlink. Use a distinct empty host-owned home mount; original Nix warns HOME is not owned by root and falls back to /root."
+  },
+  "commands": {
+    "full_build": "make kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0",
+    "selected_build": "make kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0 CONFORMANCE_TEST_SELECTOR=\"$CONFORMANCE_TEST_SELECTOR\"",
+    "run": "timeout --signal=TERM --kill-after=30s 80m make run_kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0 CONFORMANCE_TEST_SELECTOR=\"$CONFORMANCE_TEST_SELECTOR\"",
+    "output_pipe": "|& tee selected-run.log",
+    "sdk_install": "OSDK_LOCAL_DEV=1 cargo install cargo-osdk --path osdk",
+    "sdk_install_profile": "release",
+    "sdk_install_locked_flag": false,
+    "sdk_installed_path": "/github/home/.cargo/bin/cargo-osdk"
+  },
+  "runtest": {
+    "full_count": 563,
+    "full_bytes_sha256": "c8636d433bcd95782fd3068451ef90296dc33e3022f5e501f6ba0305313c3bea",
+    "full_names_sha256": "3a5d1f747a6ab7c155f3f2373e9acf54ee6672ba0e6a868dccf91b9831e2a957",
+    "selection_rule": "original_names[1::8], preserving original file row bytes and order",
+    "selected_count": 71,
+    "selected_bytes_sha256": "b36311e56c59bf3247c663d084d35e6d97878bbb78719cfe6ef35bf3c0259e11",
+    "selected_names": [
+      "access03",
+      "brk02",
+      "chmod03",
+      "chroot04",
+      "clone06",
+      "creat01",
+      "dup204",
+      "epoll_create1_01",
+      "epoll_wait07",
+      "eventfd2_03",
+      "fallocate03",
+      "fchmod01",
+      "fchmodat2_02",
+      "fcntl02_64",
+      "fcntl08_64",
+      "fcntl14_64",
+      "fgetxattr03",
+      "flock06",
+      "fork08",
+      "fsmount02",
+      "fstatfs02",
+      "futimesat01",
+      "geteuid01",
+      "gethostname01",
+      "getppid02",
+      "getresgid01",
+      "getrlimit03",
+      "getuid03",
+      "kill08",
+      "listxattr01",
+      "lstat01_64",
+      "memcpy01",
+      "mknodat01",
+      "mmap19",
+      "mremap03",
+      "nice02",
+      "newuname01",
+      "pipe02",
+      "pipe13",
+      "pipeio_7",
+      "prctl07",
+      "preadv201_64",
+      "pwrite03",
+      "pwritev201",
+      "readlinkat02",
+      "rename07",
+      "renameat201",
+      "rt_sigsuspend01",
+      "sched_setparam01",
+      "semop03",
+      "sendfile05_64",
+      "sendfile09_64",
+      "setfsgid03",
+      "setegid01",
+      "setitimer02",
+      "setresgid01",
+      "setreuid02",
+      "setrlimit04",
+      "sigaltstack01",
+      "signalfd4_01",
+      "socketpair02",
+      "statfs03_64",
+      "sysinfo01",
+      "timerfd_create01",
+      "truncate02",
+      "unlink07",
+      "wait01",
+      "waitid01",
+      "waitid11",
+      "futex_wait01",
+      "statx02"
+    ],
+    "pipe13_ordinal_one_based": 39,
+    "fcntl14_64_ordinal_one_based": 16,
+    "command_line_for_pipe13": "pipe13 pipe13 "
+  },
+  "timers": {
+    "original_full_build_step_minutes": 45,
+    "original_selected_build_step_minutes": 45,
+    "original_run_step_minutes": 85,
+    "outer_make_timeout_minutes": 80,
+    "outer_kill_after_seconds": 30,
+    "LTP_TIMEOUT_MUL": 5,
+    "Kirk_default_suite_timeout_seconds": 3600,
+    "original_run_step_wall_seconds": 717,
+    "original_UI_execution_seconds": 549,
+    "original_pipeline_status": "failure; result 67 pass, 2 skip, 2 broken (fcntl14_64, pipe13).",
+    "pipe13_original_seconds": 27.198
+  },
+  "guest": {
+    "arch": "riscv64",
+    "kernel_build_profile": "dev (unoptimized + debuginfo)",
+    "smp": 4,
+    "memory": "8G",
+    "boot": "vmm-direct",
+    "qemu_cpu": "rv64,svpbmt=true,zkr=true",
+    "qemu_machine": "virt",
+    "qemu_acceleration": "No KVM/accel option in RISC-V scheme; default QEMU TCG.",
+    "console": "hvc0",
+    "workdir": "/tmp",
+    "ltp_device": "/dev/vdc",
+    "ltp_version": "20260529",
+    "kirk_version": "v4.1.0",
+    "attached_images": [
+      "test/initramfs/build/ext2.img",
+      "test/initramfs/build/exfat.img",
+      "test/initramfs/build/ltp_dev.img"
+    ],
+    "built_unattached_image": "test/initramfs/build/nvme0n1.img",
+    "disk_reset_requirement": "Make creates data images only when missing; repeated boots otherwise reuse changed media. Preserve post-build/pre-first-boot pristine copies and restore the same disk bytes before every fresh guest, recording hashes. Do not change image sizes/formats or source scripts.",
+    "rootfs": "fresh initramfs each guest; original INITRAMFS on, no rootfs.img attachment",
+    "random_forwarded_ports": "qemu_args.sh logs random user forward ports, but the riscv QEMU_ARGS branch does not attach NETDEV_ARGS. Preserve generator/defaults rather than introducing pinned ports."
+  },
+  "unchanged_source_input_files": [
+    {
+      "path": "Makefile",
+      "sha256": "f38623aa4d9cc2a16c4426179cadf3fe734bb02a7b97f6b14a0f80f6294724e9",
+      "identical_between_sources": true
+    },
+    {
+      "path": "OSDK.toml",
+      "sha256": "155af7cb53b4dffc679393b8fc7c2c1719a74134a0ec2b0812f0c4b53a6c609b",
+      "identical_between_sources": true
+    },
+    {
+      "path": "tools/qemu_args.sh",
+      "sha256": "518981329ac95b295f594a08136dbacbdd301334221ef4088c1b5b913a88cc59",
+      "identical_between_sources": true
+    },
+    {
+      "path": "test/initramfs/Makefile",
+      "sha256": "a861ab13580b97ae20ccbc35052f77343b1bb9ef783d4a3e66ea88ac64415639",
+      "identical_between_sources": true
+    },
+    {
+      "path": "test/initramfs/src/init",
+      "sha256": "289b9a24c6ed61b7a6517064b371a4d93a0e58a4bbda9c5517bc7ab166844670",
+      "identical_between_sources": true
+    },
+    {
+      "path": "test/initramfs/src/conformance/run_conformance_test.sh",
+      "sha256": "8917d2cb0ced91ac0da0f2333cd74165c49eb4e2ebd3a14d0603137b78a01f13",
+      "identical_between_sources": true
+    },
+    {
+      "path": "test/initramfs/src/conformance/ltp/run_ltp_test.sh",
+      "sha256": "e522d38ab6934caa857c3c9cbd8fd5f32f87ca099bd05fc47afe689252f4de05",
+      "identical_between_sources": true
+    },
+    {
+      "path": "test/initramfs/src/conformance/ltp/build_ltp_package.sh",
+      "sha256": "635a60ec3e8ac746789b57a3fd75f12d7359bfe8c3c3cb75c527b84298ef152e",
+      "identical_between_sources": true
+    },
+    {
+      "path": "test/initramfs/nix/conformance/ltp.nix",
+      "sha256": "20fc112d30f67a77e40d645c25dc8ac0879ae8562b02501dd2aee02d1b23d718",
+      "identical_between_sources": true
+    },
+    {
+      "path": "flake.lock",
+      "sha256": "8886d322a872184c6beb804737ebc9afe459ad86b04eb010a4759d36181836ff",
+      "identical_between_sources": true
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "sha256": "b2508d8c9cd57258fad2fc77737e07172846161f6a7dd726cbd8e974de69c6f7",
+      "identical_between_sources": true
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "62f34083a95cb060bcbee8f0481b841d558309889031ef71eea7bdb3e9acb56a",
+      "identical_between_sources": true
+    },
+    {
+      "path": "osdk/Cargo.toml",
+      "sha256": "a13930fee211784f779a170a9f7c17ceb3ad017ab9805ba75a503a6597616190",
+      "identical_between_sources": true
+    },
+    {
+      "path": "osdk/Cargo.lock",
+      "sha256": "64b27fc01b5fc0d11a1ced141fb8ea3d8fec1041aef6058731ed0d3abc7445ad",
+      "identical_between_sources": true
+    }
+  ],
+  "limits": [
+    "Original exact host CPU model, nproc, cgroup quotas, original data disk bytes and original generated install Cargo.lock were not archived. Reproduce the configuration and compare both sources on the same new host; do not claim the original VM or every original bit was recovered.",
+    "Cargo lock resolution153 is recorded, but the compiled log enumerates102 packages only. Complete inactive dependency graph remains unknown.",
+    "Original quiet output contains no pipe13 internal TBROK reason, so a new baseline broken establishes same case outcome class, not necessarily identical internal cause."
+  ],
+  "original_evidence": {
+    "run_id": 43793399848,
+    "job_id": 133056683761,
+    "artifact_id": 14194665167,
+    "controller_sha": "70fb2d50ca8a1ed26551f6c99d8e5cee32f36925"
+  },
+  "sdk": {
+    "resolver_package_count": 153,
+    "compiled_package_count": 102,
+    "compiled_packages": [
+      {
+        "name": "quote",
+        "version": "1.0.47",
+        "path": null
+      },
+      {
+        "name": "proc-macro2",
+        "version": "1.0.107",
+        "path": null
+      },
+      {
+        "name": "unicode-ident",
+        "version": "1.0.27",
+        "path": null
+      },
+      {
+        "name": "libc",
+        "version": "0.2.191",
+        "path": null
+      },
+      {
+        "name": "memchr",
+        "version": "2.8.3",
+        "path": null
+      },
+      {
+        "name": "serde_core",
+        "version": "1.0.229",
+        "path": null
+      },
+      {
+        "name": "cfg-if",
+        "version": "1.0.5",
+        "path": null
+      },
+      {
+        "name": "syn",
+        "version": "3.0.10",
+        "path": null
+      },
+      {
+        "name": "syn",
+        "version": "2.0.119",
+        "path": null
+      },
+      {
+        "name": "serde",
+        "version": "1.0.229",
+        "path": null
+      },
+      {
+        "name": "zerocopy",
+        "version": "0.8.63",
+        "path": null
+      },
+      {
+        "name": "utf8parse",
+        "version": "0.2.2",
+        "path": null
+      },
+      {
+        "name": "once_cell",
+        "version": "1.21.4",
+        "path": null
+      },
+      {
+        "name": "anstyle-parse",
+        "version": "1.0.0",
+        "path": null
+      },
+      {
+        "name": "aho-corasick",
+        "version": "1.1.5",
+        "path": null
+      },
+      {
+        "name": "regex-syntax",
+        "version": "0.8.11",
+        "path": null
+      },
+      {
+        "name": "serde_derive",
+        "version": "1.0.229",
+        "path": null
+      },
+      {
+        "name": "zerocopy-derive",
+        "version": "0.8.63",
+        "path": null
+      },
+      {
+        "name": "is_terminal_polyfill",
+        "version": "1.70.2",
+        "path": null
+      },
+      {
+        "name": "colorchoice",
+        "version": "1.0.5",
+        "path": null
+      },
+      {
+        "name": "anstyle-query",
+        "version": "1.1.5",
+        "path": null
+      },
+      {
+        "name": "anstyle",
+        "version": "1.0.14",
+        "path": null
+      },
+      {
+        "name": "crossbeam-utils",
+        "version": "0.8.23",
+        "path": null
+      },
+      {
+        "name": "anstream",
+        "version": "1.0.0",
+        "path": null
+      },
+      {
+        "name": "regex-automata",
+        "version": "0.4.18",
+        "path": null
+      },
+      {
+        "name": "getrandom",
+        "version": "0.3.4",
+        "path": null
+      },
+      {
+        "name": "version_check",
+        "version": "0.9.5",
+        "path": null
+      },
+      {
+        "name": "parking_lot_core",
+        "version": "0.9.12",
+        "path": null
+      },
+      {
+        "name": "hashbrown",
+        "version": "0.17.1",
+        "path": null
+      },
+      {
+        "name": "equivalent",
+        "version": "1.0.3",
+        "path": null
+      },
+      {
+        "name": "autocfg",
+        "version": "1.5.1",
+        "path": null
+      },
+      {
+        "name": "num-traits",
+        "version": "0.2.19",
+        "path": null
+      },
+      {
+        "name": "indexmap",
+        "version": "2.14.2",
+        "path": null
+      },
+      {
+        "name": "regex",
+        "version": "1.13.1",
+        "path": null
+      },
+      {
+        "name": "ahash",
+        "version": "0.8.12",
+        "path": null
+      },
+      {
+        "name": "rustix",
+        "version": "1.1.6",
+        "path": null
+      },
+      {
+        "name": "log",
+        "version": "0.4.35",
+        "path": null
+      },
+      {
+        "name": "heck",
+        "version": "0.5.0",
+        "path": null
+      },
+      {
+        "name": "zmij",
+        "version": "1.0.23",
+        "path": null
+      },
+      {
+        "name": "getrandom",
+        "version": "0.4.3",
+        "path": null
+      },
+      {
+        "name": "smallvec",
+        "version": "1.16.5",
+        "path": null
+      },
+      {
+        "name": "itoa",
+        "version": "1.0.19",
+        "path": null
+      },
+      {
+        "name": "scopeguard",
+        "version": "1.2.0",
+        "path": null
+      },
+      {
+        "name": "bitflags",
+        "version": "2.13.2",
+        "path": null
+      },
+      {
+        "name": "jiff-core",
+        "version": "0.1.8",
+        "path": null
+      },
+      {
+        "name": "portable-atomic",
+        "version": "1.15.0",
+        "path": null
+      },
+      {
+        "name": "crc32fast",
+        "version": "1.5.5",
+        "path": null
+      },
+      {
+        "name": "strsim",
+        "version": "0.11.1",
+        "path": null
+      },
+      {
+        "name": "clap_lex",
+        "version": "1.1.1",
+        "path": null
+      },
+      {
+        "name": "clap_builder",
+        "version": "4.6.7",
+        "path": null
+      },
+      {
+        "name": "jiff",
+        "version": "0.2.46",
+        "path": null
+      },
+      {
+        "name": "lock_api",
+        "version": "0.4.14",
+        "path": null
+      },
+      {
+        "name": "clap_derive",
+        "version": "4.6.7",
+        "path": null
+      },
+      {
+        "name": "env_filter",
+        "version": "2.0.0",
+        "path": null
+      },
+      {
+        "name": "toml_datetime",
+        "version": "0.6.11",
+        "path": null
+      },
+      {
+        "name": "serde_spanned",
+        "version": "0.6.9",
+        "path": null
+      },
+      {
+        "name": "ostd-pod-macros",
+        "version": "0.4.0",
+        "path": "/__w/asterinas/asterinas/ostd/libs/ostd-pod/macros"
+      },
+      {
+        "name": "padding-struct",
+        "version": "0.2.0",
+        "path": "/__w/asterinas/asterinas/ostd/libs/padding-struct"
+      },
+      {
+        "name": "errno",
+        "version": "0.3.15",
+        "path": null
+      },
+      {
+        "name": "adler2",
+        "version": "2.0.1",
+        "path": null
+      },
+      {
+        "name": "hashbrown",
+        "version": "0.14.5",
+        "path": null
+      },
+      {
+        "name": "linux-raw-sys",
+        "version": "0.12.1",
+        "path": null
+      },
+      {
+        "name": "winnow",
+        "version": "0.7.15",
+        "path": null
+      },
+      {
+        "name": "arrayvec",
+        "version": "0.7.8",
+        "path": null
+      },
+      {
+        "name": "toml_write",
+        "version": "0.1.2",
+        "path": null
+      },
+      {
+        "name": "signal-hook",
+        "version": "0.3.18",
+        "path": null
+      },
+      {
+        "name": "bytemuck",
+        "version": "1.25.2",
+        "path": null
+      },
+      {
+        "name": "unicode-width",
+        "version": "0.2.3",
+        "path": null
+      },
+      {
+        "name": "serde_json",
+        "version": "1.0.154",
+        "path": null
+      },
+      {
+        "name": "zero",
+        "version": "0.1.3",
+        "path": null
+      },
+      {
+        "name": "console",
+        "version": "0.15.11",
+        "path": null
+      },
+      {
+        "name": "xmas-elf",
+        "version": "0.10.0",
+        "path": null
+      },
+      {
+        "name": "toml_edit",
+        "version": "0.22.27",
+        "path": null
+      },
+      {
+        "name": "rgb",
+        "version": "0.8.53",
+        "path": null
+      },
+      {
+        "name": "num-format",
+        "version": "0.4.4",
+        "path": null
+      },
+      {
+        "name": "dashmap",
+        "version": "6.2.1",
+        "path": null
+      },
+      {
+        "name": "ostd-pod",
+        "version": "0.4.0",
+        "path": "/__w/asterinas/asterinas/ostd/libs/ostd-pod"
+      },
+      {
+        "name": "miniz_oxide",
+        "version": "0.8.9",
+        "path": null
+      },
+      {
+        "name": "signal-hook-registry",
+        "version": "1.4.8",
+        "path": null
+      },
+      {
+        "name": "env_logger",
+        "version": "0.11.11",
+        "path": null
+      },
+      {
+        "name": "clap",
+        "version": "4.6.7",
+        "path": null
+      },
+      {
+        "name": "crossbeam-channel",
+        "version": "0.5.17",
+        "path": null
+      },
+      {
+        "name": "is-terminal",
+        "version": "0.4.17",
+        "path": null
+      },
+      {
+        "name": "quick-xml",
+        "version": "0.26.0",
+        "path": null
+      },
+      {
+        "name": "iana-time-zone",
+        "version": "0.1.65",
+        "path": null
+      },
+      {
+        "name": "semver",
+        "version": "1.0.28",
+        "path": null
+      },
+      {
+        "name": "align_ext",
+        "version": "0.1.0",
+        "path": "/__w/asterinas/asterinas/ostd/libs/align_ext"
+      },
+      {
+        "name": "str_stack",
+        "version": "0.1.1",
+        "path": null
+      },
+      {
+        "name": "number_prefix",
+        "version": "0.4.0",
+        "path": null
+      },
+      {
+        "name": "fastrand",
+        "version": "2.5.0",
+        "path": null
+      },
+      {
+        "name": "indicatif",
+        "version": "0.17.11",
+        "path": null
+      },
+      {
+        "name": "tempfile",
+        "version": "3.27.0",
+        "path": null
+      },
+      {
+        "name": "inferno",
+        "version": "0.11.21",
+        "path": null
+      },
+      {
+        "name": "linux-bzimage-builder",
+        "version": "0.19.0",
+        "path": "/__w/asterinas/asterinas/ostd/libs/linux-bzimage/builder"
+      },
+      {
+        "name": "rustc_version",
+        "version": "0.4.1",
+        "path": null
+      },
+      {
+        "name": "chrono",
+        "version": "0.4.45",
+        "path": null
+      },
+      {
+        "name": "toml",
+        "version": "0.8.23",
+        "path": null
+      },
+      {
+        "name": "which",
+        "version": "8.0.6",
+        "path": null
+      },
+      {
+        "name": "rev_buf_reader",
+        "version": "0.3.0",
+        "path": null
+      },
+      {
+        "name": "shlex",
+        "version": "1.3.0",
+        "path": null
+      },
+      {
+        "name": "whoami",
+        "version": "1.6.1",
+        "path": null
+      },
+      {
+        "name": "cargo-osdk",
+        "version": "0.19.0",
+        "path": "/__w/asterinas/asterinas/osdk"
+      }
+    ]
+  },
+  "original_selected_initramfs": {
+    "directory": "/nix/store/sg2g0r6srh4cj8ds35f9d83cv2a3yln0-initramfs",
+    "image": "/nix/store/l7p6g4j9z0lc8jw45qzgzbmbyrafz7fm-initramfs-image"
+  },
+  "kernel_compilation": {
+    "compiled_package_count": 164,
+    "compiled_packages": [
+      {
+        "name": "compiler_builtins",
+        "version": "0.1.160",
+        "source_kind": "rust_std",
+        "source": "/root/.rustup/toolchains/nightly-2026-07-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins"
+      },
+      {
+        "name": "core",
+        "version": "0.0.0",
+        "source_kind": "rust_std",
+        "source": "/root/.rustup/toolchains/nightly-2026-07-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core"
+      },
+      {
+        "name": "proc-macro2",
+        "version": "1.0.107",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "quote",
+        "version": "1.0.47",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "unicode-ident",
+        "version": "1.0.27",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "syn",
+        "version": "1.0.109",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "zerocopy",
+        "version": "0.8.63",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "autocfg",
+        "version": "1.5.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "libc",
+        "version": "0.2.191",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "paste",
+        "version": "1.0.15",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "syn",
+        "version": "2.0.119",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "getrandom",
+        "version": "0.3.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "cfg-if",
+        "version": "1.0.5",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "zerocopy-derive",
+        "version": "0.8.63",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "fnv",
+        "version": "1.0.7",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "strsim",
+        "version": "0.10.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "radium",
+        "version": "0.7.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "ident_case",
+        "version": "1.0.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "ppv-lite86",
+        "version": "0.2.21",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "darling_core",
+        "version": "0.13.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "rand_core",
+        "version": "0.9.5",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "rand_chacha",
+        "version": "0.9.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "num-traits",
+        "version": "0.2.19",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "rand",
+        "version": "0.9.5",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "padding-struct",
+        "version": "0.2.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd/libs/padding-struct"
+      },
+      {
+        "name": "riscv-macros",
+        "version": "0.3.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "ostd-pod-macros",
+        "version": "0.4.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd/libs/ostd-pod/macros"
+      },
+      {
+        "name": "ostd-macros",
+        "version": "0.19.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd/libs/ostd-macros"
+      },
+      {
+        "name": "serde_core",
+        "version": "1.0.229",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "serde",
+        "version": "1.0.229",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "either",
+        "version": "1.19.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "itertools",
+        "version": "0.10.5",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "darling_macro",
+        "version": "0.13.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "darling",
+        "version": "0.13.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "inherit-methods-macro",
+        "version": "0.1.0",
+        "source_kind": "git",
+        "source": "https://github.com/asterinas/inherit-methods-macro?rev=98f7e3e#98f7e3eb"
+      },
+      {
+        "name": "hashbrown",
+        "version": "0.17.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "equivalent",
+        "version": "1.0.3",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "indexmap",
+        "version": "2.14.2",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "alloc",
+        "version": "0.0.0",
+        "source_kind": "rust_std",
+        "source": "/root/.rustup/toolchains/nightly-2026-07-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc"
+      },
+      {
+        "name": "serde_spanned",
+        "version": "0.6.9",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "toml_datetime",
+        "version": "0.6.11",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "winnow",
+        "version": "0.5.40",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "json",
+        "version": "0.12.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "typeflags",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/typeflags"
+      },
+      {
+        "name": "aster-rights-proc",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/aster-rights-proc"
+      },
+      {
+        "name": "int-to-c-enum-derive",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd/libs/int-to-c-enum/derive"
+      },
+      {
+        "name": "toml_edit",
+        "version": "0.19.15",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "memoffset",
+        "version": "0.9.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "heapless",
+        "version": "0.8.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "smoltcp",
+        "version": "0.11.0",
+        "source_kind": "git",
+        "source": "https://github.com/asterinas/smoltcp?tag=r_2026-08-11_1b7629c#56ab8379"
+      },
+      {
+        "name": "ext-trait-proc_macros",
+        "version": "1.0.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "tap",
+        "version": "1.0.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "wyz",
+        "version": "0.5.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "scopeguard",
+        "version": "1.2.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "funty",
+        "version": "2.0.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "log",
+        "version": "0.4.35",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "lock_api",
+        "version": "0.4.14",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "bitvec",
+        "version": "1.1.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "riscv-pac",
+        "version": "0.2.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "smallvec",
+        "version": "1.16.5",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "critical-section",
+        "version": "1.2.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "sbi-spec",
+        "version": "0.0.7",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "bitflags",
+        "version": "2.13.2",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "embedded-hal",
+        "version": "1.0.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "gimli",
+        "version": "0.34.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "id-alloc",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd/libs/id-alloc"
+      },
+      {
+        "name": "riscv",
+        "version": "0.15.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "sbi-rt",
+        "version": "0.0.3",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "spin",
+        "version": "0.9.9",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "unwinding",
+        "version": "0.2.10",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "gimli",
+        "version": "0.28.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "ostd-pod",
+        "version": "0.4.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd/libs/ostd-pod"
+      },
+      {
+        "name": "fdt",
+        "version": "0.1.5",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "align_ext",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd/libs/align_ext"
+      },
+      {
+        "name": "ostd-test",
+        "version": "0.19.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd/libs/ostd-test"
+      },
+      {
+        "name": "bit_field",
+        "version": "0.10.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "toml",
+        "version": "0.7.8",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "inventory",
+        "version": "0.3.25",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "typeflags-util",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/typeflags-util"
+      },
+      {
+        "name": "aster-rights",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/aster-rights"
+      },
+      {
+        "name": "int-to-c-enum",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd/libs/int-to-c-enum"
+      },
+      {
+        "name": "intrusive-collections",
+        "version": "0.9.7",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "byteorder",
+        "version": "1.5.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "hash32",
+        "version": "0.3.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "stable_deref_trait",
+        "version": "1.2.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "bitflags",
+        "version": "1.3.2",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "managed",
+        "version": "0.8.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "component-macro",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/comp-sys/component-macro"
+      },
+      {
+        "name": "ostd",
+        "version": "0.19.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/ostd"
+      },
+      {
+        "name": "macro_rules_attribute-proc_macro",
+        "version": "0.1.3",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "component",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/comp-sys/component"
+      },
+      {
+        "name": "version_check",
+        "version": "0.9.5",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "macro_rules_attribute",
+        "version": "0.1.3",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "ahash",
+        "version": "0.8.12",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "io-util",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/io-util"
+      },
+      {
+        "name": "ext-trait",
+        "version": "1.0.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "takeable",
+        "version": "0.2.2",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "jhash",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/jhash"
+      },
+      {
+        "name": "allocator-api2",
+        "version": "0.2.21",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "nougat-proc_macros",
+        "version": "0.2.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "extension-traits",
+        "version": "1.0.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "nougat",
+        "version": "0.2.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "osdk-heap-allocator",
+        "version": "0.19.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/osdk/deps/heap-allocator"
+      },
+      {
+        "name": "aster-util",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/aster-util"
+      },
+      {
+        "name": "aster-softirq",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/softirq"
+      },
+      {
+        "name": "fdt-util",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/fdt-util"
+      },
+      {
+        "name": "device-id",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/device-id"
+      },
+      {
+        "name": "dma-pool",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/dma-pool"
+      },
+      {
+        "name": "aster-console",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/console"
+      },
+      {
+        "name": "aster-block",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/block"
+      },
+      {
+        "name": "aster-bigtcp",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/aster-bigtcp"
+      },
+      {
+        "name": "aster-pci",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/pci"
+      },
+      {
+        "name": "never-say-never",
+        "version": "6.6.666",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "once_cell",
+        "version": "1.21.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "konst_macro_rules",
+        "version": "0.2.19",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "foldhash",
+        "version": "0.2.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "polonius-the-crab",
+        "version": "0.2.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "lending-iterator-proc_macros",
+        "version": "0.1.7",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "unicode-xid",
+        "version": "0.2.6",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "const_format_proc_macros",
+        "version": "0.2.37",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "hashbrown",
+        "version": "0.16.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "lending-iterator",
+        "version": "0.1.7",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "konst",
+        "version": "0.2.20",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "aster-network",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/network"
+      },
+      {
+        "name": "aster-systree",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/systree"
+      },
+      {
+        "name": "aster-input",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/input"
+      },
+      {
+        "name": "aster-fuse",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/aster-fuse"
+      },
+      {
+        "name": "num-conv",
+        "version": "0.2.2",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "font8x8",
+        "version": "0.2.7",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "adler2",
+        "version": "2.0.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "powerfmt",
+        "version": "0.2.1",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "zero",
+        "version": "0.1.3",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "owo-colors",
+        "version": "4.4.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "time-core",
+        "version": "0.1.9",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "deranged",
+        "version": "0.5.9",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "short-vis-path",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/short-vis-path"
+      },
+      {
+        "name": "aster-logger",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/logger"
+      },
+      {
+        "name": "xmas-elf",
+        "version": "0.10.0",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "miniz_oxide",
+        "version": "0.8.9",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "time",
+        "version": "0.3.55",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "aster-virtio",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/virtio"
+      },
+      {
+        "name": "aster-framebuffer",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/framebuffer"
+      },
+      {
+        "name": "aster-device",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/device"
+      },
+      {
+        "name": "hashbrown",
+        "version": "0.14.5",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "const_format",
+        "version": "0.2.37",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "lru",
+        "version": "0.16.4",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "cpio-decoder",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/cpio-decoder"
+      },
+      {
+        "name": "aster-nvme",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/nvme"
+      },
+      {
+        "name": "aster-time",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/time"
+      },
+      {
+        "name": "osdk-frame-allocator",
+        "version": "0.19.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/osdk/deps/frame-allocator"
+      },
+      {
+        "name": "aster-cmdline",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core/comps/cmdline"
+      },
+      {
+        "name": "ring-buffer",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/ring-buffer"
+      },
+      {
+        "name": "xarray",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/xarray"
+      },
+      {
+        "name": "sparse-id-alloc",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/sparse-id-alloc"
+      },
+      {
+        "name": "logo-ascii-art",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/logo-ascii-art"
+      },
+      {
+        "name": "keyable-arc",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/keyable-arc"
+      },
+      {
+        "name": "atomic-integer-wrapper",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/libs/atomic-integer-wrapper"
+      },
+      {
+        "name": "getset",
+        "version": "0.1.7",
+        "source_kind": "registry",
+        "source": null
+      },
+      {
+        "name": "aster-uart",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/comps/uart"
+      },
+      {
+        "name": "aster-core",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/core"
+      },
+      {
+        "name": "aster-drm",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/comps/drm"
+      },
+      {
+        "name": "aster-simpledrm",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel/comps/simpledrm"
+      },
+      {
+        "name": "asterinas",
+        "version": "0.1.0",
+        "source_kind": "workspace",
+        "source": "/__w/asterinas/asterinas/kernel"
+      },
+      {
+        "name": "asterinas-osdk-bin",
+        "version": "0.1.0",
+        "source_kind": "generated",
+        "source": "/__w/asterinas/asterinas/target/osdk/asterinas-run-base"
+      }
+    ],
+    "source_kind_counts": {
+      "rust_std": 3,
+      "registry": 105,
+      "workspace": 53,
+      "git": 2,
+      "generated": 1
+    },
+    "lock_counts": [
+      203
+    ],
+    "registry_name_versions": [
+      "adler2 2.0.1",
+      "ahash 0.8.12",
+      "allocator-api2 0.2.21",
+      "autocfg 1.5.1",
+      "bit_field 0.10.4",
+      "bitflags 1.3.2",
+      "bitflags 2.13.2",
+      "bitvec 1.1.1",
+      "byteorder 1.5.0",
+      "cfg-if 1.0.5",
+      "const_format 0.2.37",
+      "const_format_proc_macros 0.2.37",
+      "critical-section 1.2.0",
+      "darling 0.13.4",
+      "darling_core 0.13.4",
+      "darling_macro 0.13.4",
+      "deranged 0.5.9",
+      "either 1.19.0",
+      "embedded-hal 1.0.0",
+      "equivalent 1.0.3",
+      "ext-trait 1.0.1",
+      "ext-trait-proc_macros 1.0.1",
+      "extension-traits 1.0.1",
+      "fdt 0.1.5",
+      "fnv 1.0.7",
+      "foldhash 0.2.0",
+      "font8x8 0.2.7",
+      "funty 2.0.0",
+      "getrandom 0.3.4",
+      "getset 0.1.7",
+      "gimli 0.28.1",
+      "gimli 0.34.0",
+      "hash32 0.3.1",
+      "hashbrown 0.14.5",
+      "hashbrown 0.16.1",
+      "hashbrown 0.17.1",
+      "heapless 0.8.0",
+      "ident_case 1.0.1",
+      "indexmap 2.14.2",
+      "intrusive-collections 0.9.7",
+      "inventory 0.3.25",
+      "itertools 0.10.5",
+      "json 0.12.4",
+      "konst 0.2.20",
+      "konst_macro_rules 0.2.19",
+      "lending-iterator 0.1.7",
+      "lending-iterator-proc_macros 0.1.7",
+      "libc 0.2.191",
+      "lock_api 0.4.14",
+      "log 0.4.35",
+      "lru 0.16.4",
+      "macro_rules_attribute 0.1.3",
+      "macro_rules_attribute-proc_macro 0.1.3",
+      "managed 0.8.0",
+      "memoffset 0.9.1",
+      "miniz_oxide 0.8.9",
+      "never-say-never 6.6.666",
+      "nougat 0.2.4",
+      "nougat-proc_macros 0.2.4",
+      "num-conv 0.2.2",
+      "num-traits 0.2.19",
+      "once_cell 1.21.4",
+      "owo-colors 4.4.0",
+      "paste 1.0.15",
+      "polonius-the-crab 0.2.1",
+      "powerfmt 0.2.1",
+      "ppv-lite86 0.2.21",
+      "proc-macro2 1.0.107",
+      "quote 1.0.47",
+      "radium 0.7.0",
+      "rand 0.9.5",
+      "rand_chacha 0.9.0",
+      "rand_core 0.9.5",
+      "riscv 0.15.0",
+      "riscv-macros 0.3.0",
+      "riscv-pac 0.2.0",
+      "sbi-rt 0.0.3",
+      "sbi-spec 0.0.7",
+      "scopeguard 1.2.0",
+      "serde 1.0.229",
+      "serde_core 1.0.229",
+      "serde_spanned 0.6.9",
+      "smallvec 1.16.5",
+      "spin 0.9.9",
+      "stable_deref_trait 1.2.1",
+      "strsim 0.10.0",
+      "syn 1.0.109",
+      "syn 2.0.119",
+      "takeable 0.2.2",
+      "tap 1.0.1",
+      "time 0.3.55",
+      "time-core 0.1.9",
+      "toml 0.7.8",
+      "toml_datetime 0.6.11",
+      "toml_edit 0.19.15",
+      "unicode-ident 1.0.27",
+      "unicode-xid 0.2.6",
+      "unwinding 0.2.10",
+      "version_check 0.9.5",
+      "winnow 0.5.40",
+      "wyz 0.5.1",
+      "xmas-elf 0.10.0",
+      "zero 0.1.3",
+      "zerocopy 0.8.63",
+      "zerocopy-derive 0.8.63"
+    ],
+    "observable_name_version_source_kind": [
+      "adler2 2.0.1 registry",
+      "ahash 0.8.12 registry",
+      "align_ext 0.1.0 workspace",
+      "alloc 0.0.0 rust_std",
+      "allocator-api2 0.2.21 registry",
+      "aster-bigtcp 0.1.0 workspace",
+      "aster-block 0.1.0 workspace",
+      "aster-cmdline 0.1.0 workspace",
+      "aster-console 0.1.0 workspace",
+      "aster-core 0.1.0 workspace",
+      "aster-device 0.1.0 workspace",
+      "aster-drm 0.1.0 workspace",
+      "aster-framebuffer 0.1.0 workspace",
+      "aster-fuse 0.1.0 workspace",
+      "aster-input 0.1.0 workspace",
+      "aster-logger 0.1.0 workspace",
+      "aster-network 0.1.0 workspace",
+      "aster-nvme 0.1.0 workspace",
+      "aster-pci 0.1.0 workspace",
+      "aster-rights 0.1.0 workspace",
+      "aster-rights-proc 0.1.0 workspace",
+      "aster-simpledrm 0.1.0 workspace",
+      "aster-softirq 0.1.0 workspace",
+      "aster-systree 0.1.0 workspace",
+      "aster-time 0.1.0 workspace",
+      "aster-uart 0.1.0 workspace",
+      "aster-util 0.1.0 workspace",
+      "aster-virtio 0.1.0 workspace",
+      "asterinas 0.1.0 workspace",
+      "asterinas-osdk-bin 0.1.0 generated",
+      "atomic-integer-wrapper 0.1.0 workspace",
+      "autocfg 1.5.1 registry",
+      "bit_field 0.10.4 registry",
+      "bitflags 1.3.2 registry",
+      "bitflags 2.13.2 registry",
+      "bitvec 1.1.1 registry",
+      "byteorder 1.5.0 registry",
+      "cfg-if 1.0.5 registry",
+      "compiler_builtins 0.1.160 rust_std",
+      "component 0.1.0 workspace",
+      "component-macro 0.1.0 workspace",
+      "const_format 0.2.37 registry",
+      "const_format_proc_macros 0.2.37 registry",
+      "core 0.0.0 rust_std",
+      "cpio-decoder 0.1.0 workspace",
+      "critical-section 1.2.0 registry",
+      "darling 0.13.4 registry",
+      "darling_core 0.13.4 registry",
+      "darling_macro 0.13.4 registry",
+      "deranged 0.5.9 registry",
+      "device-id 0.1.0 workspace",
+      "dma-pool 0.1.0 workspace",
+      "either 1.19.0 registry",
+      "embedded-hal 1.0.0 registry",
+      "equivalent 1.0.3 registry",
+      "ext-trait 1.0.1 registry",
+      "ext-trait-proc_macros 1.0.1 registry",
+      "extension-traits 1.0.1 registry",
+      "fdt 0.1.5 registry",
+      "fdt-util 0.1.0 workspace",
+      "fnv 1.0.7 registry",
+      "foldhash 0.2.0 registry",
+      "font8x8 0.2.7 registry",
+      "funty 2.0.0 registry",
+      "getrandom 0.3.4 registry",
+      "getset 0.1.7 registry",
+      "gimli 0.28.1 registry",
+      "gimli 0.34.0 registry",
+      "hash32 0.3.1 registry",
+      "hashbrown 0.14.5 registry",
+      "hashbrown 0.16.1 registry",
+      "hashbrown 0.17.1 registry",
+      "heapless 0.8.0 registry",
+      "id-alloc 0.1.0 workspace",
+      "ident_case 1.0.1 registry",
+      "indexmap 2.14.2 registry",
+      "inherit-methods-macro 0.1.0 git",
+      "int-to-c-enum 0.1.0 workspace",
+      "int-to-c-enum-derive 0.1.0 workspace",
+      "intrusive-collections 0.9.7 registry",
+      "inventory 0.3.25 registry",
+      "io-util 0.1.0 workspace",
+      "itertools 0.10.5 registry",
+      "jhash 0.1.0 workspace",
+      "json 0.12.4 registry",
+      "keyable-arc 0.1.0 workspace",
+      "konst 0.2.20 registry",
+      "konst_macro_rules 0.2.19 registry",
+      "lending-iterator 0.1.7 registry",
+      "lending-iterator-proc_macros 0.1.7 registry",
+      "libc 0.2.191 registry",
+      "lock_api 0.4.14 registry",
+      "log 0.4.35 registry",
+      "logo-ascii-art 0.1.0 workspace",
+      "lru 0.16.4 registry",
+      "macro_rules_attribute 0.1.3 registry",
+      "macro_rules_attribute-proc_macro 0.1.3 registry",
+      "managed 0.8.0 registry",
+      "memoffset 0.9.1 registry",
+      "miniz_oxide 0.8.9 registry",
+      "never-say-never 6.6.666 registry",
+      "nougat 0.2.4 registry",
+      "nougat-proc_macros 0.2.4 registry",
+      "num-conv 0.2.2 registry",
+      "num-traits 0.2.19 registry",
+      "once_cell 1.21.4 registry",
+      "osdk-frame-allocator 0.19.0 workspace",
+      "osdk-heap-allocator 0.19.0 workspace",
+      "ostd 0.19.0 workspace",
+      "ostd-macros 0.19.0 workspace",
+      "ostd-pod 0.4.0 workspace",
+      "ostd-pod-macros 0.4.0 workspace",
+      "ostd-test 0.19.0 workspace",
+      "owo-colors 4.4.0 registry",
+      "padding-struct 0.2.0 workspace",
+      "paste 1.0.15 registry",
+      "polonius-the-crab 0.2.1 registry",
+      "powerfmt 0.2.1 registry",
+      "ppv-lite86 0.2.21 registry",
+      "proc-macro2 1.0.107 registry",
+      "quote 1.0.47 registry",
+      "radium 0.7.0 registry",
+      "rand 0.9.5 registry",
+      "rand_chacha 0.9.0 registry",
+      "rand_core 0.9.5 registry",
+      "ring-buffer 0.1.0 workspace",
+      "riscv 0.15.0 registry",
+      "riscv-macros 0.3.0 registry",
+      "riscv-pac 0.2.0 registry",
+      "sbi-rt 0.0.3 registry",
+      "sbi-spec 0.0.7 registry",
+      "scopeguard 1.2.0 registry",
+      "serde 1.0.229 registry",
+      "serde_core 1.0.229 registry",
+      "serde_spanned 0.6.9 registry",
+      "short-vis-path 0.1.0 workspace",
+      "smallvec 1.16.5 registry",
+      "smoltcp 0.11.0 git",
+      "sparse-id-alloc 0.1.0 workspace",
+      "spin 0.9.9 registry",
+      "stable_deref_trait 1.2.1 registry",
+      "strsim 0.10.0 registry",
+      "syn 1.0.109 registry",
+      "syn 2.0.119 registry",
+      "takeable 0.2.2 registry",
+      "tap 1.0.1 registry",
+      "time 0.3.55 registry",
+      "time-core 0.1.9 registry",
+      "toml 0.7.8 registry",
+      "toml_datetime 0.6.11 registry",
+      "toml_edit 0.19.15 registry",
+      "typeflags 0.1.0 workspace",
+      "typeflags-util 0.1.0 workspace",
+      "unicode-ident 1.0.27 registry",
+      "unicode-xid 0.2.6 registry",
+      "unwinding 0.2.10 registry",
+      "version_check 0.9.5 registry",
+      "winnow 0.5.40 registry",
+      "wyz 0.5.1 registry",
+      "xarray 0.1.0 workspace",
+      "xmas-elf 0.10.0 registry",
+      "zero 0.1.3 registry",
+      "zerocopy 0.8.63 registry",
+      "zerocopy-derive 0.8.63 registry"
+    ]
+  },
+  "original_selected_rows": [
+    "access03 access03 ",
+    "brk02 brk02 ",
+    "chmod03 chmod03 ",
+    "chroot04 chroot04 ",
+    "clone06 clone06 ",
+    "creat01 creat01 ",
+    "dup204 dup204 ",
+    "epoll_create1_01 epoll_create1_01 ",
+    "epoll_wait07 epoll_wait07 ",
+    "eventfd2_03 eventfd2_03 ",
+    "fallocate03 fallocate03 ",
+    "fchmod01 fchmod01 ",
+    "fchmodat2_02 fchmodat2_02 ",
+    "fcntl02_64 fcntl02_64 ",
+    "fcntl08_64 fcntl08_64 ",
+    "fcntl14_64 fcntl14_64 ",
+    "fgetxattr03 fgetxattr03 ",
+    "flock06 flock06 ",
+    "fork08 fork08 ",
+    "fsmount02 fsmount02 ",
+    "fstatfs02 fstatfs02 ",
+    "futimesat01 futimesat01 ",
+    "geteuid01 geteuid01 ",
+    "gethostname01 gethostname01 ",
+    "getppid02 getppid02 ",
+    "getresgid01 getresgid01 ",
+    "getrlimit03 getrlimit03 ",
+    "getuid03 getuid03 ",
+    "kill08 kill08 ",
+    "listxattr01 listxattr01 ",
+    "lstat01_64 lstat01_64 ",
+    "memcpy01 memcpy01 ",
+    "mknodat01 mknodat01 ",
+    "mmap19 mmap19 ",
+    "mremap03 mremap03 ",
+    "nice02 nice02 ",
+    "newuname01 newuname01 ",
+    "pipe02 pipe02 ",
+    "pipe13 pipe13 ",
+    "pipeio_7 pipeio -T pipeio_7 -c 5 -s 5000 -i 10 -f x80",
+    "prctl07 prctl07 ",
+    "preadv201_64 preadv201_64 ",
+    "pwrite03 pwrite03 ",
+    "pwritev201 pwritev201 ",
+    "readlinkat02 readlinkat02 ",
+    "rename07 rename07 ",
+    "renameat201 renameat201 ",
+    "rt_sigsuspend01 rt_sigsuspend01 ",
+    "sched_setparam01 sched_setparam01 ",
+    "semop03 semop03 ",
+    "sendfile05_64 sendfile05_64 ",
+    "sendfile09_64 sendfile09_64 ",
+    "setfsgid03 setfsgid03 ",
+    "setegid01 setegid01 ",
+    "setitimer02 setitimer02 ",
+    "setresgid01 setresgid01 ",
+    "setreuid02 setreuid02 ",
+    "setrlimit04 setrlimit04 ",
+    "sigaltstack01 sigaltstack01 ",
+    "signalfd4_01 signalfd4_01 ",
+    "socketpair02 socketpair02 ",
+    "statfs03_64 statfs03_64 ",
+    "sysinfo01 sysinfo01 ",
+    "timerfd_create01 timerfd_create01 ",
+    "truncate02 truncate02 ",
+    "unlink07 unlink07 ",
+    "wait01 wait01 ",
+    "waitid01 waitid01 ",
+    "waitid11 waitid11 ",
+    "futex_wait01 futex_wait01 ",
+    "statx02 statx02 "
+  ],
+  "original_ltp_bytes": {
+    "image_digest": "sha256:97d370e2260fec73f59d9ee02a128edb84141789248e4c1c4b18f05da8bf4e51",
+    "ltp_prebuilt_path": "/nix/store/k46kxw67kiw1f84wrky4mji0fzffxvw0-ltp-riscv64-unknown-linux-gnu-20260529",
+    "gcroot": "/nix/var/nix/gcroots/auto/riscv64-pkgs-2",
+    "registered_nar_hash": "sha256:0nrr5mc5x3h62pmm59arqj99hbdhac0lzj5i50324lfymhrlljh0",
+    "actual_nar_sha256": "004a4a33acde51220628b1c84f0153b02d9892c459a552eb15068e5e582d395b",
+    "binary_cases": [
+      {
+        "case": "access03",
+        "binary": "access03",
+        "sha256": "3c42edabaaf22e99f313d6e3e9fdc2d921ef424c11cbc6750627b5059fad6454",
+        "bytes": 271792
+      },
+      {
+        "case": "brk02",
+        "binary": "brk02",
+        "sha256": "aa09c9bad5124280c1135fb57158e83e71acfa5d1e3c15b66ed7a0a036a48474",
+        "bytes": 267536
+      },
+      {
+        "case": "chmod03",
+        "binary": "chmod03",
+        "sha256": "e5ae26fca555c68feddbebe51cc0c137fcbfaae504b350366a6ed10f58cc966e",
+        "bytes": 267480
+      },
+      {
+        "case": "chroot04",
+        "binary": "chroot04",
+        "sha256": "bc58797bf4a612fa784048e932f3f54079bb69be9edb5cb768d186bf795414ee",
+        "bytes": 267648
+      },
+      {
+        "case": "clone06",
+        "binary": "clone06",
+        "sha256": "f955af08a2e19c8d17255b4bac17ab3e064ec05bd36757e8fbfc789b69aa21be",
+        "bytes": 267880
+      },
+      {
+        "case": "creat01",
+        "binary": "creat01",
+        "sha256": "f6192dcd622b49a08b5caca9118246e60519684461db3f8c21d727c9df8702a7",
+        "bytes": 267560
+      },
+      {
+        "case": "dup204",
+        "binary": "dup204",
+        "sha256": "a9cd4bcb818550304c65fb123f7b5a18d747bc40dafc762315462688386b12be",
+        "bytes": 267552
+      },
+      {
+        "case": "epoll_create1_01",
+        "binary": "epoll_create1_01",
+        "sha256": "6d7ce257694648171dcc44a49808883fa4131d714d3a5ca453b5f295f931c1f8",
+        "bytes": 267496
+      },
+      {
+        "case": "epoll_wait07",
+        "binary": "epoll_wait07",
+        "sha256": "a29dfd83e2ba4fe318094b72654d51ea465e04c8b98591d6969f0411941bbec3",
+        "bytes": 271920
+      },
+      {
+        "case": "eventfd2_03",
+        "binary": "eventfd2_03",
+        "sha256": "f8189f672c6eb6302988210f900a9c46eac1b83208f8f47588c969d4ff58938f",
+        "bytes": 267456
+      },
+      {
+        "case": "fallocate03",
+        "binary": "fallocate03",
+        "sha256": "4a164648e4048a9234c45af986523049f1481784432085e6f16887eeacfcd7f8",
+        "bytes": 271776
+      },
+      {
+        "case": "fchmod01",
+        "binary": "fchmod01",
+        "sha256": "6d1650bf602a91fb56821ae541e85298eda7bbdd63aada064e941666d804ab7d",
+        "bytes": 267560
+      },
+      {
+        "case": "fchmodat2_02",
+        "binary": "fchmodat2_02",
+        "sha256": "b16dab6fc56e33076f6546349f8ed32a66f576f7b767db2db93ba7f1b3cde308",
+        "bytes": 271872
+      },
+      {
+        "case": "fcntl02_64",
+        "binary": "fcntl02_64",
+        "sha256": "b30839944525b095f3f7e577c9f55bad45e4e927ab6ab29cb7edb337f7f92e04",
+        "bytes": 267608
+      },
+      {
+        "case": "fcntl08_64",
+        "binary": "fcntl08_64",
+        "sha256": "22c5990c4a617a4f3f15a7c0d9986acf702e0e7a2b364faf6e6f3c3201b84796",
+        "bytes": 267536
+      },
+      {
+        "case": "fcntl14_64",
+        "binary": "fcntl14_64",
+        "sha256": "a5a8176289429271e0842db586a91a2ecd27647db8080b352940a5ee5b9ee88c",
+        "bytes": 272304
+      },
+      {
+        "case": "fgetxattr03",
+        "binary": "fgetxattr03",
+        "sha256": "d5c54d693b4b2974d77dfbc324dbca634a33503950a70dbd58c90bcd8752db00",
+        "bytes": 267544
+      },
+      {
+        "case": "flock06",
+        "binary": "flock06",
+        "sha256": "ef70ee566b5c65ec2ccbb6fb330d9b4eba4518a895d5da56eadbd175e0821fde",
+        "bytes": 267496
+      },
+      {
+        "case": "fork08",
+        "binary": "fork08",
+        "sha256": "1b88450f77a6ee9550f46c54b5ac232e024e02fbefb0659c5206e4f6cca47826",
+        "bytes": 267520
+      },
+      {
+        "case": "fsmount02",
+        "binary": "fsmount02",
+        "sha256": "20174bedd535e4a3836e8f38ce2ab4796aba06847f44ea69f40c736eaefd6f07",
+        "bytes": 271832
+      },
+      {
+        "case": "fstatfs02",
+        "binary": "fstatfs02",
+        "sha256": "1f9d4cfaa24a9e3c1870ff8ccc305c57f0ed715578935e3d0276645c78b5c307",
+        "bytes": 272184
+      },
+      {
+        "case": "futimesat01",
+        "binary": "futimesat01",
+        "sha256": "923329969a43360f706d247f143eb8aa08c6c2992de08d10ac7343f80644db0c",
+        "bytes": 276832
+      },
+      {
+        "case": "geteuid01",
+        "binary": "geteuid01",
+        "sha256": "06c83713750b81a3efcabab081bb4278ce09c4ad45862be95aa86d2e0e123791",
+        "bytes": 268184
+      },
+      {
+        "case": "gethostname01",
+        "binary": "gethostname01",
+        "sha256": "8029bec6d96491771a1f13d99db92d85027f21425829d53ccd30f02d26c43e8b",
+        "bytes": 267472
+      },
+      {
+        "case": "getppid02",
+        "binary": "getppid02",
+        "sha256": "d90bc4debb030dd6219ece0bab1d5cc56079e1da3d753f988b9469a48dd390f7",
+        "bytes": 267440
+      },
+      {
+        "case": "getresgid01",
+        "binary": "getresgid01",
+        "sha256": "fa6d745752a7032669bedc00071106abbc27e30e13d90693b93a36722354d2ee",
+        "bytes": 277384
+      },
+      {
+        "case": "getrlimit03",
+        "binary": "getrlimit03",
+        "sha256": "98f2f2183b9e3516007361b5c797a6de8d6ae0ebc1bd96953da93682ac398a0f",
+        "bytes": 267544
+      },
+      {
+        "case": "getuid03",
+        "binary": "getuid03",
+        "sha256": "6d461e7960ae32cbb7c9f21111224d0b8ae448705b682b476bb3aaad180f155f",
+        "bytes": 272280
+      },
+      {
+        "case": "kill08",
+        "binary": "kill08",
+        "sha256": "9c1294e8f1a0f98acf1db21d77888a9e2c7f52c80c88389086018bd841886db1",
+        "bytes": 267504
+      },
+      {
+        "case": "listxattr01",
+        "binary": "listxattr01",
+        "sha256": "eab8c4c781f5bd2822c9b1e071ebaedbbda4b1f2037475c5ad2a5df322935934",
+        "bytes": 267512
+      },
+      {
+        "case": "lstat01_64",
+        "binary": "lstat01_64",
+        "sha256": "c2ca6e8a7c1d1d75feed1bec650cba2b0fe474810ba329145031364041b1b4df",
+        "bytes": 267576
+      },
+      {
+        "case": "memcpy01",
+        "binary": "memcpy01",
+        "sha256": "3a33f8dc63c1f5a614cad06db8d7222753db45ebacfcc2e8cff4cc81d89ef500",
+        "bytes": 267504
+      },
+      {
+        "case": "mknodat01",
+        "binary": "mknodat01",
+        "sha256": "cf5eff69ed947b017d5955d0220b670312562f0efe7098dc586eb12dc7b2cede",
+        "bytes": 276904
+      },
+      {
+        "case": "mmap19",
+        "binary": "mmap19",
+        "sha256": "7ed1a5247fb49d192fc27fe926796a286000ce2d99d056c9bf7a22ab318b1ee1",
+        "bytes": 267728
+      },
+      {
+        "case": "mremap03",
+        "binary": "mremap03",
+        "sha256": "6c58aaf51bf6c052967de65c01191e5dd4d49136f088fdcb618782a746a27a8d",
+        "bytes": 276728
+      },
+      {
+        "case": "nice02",
+        "binary": "nice02",
+        "sha256": "fdc05d9141654e79022e4931430ad9fb84452e4b15dcc2c7148a5ad897184ed8",
+        "bytes": 267472
+      },
+      {
+        "case": "newuname01",
+        "binary": "newuname01",
+        "sha256": "ab2bd0a00ede452e2e756cccfe6c8cb43ffb4d92c05d0145a899ab780a3af235",
+        "bytes": 267552
+      },
+      {
+        "case": "pipe02",
+        "binary": "pipe02",
+        "sha256": "7aaf9abf8e4e9188b3fe416b83cb5dcc607a19f48af3047c59a23b9850bceba6",
+        "bytes": 267512
+      },
+      {
+        "case": "pipe13",
+        "binary": "pipe13",
+        "sha256": "7d045418166b4b7fbe94269159fcff5f75c937b075eab645f10bd61b874b3c70",
+        "bytes": 271832
+      },
+      {
+        "case": "pipeio_7",
+        "binary": "pipeio",
+        "sha256": "b923ab872c4dec6a2612beef5e919926fe9db1f601060339a9da0c665eb61f58",
+        "bytes": 304984
+      },
+      {
+        "case": "prctl07",
+        "binary": "prctl07",
+        "sha256": "8276bba202656aaa434d5b93718567ec3c240a890a50f60cd01262e709ca6666",
+        "bytes": 272000
+      },
+      {
+        "case": "preadv201_64",
+        "binary": "preadv201_64",
+        "sha256": "2ddc3f8ad80e7b1c28f2ee6fa14438088757c7779451a6bb2b40f8d7b81c5a02",
+        "bytes": 271808
+      },
+      {
+        "case": "pwrite03",
+        "binary": "pwrite03",
+        "sha256": "900e8dcd293efc1b57249a8fc018bf38d44878fef41fc44a9c639acb67922b1e",
+        "bytes": 267552
+      },
+      {
+        "case": "pwritev201",
+        "binary": "pwritev201",
+        "sha256": "1668a2effdcb1ead3555b0670152e5d2aff97c6e3248a006434dab458c5f1dca",
+        "bytes": 271928
+      },
+      {
+        "case": "readlinkat02",
+        "binary": "readlinkat02",
+        "sha256": "03ebc2f55cf689240e3d451d0d5880d4a3177579299680453eb17de229626229",
+        "bytes": 271952
+      },
+      {
+        "case": "rename07",
+        "binary": "rename07",
+        "sha256": "66df6914b6de783ae73d8716525000f1152849374fe9c60fa228e5d3ff524391",
+        "bytes": 267632
+      },
+      {
+        "case": "renameat201",
+        "binary": "renameat201",
+        "sha256": "12f3ddc93a0767b3e243f4b823a1df4485c7f01c79b9faaff03a8a61ccb1c37f",
+        "bytes": 276656
+      },
+      {
+        "case": "rt_sigsuspend01",
+        "binary": "rt_sigsuspend01",
+        "sha256": "d44ce3cbaa4ecd5846341e8d6d899c1087b668ef46626e94c6b78b512028775d",
+        "bytes": 271744
+      },
+      {
+        "case": "sched_setparam01",
+        "binary": "sched_setparam01",
+        "sha256": "611a4d90eacdffbc812d9a989420fa7002b59e34a5ed02af2c750cd346e2d94b",
+        "bytes": 272240
+      },
+      {
+        "case": "semop03",
+        "binary": "semop03",
+        "sha256": "d36e3c9a0111eb7eaffa30955e8339447d6170550e8abb6ada7e6fdcb70da016",
+        "bytes": 277680
+      },
+      {
+        "case": "sendfile05_64",
+        "binary": "sendfile05_64",
+        "sha256": "e34cfcb9661fdc29844fc454ac33800e704a90d4e687e6017b1be552217bcb64",
+        "bytes": 267768
+      },
+      {
+        "case": "sendfile09_64",
+        "binary": "sendfile09_64",
+        "sha256": "9c2fc141a4b6a4184fe325b5fb1d615ba94b7b7937415a9b8263e59220f2c2a9",
+        "bytes": 271808
+      },
+      {
+        "case": "setfsgid03",
+        "binary": "setfsgid03",
+        "sha256": "1fa7580ab949808bb178d7326202aa3053401891a140123f5bc6dc08695b3f35",
+        "bytes": 277344
+      },
+      {
+        "case": "setegid01",
+        "binary": "setegid01",
+        "sha256": "260ee1c38a7313cce0b212e87bc334ebba81e805e400406a9705bbad15e424e4",
+        "bytes": 267496
+      },
+      {
+        "case": "setitimer02",
+        "binary": "setitimer02",
+        "sha256": "6c5e8bb3bfeb9224f2bcb952feb093cb41a127fd73e7361cc04db2f239e7b5e5",
+        "bytes": 271944
+      },
+      {
+        "case": "setresgid01",
+        "binary": "setresgid01",
+        "sha256": "31e3fc28540a35bc2d14e2cf1bc8a3dfad1f2c37d900b1f1a050ee4b548a3801",
+        "bytes": 272424
+      },
+      {
+        "case": "setreuid02",
+        "binary": "setreuid02",
+        "sha256": "490b356b1410e20ee7e80b2d7f49b2aabc67ca014056f2d20535d5e7a46dcb3e",
+        "bytes": 273064
+      },
+      {
+        "case": "setrlimit04",
+        "binary": "setrlimit04",
+        "sha256": "025fb15367e94969a2088d8b4c3d4767f497cffb4fa6d066b65b40bf9c2bd025",
+        "bytes": 267752
+      },
+      {
+        "case": "sigaltstack01",
+        "binary": "sigaltstack01",
+        "sha256": "ea717de0c4872cd637ac2232b29ecf177a30a8299510a2ff352c607f9b430b84",
+        "bytes": 276792
+      },
+      {
+        "case": "signalfd4_01",
+        "binary": "signalfd4_01",
+        "sha256": "5d77684622f098898626b43899457003477294f017df3f338b392ca17b285c78",
+        "bytes": 276384
+      },
+      {
+        "case": "socketpair02",
+        "binary": "socketpair02",
+        "sha256": "25958a3aa69e6483317c447675f9defdea5da43cafbe8e8013d2d08b33085031",
+        "bytes": 267608
+      },
+      {
+        "case": "statfs03_64",
+        "binary": "statfs03_64",
+        "sha256": "83cdb0e73e3d7c5dfda1ebd9ac5d2a55792f00e013d95afd4e61514fa638b418",
+        "bytes": 267680
+      },
+      {
+        "case": "sysinfo01",
+        "binary": "sysinfo01",
+        "sha256": "c94a8990fc4d8abd3c1e6122e3a55da4cc80a59b4af3fa2ac795e64b272faa88",
+        "bytes": 271656
+      },
+      {
+        "case": "timerfd_create01",
+        "binary": "timerfd_create01",
+        "sha256": "dd3ae42ec022b7ebf382ec3683de0a70ddf8ca65b248288333b779e478ecaa43",
+        "bytes": 267696
+      },
+      {
+        "case": "truncate02",
+        "binary": "truncate02",
+        "sha256": "d2900a9dfbefa6f7f2e6e239ddd25642ebd17502bb2e6a7b40060076e1868d5e",
+        "bytes": 271784
+      },
+      {
+        "case": "unlink07",
+        "binary": "unlink07",
+        "sha256": "9cb8d42997299581b969f19059eac115e03f75f7a4cee8354dcceb5f0bd74bd5",
+        "bytes": 272056
+      },
+      {
+        "case": "wait01",
+        "binary": "wait01",
+        "sha256": "226694ab613f3a31de55dca385828a4c48b0e89906d3302a87cf5964b923fe5d",
+        "bytes": 267624
+      },
+      {
+        "case": "waitid01",
+        "binary": "waitid01",
+        "sha256": "b3be3cc7a1fa31840a60ff333980d79e04bdb5386b43201bdcd799e169d9f816",
+        "bytes": 267600
+      },
+      {
+        "case": "waitid11",
+        "binary": "waitid11",
+        "sha256": "3937edc487e564dfdeafc29d332e9da8f67b1a7cd3b946dd1b0ceb4ebf5c44ce",
+        "bytes": 267640
+      },
+      {
+        "case": "futex_wait01",
+        "binary": "futex_wait01",
+        "sha256": "ac8d624073122de739914b9353e3b9b8725555f9804e43cf40afd63c130179f8",
+        "bytes": 271704
+      },
+      {
+        "case": "statx02",
+        "binary": "statx02",
+        "sha256": "35f0d9ebe013b42d266538aa26b3946cfee7ff99554c8e2b835ffc4ef6e60b93",
+        "bytes": 271736
+      }
+    ],
+    "selected_cases_count": 71,
+    "script_hashes": {
+      "kirk": "bf386490b1f47a899c5183a0c87a22328f7e315dac8221bfe326a02a45f7d558",
+      "Version": "fbac75937fe920cfe33dd9048c809b50ac8ad3d408f221518f85771f49181deb"
+    },
+    "scope": "Byte identities read from the exact image that the original job pulled. Formal reproduction must also prove its conformance derivation uses this prebuilt package; the original package source derivation and copied scripts were not dumped by the old job."
+  },
+  "conformance_derivations": {
+    "full": "/nix/store/svlkkn2nzshj5d0ybi6cnpkrlnda275d-conformance-0.1.0.drv",
+    "selected": "/nix/store/7j0zl7aldwzqdhjsmi2q9klzjwn4vd8x-conformance-0.1.0.drv"
+  }
+}
