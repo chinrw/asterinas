@@ -1,0 +1,235 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Diagnose DropGuard RISC-V pipe13 on one hosted runner
+
+on:
+  push:
+    branches: [ci/dropguard-prepared-pipe13-20261116]
+
+permissions:
+  contents: read
+
+env:
+  BASELINE_SHA: a0de2258c56b03ba1a6aa417a05f10bdc0f54ff4
+  CANDIDATE_SHA: 564bd54533c8b012f441f7fca2863cdde6b57434
+  CONTROLLER_PARENT_SHA: 70fb2d50ca8a1ed26551f6c99d8e5cee32f36925
+  ORIGINAL_RUNTEXT_SHA256: c8636d433bcd95782fd3068451ef90296dc33e3022f5e501f6ba0305313c3bea
+  SELECTED_RUNTEXT_SHA256: b36311e56c59bf3247c663d084d35e6d97878bbb78719cfe6ef35bf3c0259e11
+
+jobs:
+  same-host-abba:
+    if: github.repository == 'chinrw/asterinas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    container:
+      image: asterinas/kernel-dev:0.19.0-20261012
+      options: -v /dev:/dev --privileged
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
+    env:
+      RUSTUP_HOME: /root/.rustup
+      CARGO_HOME: /root/.cargo
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - name: Free the standard runner tool directories
+        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: controller
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASELINE_SHA }}
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          path: candidate
+          persist-credentials: false
+      - name: Build both original images and the exact failing 71-case group
+        id: prepare
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$GITHUB_WORKSPACE/validation-output"
+          mkdir -p "$output"
+          git_safe=(git -c safe.directory="$GITHUB_WORKSPACE/controller" -C "$GITHUB_WORKSPACE/controller")
+          test "$("${git_safe[@]}" rev-parse HEAD^)" = "$CONTROLLER_PARENT_SHA"
+          {
+            uname -a
+            nproc
+            grep -E '^(MemTotal|MemAvailable):' /proc/meminfo
+            df -h "$GITHUB_WORKSPACE"
+            printf 'controller=%s\nparent=%s\n' '${{ github.sha }}' "$CONTROLLER_PARENT_SHA"
+          } | tee "$output/host.txt"
+          for version in baseline candidate; do
+            checkout="$GITHUB_WORKSPACE/$version"
+            version_output="$output/$version"
+            mkdir -p "$version_output"
+            export VERSION="$version" VERSION_OUTPUT="$version_output"
+            expected="$BASELINE_SHA"
+            if [[ "$version" == candidate ]]; then expected="$CANDIDATE_SHA"; fi
+            actual=$(git -c safe.directory="$checkout" -C "$checkout" rev-parse HEAD)
+            test "$actual" = "$expected"
+            printf '%s\n' "$actual" | tee "$version_output/tested-source.txt"
+            export CARGO_TARGET_DIR="$GITHUB_WORKSPACE/build-targets/$version"
+            export PATH="$CARGO_TARGET_DIR/osdk/debug:$PATH"
+            cd "$checkout"
+            OSDK_LOCAL_DEV=1 cargo build --manifest-path osdk/Cargo.toml --locked --bin cargo-osdk --target-dir "$CARGO_TARGET_DIR/osdk" |& tee "$version_output/osdk-build.log"
+            parameters=(TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0 CMDLINE=KIRK_VERBOSE=1 CARGO_OSDK="$CARGO_TARGET_DIR/osdk/debug/cargo-osdk")
+            make kernel "${parameters[@]}" |& tee "$version_output/original-build.log"
+            cp test/initramfs/build/initramfs/opt/ltp/runtest/syscalls "$version_output/original-runtest.txt"
+            python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          output = pathlib.Path(os.environ['VERSION_OUTPUT'])
+          raw = (output / 'original-runtest.txt').read_bytes()
+          assert hashlib.sha256(raw).hexdigest() == os.environ['ORIGINAL_RUNTEXT_SHA256']
+          rows = raw.decode().splitlines()
+          names = [row.split()[0] for row in rows]
+          digest = hashlib.sha256(('\n'.join(sorted(names)) + '\n').encode()).hexdigest()
+          assert len(names) == len(set(names)) == 563
+          assert digest == '3a5d1f747a6ab7c155f3f2373e9acf54ee6672ba0e6a868dccf91b9831e2a957'
+          selected = names[1::8]
+          assert len(selected) == 71
+          selected_rows = ''.join(row + '\n' for row in rows if row.split()[0] in set(selected)).encode()
+          assert hashlib.sha256(selected_rows).hexdigest() == os.environ['SELECTED_RUNTEXT_SHA256']
+          (output / 'expected-runtest.txt').write_bytes(selected_rows)
+          (output / 'selector.txt').write_text(','.join(selected) + '\n')
+          manifest = {'version': os.environ['VERSION'], 'source_sha': (output / 'tested-source.txt').read_text().strip(),
+                      'original_names': names, 'selected': selected, 'full_names_sha256': digest,
+                      'original_runtest_sha256': hashlib.sha256(raw).hexdigest(),
+                      'selected_runtest_sha256': hashlib.sha256(selected_rows).hexdigest(),
+                      'parameters': {'TARGET_ARCH': 'riscv64', 'SMP': 4, 'RELEASE': 0, 'CMDLINE': 'KIRK_VERBOSE=1',
+                                     'LTP_TIMEOUT_MUL': 5, 'Kirk_default_suite_timeout_seconds': 3600}}
+          (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+            selector=$(cat "$version_output/selector.txt")
+            make kernel "${parameters[@]}" CONFORMANCE_TEST_SELECTOR="$selector" |& tee "$version_output/selected-build.log"
+            cp test/initramfs/build/initramfs/opt/ltp/runtest/syscalls "$version_output/selected-runtest.txt"
+            cmp "$version_output/expected-runtest.txt" "$version_output/selected-runtest.txt"
+            grep -Fx 'export LTP_TIMEOUT_MUL=5' test/initramfs/src/conformance/ltp/run_ltp_test.sh
+            cp test/initramfs/src/conformance/ltp/run_ltp_test.sh "$version_output/run_ltp_test.sh"
+          done
+          cmp "$output/baseline/original-runtest.txt" "$output/candidate/original-runtest.txt"
+          cmp "$output/baseline/selected-runtest.txt" "$output/candidate/selected-runtest.txt"
+          cmp "$output/baseline/run_ltp_test.sh" "$output/candidate/run_ltp_test.sh"
+          cat > "$GITHUB_WORKSPACE/run-round.sh" <<'SH'
+          set -euo pipefail
+          version="$1"
+          round="$2"
+          checkout="$GITHUB_WORKSPACE/$version"
+          prepared="$GITHUB_WORKSPACE/validation-output/$version"
+          output="$GITHUB_WORKSPACE/validation-output/$round"
+          mkdir -p "$output"
+          cp "$prepared/manifest.json" "$output/manifest.json"
+          cp "$prepared/tested-source.txt" "$output/tested-source.txt"
+          cp "$prepared/selected-runtest.txt" "$output/expected-runtest.txt"
+          export CARGO_TARGET_DIR="$GITHUB_WORKSPACE/build-targets/$version"
+          export PATH="$CARGO_TARGET_DIR/osdk/debug:$PATH"
+          selector=$(cat "$prepared/selector.txt")
+          cd "$checkout"
+          rm -f qemu.log qemu-serial.log
+          set +e
+          timeout --signal=TERM --kill-after=30s 70m make run_kernel TARGET_ARCH=riscv64 AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=ltp SMP=4 RELEASE=0 CMDLINE=KIRK_VERBOSE=1 CARGO_OSDK="$CARGO_TARGET_DIR/osdk/debug/cargo-osdk" CONFORMANCE_TEST_SELECTOR="$selector" |& tee "$output/run.log"
+          make_status=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$make_status" | tee "$output/make-exit-code.txt"
+          for log in qemu.log qemu-serial.log; do
+            if [[ -f "$log" ]]; then cp "$log" "$output/$log"; fi
+          done
+          cp test/initramfs/build/initramfs/opt/ltp/runtest/syscalls "$output/actual-runtest.txt"
+          cmp "$output/expected-runtest.txt" "$output/actual-runtest.txt"
+          set +e
+          python3 "$GITHUB_WORKSPACE/controller/.github/scripts/verify_dropguard_verbose_ltp.py" "$output/qemu.log" "$output/actual-runtest.txt" "$output/cases" --expected-count 71 > "$output/verification.log" 2>&1
+          verification_status=$?
+          set -e
+          cat "$output/verification.log"
+          printf '%s\n' "$verification_status" > "$output/verification-exit-code.txt"
+          if (( make_status != 0 )); then exit "$make_status"; fi
+          exit "$verification_status"
+          SH
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipe13-diagnostic-preparation
+          path: validation-output/
+      - name: Run baseline first
+        if: always() && steps.prepare.conclusion == 'success'
+        timeout-minutes: 75
+        run: bash "$GITHUB_WORKSPACE/run-round.sh" baseline 01-baseline
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipe13-round01-baseline
+          path: validation-output/01-baseline/
+      - name: Run candidate second
+        if: always() && steps.prepare.conclusion == 'success'
+        timeout-minutes: 75
+        run: bash "$GITHUB_WORKSPACE/run-round.sh" candidate 02-candidate
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipe13-round02-candidate
+          path: validation-output/02-candidate/
+      - name: Run candidate third
+        if: always() && steps.prepare.conclusion == 'success'
+        timeout-minutes: 75
+        run: bash "$GITHUB_WORKSPACE/run-round.sh" candidate 03-candidate
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipe13-round03-candidate
+          path: validation-output/03-candidate/
+      - name: Run baseline fourth
+        if: always() && steps.prepare.conclusion == 'success'
+        timeout-minutes: 75
+        run: bash "$GITHUB_WORKSPACE/run-round.sh" baseline 04-baseline
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipe13-round04-baseline
+          path: validation-output/04-baseline/
+      - name: Record all four results and retain every failure
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          output = pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'validation-output'
+          rounds = []
+          for name in ['01-baseline', '02-candidate', '03-candidate', '04-baseline']:
+              directory = output / name
+              coverage_path = directory / 'cases/coverage.json'
+              row = {'round': name, 'coverage_saved': coverage_path.exists()}
+              if coverage_path.exists():
+                  coverage = json.loads(coverage_path.read_text())
+                  row.update(make_exit_code=int((directory / 'make-exit-code.txt').read_text()),
+                             verification_exit_code=int((directory / 'verification-exit-code.txt').read_text()),
+                             counts=coverage['counts'], missing=coverage['missing'], extra=coverage['extra'],
+                             failed_or_broken=coverage['failed_or_broken'], incomplete=coverage['incomplete'],
+                             pipe13=[item for item in coverage['results'] if item['name'] == 'pipe13'])
+              rounds.append(row)
+          summary = {'order': 'baseline-candidate-candidate-baseline', 'rounds': rounds,
+                     'interpretation_limit': 'Four successful pipe13 observations would mean this diagnostic did not reproduce the failure.'}
+          (output / 'abba-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          print(json.dumps(summary, indent=2))
+          assert all(row['coverage_saved'] for row in rounds)
+          assert all(not row['missing'] and not row['extra'] and not row['incomplete'] for row in rounds)
+          assert all(row['make_exit_code'] == row['verification_exit_code'] == 0 for row in rounds)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipe13-diagnostic-complete
+          path: validation-output/
