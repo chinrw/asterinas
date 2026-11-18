@@ -170,9 +170,9 @@ order across four GitHub Actions shards. Set the repository variable
 count. A manual run can also select a group or workload and include temporary
 exclusions. Capability and hardware exclusions remain visible in the report.
 
-Open **Linux regression report → Print regression report** in Actions for every
-workload's full console log, followed by the English results table and test
-summary. A failed workload does not stop other workloads or shards. A missing
+Open **Linux regression report → Test summary** in Actions for the English results
+table and totals. Expand **Full workload logs** in the same job to inspect any
+workload's console output. A failed workload does not stop other workloads or shards. A missing
 shard, result, or completed workload log fails the combined check. Each shard
 also retains its original console files and results as an artifact.
 

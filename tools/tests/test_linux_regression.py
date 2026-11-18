@@ -499,6 +499,22 @@ sys.exit(19 if mode == 'qemu_failure' else 0)
         self.assertIn("MISSING: 1", output)
         self.assertIn("REGRESSION_CASE_START time 1", output)
 
+    def test_summary_and_full_logs_can_be_viewed_separately_after_failure(self):
+        shard = self.root / "shard-0"
+        result = self.run_runner("first_case_failure", "--output", str(shard))
+        self.assertEqual(result.returncode, 1)
+        with (shard / "time/1.log").open("a") as log:
+            log.write("assertion failed [got 1, expected 0]\n")
+        summary, logs = StringIO(), StringIO()
+        with redirect_stdout(summary):
+            self.assertTrue(report(shard / "cases.tsv", self.root, 1, console_output=logs))
+        self.assertIn("TEST SUMMARY", summary.getvalue())
+        self.assertIn("assertion failed [got 1, expected 0]", summary.getvalue())
+        self.assertNotIn("REGRESSION_CASE_START", summary.getvalue())
+        self.assertIn("::group::FAIL time/1", logs.getvalue())
+        self.assertIn("::group::PASS time/2", logs.getvalue())
+        self.assertNotIn("TEST SUMMARY", logs.getvalue())
+
     def test_invalid_shards_are_rejected(self):
         for count, index in [("0", "0"), ("3", "3"), ("4", "-1"), ("257", "0")]:
             result = self.run_runner("pass", "--shard-count", count, "--shard-index", index)

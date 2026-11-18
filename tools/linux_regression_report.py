@@ -45,26 +45,33 @@ def collect_results(directory, shards, expected):
     return results, errors
 
 
-def print_log(log, result, label):
-    print(f"::group::{result} {label}")
+def print_log(log, result, label, output):
+    print(f"::group::{result} {label}", file=output)
     # Guest output is arbitrary text and must not issue Actions commands.
     token = uuid.uuid4().hex
-    print(f"::stop-commands::{token}")
+    print(f"::stop-commands::{token}", file=output)
     first_error = None
     with log.open(errors="replace", newline="\n") as source:
         for line in source:
             line = line.rstrip("\r\n")
-            print(line)
+            print(line, file=output)
             if first_error is None and re.search(
                 r"failed \[|fatal error|^Error:", line, re.I
             ):
                 first_error = line
-    print(f"::{token}::")
-    print("::endgroup::")
+    print(f"::{token}::", file=output)
+    print("::endgroup::", file=output)
     return first_error
 
 
-def report(manifest, directory, shards, allow_all_skipped=False, summary_path=None):
+def report(
+    manifest,
+    directory,
+    shards,
+    allow_all_skipped=False,
+    summary_path=None,
+    console_output=None,
+):
     cases = read_rows(manifest)
     expected = {workload(case) for case in cases}
     if not expected or len(expected) != len(cases):
@@ -99,7 +106,7 @@ def report(manifest, directory, shards, allow_all_skipped=False, summary_path=No
         name = case["command"].strip().removeprefix("./")
         label = f"{key} ({name})"
         if log.is_file():
-            first_error = print_log(log, result, label)
+            first_error = print_log(log, result, label, console_output)
             if result == "FAIL" and detail == "workload failed" and first_error:
                 detail = first_error
         elif result in {"PASS", "FAIL"}:
@@ -127,7 +134,7 @@ def report(manifest, directory, shards, allow_all_skipped=False, summary_path=No
         with open(summary_path, "a") as output:
             print("### Linux regression", file=output)
             print(
-                f"\n{len(cases)} workloads registered. Open **Print regression report** for all logs.",
+                f"\n{len(cases)} workloads registered. Open **Test summary** for individual results and **Full workload logs** for their console output.",
                 file=output,
             )
             print("\n| Result | Workloads |\n| --- | ---: |", file=output)
@@ -150,6 +157,9 @@ if __name__ == "__main__":
         "--shards", required=True, type=int, choices=range(1, 257), metavar="N"
     )
     parser.add_argument("--allow-all-skipped", action="store_true")
+    parser.add_argument(
+        "--console-output", type=argparse.FileType("w", encoding="utf-8")
+    )
     args = parser.parse_args()
     sys.exit(
         report(
@@ -158,5 +168,6 @@ if __name__ == "__main__":
             args.shards,
             args.allow_all_skipped,
             os.environ.get("GITHUB_STEP_SUMMARY"),
+            args.console_output,
         )
     )

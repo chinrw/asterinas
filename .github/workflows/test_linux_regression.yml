@@ -164,7 +164,7 @@ jobs:
         with:
           pattern: shard-*
           path: collected
-      - name: Print regression report
+      - name: Test summary
         if: ${{ !cancelled() }}
         env:
           MATRIX: ${{ needs.prepare.outputs.matrix }}
@@ -177,5 +177,14 @@ jobs:
           fi
           args=()
           if [[ -n "$REGRESSION_CASE" ]]; then args+=(--allow-all-skipped); fi
-          python3 tools/linux_regression_report.py plan/cases.tsv collected --shards "$(jq length <<< "$MATRIX")" "${args[@]}"
+          python3 tools/linux_regression_report.py plan/cases.tsv collected --shards "$(jq length <<< "$MATRIX")" \
+            --console-output "$RUNNER_TEMP/regression-console.log" "${args[@]}"
           [[ "$SHARD_STATUS" == success ]]
+      - name: Full workload logs
+        if: ${{ !cancelled() }}
+        run: |
+          if [[ -f "$RUNNER_TEMP/regression-console.log" ]]; then
+            cat "$RUNNER_TEMP/regression-console.log"
+          else
+            echo "No workload logs were collected."
+          fi
