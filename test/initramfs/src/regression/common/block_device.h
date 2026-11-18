@@ -11,6 +11,8 @@
  * in guest Asterinas via /dev/vda (or similar) and in host Linux via
  * /dev/loop0 (or similar). These correspond to the same device image, where
  * the underlying file system is prepared as part of the build process.
+ * Linux regression VMs set `REGRESSION_BLOCK_DEVICES=virtio` to access their
+ * dedicated /dev/vda, /dev/vdb, and /dev/vdc directly.
  *
  * The device can be mounted using mount_block_device(). After use, the mount
  * can be cleaned up and the device can be closed via umount_block_device() and
@@ -28,9 +30,7 @@ enum block_device {
 	BLOCK_VDC_EXT2,
 };
 
-#ifdef __asterinas__
-
-static int open_block_device(enum block_device dev)
+static int open_virtio_block_device(enum block_device dev)
 {
 	switch (dev) {
 	case BLOCK_VDA_EXT2:
@@ -45,6 +45,13 @@ static int open_block_device(enum block_device dev)
 	return -1;
 }
 
+#ifdef __asterinas__
+
+static int open_block_device(enum block_device dev)
+{
+	return open_virtio_block_device(dev);
+}
+
 static int close_block_device(int fd)
 {
 	return close(fd);
@@ -57,11 +64,21 @@ static int close_block_device(int fd)
 
 #include "test.h"
 
+static int use_virtio_block_devices(void)
+{
+	const char *devices = getenv("REGRESSION_BLOCK_DEVICES");
+
+	return devices && strcmp(devices, "virtio") == 0;
+}
+
 static int open_block_device(enum block_device dev)
 {
 	int img_fd, ctrl_fd, loop_fd;
 	int id;
 	char loop_path[20];
+
+	if (use_virtio_block_devices())
+		return open_virtio_block_device(dev);
 
 	img_fd = -1;
 	switch (dev) {
@@ -92,6 +109,9 @@ static int open_block_device(enum block_device dev)
 
 static int close_block_device(int fd)
 {
+	if (use_virtio_block_devices())
+		return close(fd);
+
 	CHECK(ioctl(fd, LOOP_CLR_FD));
 	CHECK(close(fd));
 

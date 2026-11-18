@@ -4,10 +4,14 @@
 
 set -e
 
-./in_c/hello
-./in_c_pie/hello
+. "${REGRESSION_TEST_ROOT:-/test}/run_test_case.sh"
+
+run_test_case ./in_c/hello
+run_test_case ./in_c_pie/hello
 case "$(uname -m)" in
     x86_64|riscv64|aarch64)
-        ./in_assembly/hello
+        run_test_case ./in_assembly/hello
         ;;
 esac
+
+finish_test_cases

@@ -20,6 +20,17 @@
 #define LM_PARENT "/tmp/lm_parent"
 #define LM_CHILD "/tmp/lm_parent/child"
 
+struct mnt_id_req_v1 {
+	uint32_t size;
+	uint32_t mnt_ns_fd;
+	uint64_t mnt_id;
+	uint64_t param;
+	uint64_t mnt_ns_id;
+};
+
+_Static_assert(sizeof(struct mnt_id_req_v1) == MNT_ID_REQ_SIZE_VER0 + 8,
+	       "mnt_id_req VER1 must contain 32 bytes");
+
 FN_SETUP(setup)
 {
 	CHECK(unshare(CLONE_NEWNS));
@@ -108,7 +119,7 @@ END_TEST()
 FN_TEST(listmount_rejects_unmounted_parent)
 {
 	uint64_t child_uid = TEST_RES(mount_unique_id(LM_CHILD), _ret != 0);
-	TEST_SUCC(chdir(LM_CHILD));
+	TEST_SUCC(chdir("/"));
 	TEST_SUCC(umount(LM_CHILD));
 
 	struct mnt_id_req req = {
@@ -118,7 +129,6 @@ FN_TEST(listmount_rejects_unmounted_parent)
 	uint64_t ids[1];
 	TEST_ERRNO(syscall(SYS_listmount, &req, ids, 1, 0), ENOENT);
 
-	TEST_SUCC(chdir("/"));
 	TEST_SUCC(mount("tmpfs", LM_CHILD, "tmpfs", 0, NULL));
 }
 END_TEST()
@@ -153,19 +163,28 @@ FN_TEST(listmount_rejects_undersized_req)
 	};
 	uint64_t ids[1];
 	TEST_ERRNO(syscall(SYS_listmount, &req, ids, 1, 0), EINVAL);
+	req.size = 0;
+	TEST_ERRNO(syscall(SYS_listmount, &req, ids, 1, 0), EINVAL);
 }
 END_TEST()
 
-FN_TEST(listmount_rejects_oversized_req)
+FN_TEST(listmount_request_version_one)
 {
-	// Pretending to be a future VER1-sized request must be rejected, not
-	// silently truncated to VER0 semantics.
-	struct mnt_id_req req = {
+	uint64_t parent_uid = TEST_RES(mount_unique_id(LM_PARENT), _ret != 0);
+	struct mnt_id_req_v1 req = {
 		.size = MNT_ID_REQ_SIZE_VER0 + 8,
-		.mnt_id = LSMT_ROOT,
+		.mnt_id = parent_uid,
 	};
 	uint64_t ids[1];
+#ifdef __asterinas__
+	// Asterinas currently documents support for the VER0 request layout only.
 	TEST_ERRNO(syscall(SYS_listmount, &req, ids, 1, 0), EINVAL);
+#else
+	uint64_t child_uid = TEST_RES(mount_unique_id(LM_CHILD), _ret != 0);
+
+	TEST_RES(syscall(SYS_listmount, &req, ids, 1, 0), _ret == 1);
+	TEST_RES(ids[0], _ret == child_uid);
+#endif
 }
 END_TEST()
 

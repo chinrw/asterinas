@@ -6,8 +6,9 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/fcntl.h>
+#include <sys/prctl.h>
 
-#include "../../common/test.h"
+#include "../../common/capability.h"
 
 struct custom_elf {
 	Elf64_Ehdr ehdr;
@@ -39,6 +40,10 @@ static const unsigned char illegal_instr[] = { 0x00, 0x00, 0x00, 0x00 };
 
 FN_SETUP(init_exec)
 {
+	// Keep root's exec transition from restoring access to low-address mappings.
+	CHECK(prctl(PR_CAPBSET_DROP, CAP_SYS_RAWIO, 0, 0, 0));
+	drop_capability(CAP_SYS_RAWIO);
+
 	elf.ehdr.e_ident[EI_MAG0] = ELFMAG0;
 	elf.ehdr.e_ident[EI_MAG1] = ELFMAG1;
 	elf.ehdr.e_ident[EI_MAG2] = ELFMAG2;

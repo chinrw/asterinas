@@ -4,18 +4,24 @@
 
 set -e
 
-./epoll/epoll_cycle
-./epoll/epoll_err
-./epoll/poll_err
-./epoll/test_epoll_pwait.sh
+. "${REGRESSION_TEST_ROOT:-/test}/run_test_case.sh"
 
-./eventfd2/eventfd2
-./eventfd2/eventfd2_err
+run_test_case ./epoll/epoll_cycle
+run_test_case ./epoll/epoll_err
+run_test_case ./epoll/poll_err
+run_test_case ./epoll/test_epoll_pwait.sh
 
-./file_io/access_err
-./file_io/block_device
-./file_io/fcntl_lock
-./file_io/fcntl_owner
-./file_io/fcntl_status_flags
-./file_io/file_err
-./file_io/iovec_err
+run_test_case ./eventfd2/eventfd2
+run_test_case ./eventfd2/eventfd2_err
+
+run_test_case ./file_io/access_err
+run_test_case ./file_io/block_device
+run_test_case ./file_io/fcntl_lock
+run_test_case ./file_io/fcntl_owner
+run_test_case ./file_io/fcntl_status_flags
+run_test_case ./file_io/file_err
+run_test_case ./file_io/iovec_err
+
+run_test_case ./epoll/epoll_wait
+
+finish_test_cases

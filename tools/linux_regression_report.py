@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
+
+"""Print all shard logs and reconcile their results with the build's manifest."""
+
+import argparse
+from collections import Counter
+import csv
+import os
+from pathlib import Path
+import re
+import sys
+import uuid
+
+
+def read_rows(path):
+    with path.open(newline="") as source:
+        return list(csv.DictReader(source, delimiter="\t", quoting=csv.QUOTE_NONE))
+
+
+def workload(row):
+    return f"{row['group']}/{row['case']}"
+
+
+def collect_results(directory, shards, expected):
+    results = {}
+    errors = []
+    for index in range(shards):
+        path = directory / f"shard-{index}" / "results.tsv"
+        if not path.is_file():
+            errors.append(f"Missing results from shard {index}")
+            continue
+        required = {"group", "case", "result", "duration_seconds", "command", "reason"}
+        for line, row in enumerate(read_rows(path), start=2):
+            if not required.issubset(row) or None in row or None in row.values():
+                errors.append(f"Incomplete result in shard {index} at line {line}")
+                continue
+            key = workload(row)
+            if key in results or key not in expected:
+                errors.append(
+                    f"Duplicate or unexpected result for {key} in shard {index}"
+                )
+                continue
+            results[key] = (index, row)
+    return results, errors
+
+
+def print_log(log, result, label):
+    print(f"::group::{result} {label}")
+    # Guest output is arbitrary text and must not issue Actions commands.
+    token = uuid.uuid4().hex
+    print(f"::stop-commands::{token}")
+    first_error = None
+    with log.open(errors="replace", newline="\n") as source:
+        for line in source:
+            line = line.rstrip("\r\n")
+            print(line)
+            if first_error is None and re.search(
+                r"failed \[|fatal error|^Error:", line, re.I
+            ):
+                first_error = line
+    print(f"::{token}::")
+    print("::endgroup::")
+    return first_error
+
+
+def report(manifest, directory, shards, allow_all_skipped=False, summary_path=None):
+    cases = read_rows(manifest)
+    expected = {workload(case) for case in cases}
+    if not expected or len(expected) != len(cases):
+        raise ValueError("Empty manifest or duplicate workload IDs")
+
+    results, errors = collect_results(directory, shards, expected)
+    totals = Counter()
+    assigned = Counter()
+    table = []
+    for case in cases:
+        key = workload(case)
+        action = case["action"]
+        owner = assigned[action] % shards
+        assigned[action] += 1
+        index, row = results.get(key, (owner, None))
+        result, duration, detail = "MISSING", "-", "No workload result was collected"
+        if row is not None:
+            result, duration, detail = (
+                row["result"],
+                row["duration_seconds"] + "s",
+                row["reason"],
+            )
+            if (
+                index != owner
+                or row["command"].strip() != case["command"].strip()
+                or result not in {"PASS", "FAIL", "SKIP", "NOT_RUN"}
+                or (action == "SKIP") != (result == "SKIP")
+            ):
+                errors.append(f"Result for {key} does not match the manifest")
+
+        log = directory / f"shard-{index}" / case["group"] / (case["case"] + ".log")
+        name = case["command"].strip().removeprefix("./")
+        label = f"{key} ({name})"
+        if log.is_file():
+            first_error = print_log(log, result, label)
+            if result == "FAIL" and detail == "workload failed" and first_error:
+                detail = first_error
+        elif result in {"PASS", "FAIL"}:
+            errors.append(f"Missing console log for {key}")
+        totals[result] += 1
+        table.append((label, result, duration, detail))
+
+    for message in errors:
+        print(f"Report error: {message}")
+    # Details can also contain assertion text supplied by a guest.
+    token = uuid.uuid4().hex
+    print(f"::stop-commands::{token}")
+    width = max(len(row[0]) for row in table)
+    print("\nTEST RESULTS")
+    print(f"{'TEST':<{width}}  RESULT   TIME  DETAILS")
+    for name, result, duration, detail in table:
+        print(f"{name:<{width}}  {result:<7}  {duration:>4}  {detail}".rstrip())
+    print("\nTEST SUMMARY")
+    print(f"Registered: {len(cases)}")
+    print(f"Executed: {totals['PASS'] + totals['FAIL']}")
+    for result in ("PASS", "FAIL", "SKIP", "NOT_RUN", "MISSING"):
+        print(f"{result}: {totals[result]}")
+    print(f"::{token}::")
+    if summary_path:
+        with open(summary_path, "a") as output:
+            print("### Linux regression", file=output)
+            print(
+                f"\n{len(cases)} workloads registered. Open **Print regression report** for all logs.",
+                file=output,
+            )
+            print("\n| Result | Workloads |\n| --- | ---: |", file=output)
+            for result in ("PASS", "FAIL", "SKIP", "NOT_RUN", "MISSING"):
+                print(f"| {result} | {totals[result]} |", file=output)
+    return bool(
+        errors
+        or totals["FAIL"]
+        or totals["NOT_RUN"]
+        or totals["MISSING"]
+        or (not allow_all_skipped and totals["SKIP"] == len(cases))
+    )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("manifest", type=Path)
+    parser.add_argument("directory", type=Path)
+    parser.add_argument(
+        "--shards", required=True, type=int, choices=range(1, 257), metavar="N"
+    )
+    parser.add_argument("--allow-all-skipped", action="store_true")
+    args = parser.parse_args()
+    sys.exit(
+        report(
+            args.manifest,
+            args.directory,
+            args.shards,
+            args.allow_all_skipped,
+            os.environ.get("GITHUB_STEP_SUMMARY"),
+        )
+    )

@@ -5,7 +5,7 @@
 #include <sys/fcntl.h>
 #include <unistd.h>
 
-#include "../../common/test.h"
+#include "../../common/capability.h"
 
 #define PAGE_SIZE 4096
 
@@ -18,6 +18,9 @@ FN_SETUP(init)
 {
 	FILE *fp;
 	unsigned long val;
+
+	// Linux permits CAP_SYS_RAWIO to bypass the low-address mapping restriction.
+	drop_capability(CAP_SYS_RAWIO);
 
 	fp = CHECK_WITH(fopen("/proc/sys/vm/mmap_min_addr", "r"), _ret != NULL);
 	CHECK_WITH(fscanf(fp, "%lu", &val), _ret == 1);

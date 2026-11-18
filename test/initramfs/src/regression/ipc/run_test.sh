@@ -4,10 +4,14 @@
 
 set -e
 
-./pipe/pipe_err
-./pipe/process_pipe_available
-./pipe/short_rw
+. "${REGRESSION_TEST_ROOT:-/test}/run_test_case.sh"
 
-./sem/sem
+run_test_case ./pipe/pipe_err
+run_test_case ./pipe/process_pipe_available
+run_test_case ./pipe/short_rw
 
-./shm/posix_shm
+run_test_case ./sem/sem
+
+run_test_case ./shm/posix_shm
+
+finish_test_cases

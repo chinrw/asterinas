@@ -1,0 +1,181 @@
+name: Test Linux regression
+
+on:
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: Number of parallel shards (1 to 256, default 4)
+        required: false
+        type: string
+      group:
+        description: Regression group to run; empty runs all groups
+        required: false
+        type: string
+        default: ''
+      case:
+        description: Workload number within the selected group; empty runs the group
+        required: false
+        type: string
+        default: ''
+      include_excluded:
+        description: Run temporarily excluded Linux workloads as well
+        required: false
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - test/initramfs/**
+      - distro/nixpkgs.nix
+      - flake.nix
+      - flake.lock
+      - tools/dev_env/nix/packages/qemu.nix
+      - tools/linux_regression_report.py
+      - tools/run_linux_regression.sh
+      - tools/tests/test_linux_regression.py
+      - .github/workflows/test_linux_regression.yml
+  push:
+    branches:
+      - main
+      - ci-preview/linux-regression-6.16-20261118
+    paths:
+      - test/initramfs/**
+      - distro/nixpkgs.nix
+      - flake.nix
+      - flake.lock
+      - tools/dev_env/nix/packages/qemu.nix
+      - tools/linux_regression_report.py
+      - tools/run_linux_regression.sh
+      - tools/tests/test_linux_regression.py
+      - .github/workflows/test_linux_regression.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SHARDS: ${{ inputs.shards || vars.LINUX_REGRESSION_SHARDS || '4' }}
+  REGRESSION_GROUP: ${{ inputs.group }}
+  REGRESSION_CASE: ${{ inputs.case }}
+  REGRESSION_INCLUDE_EXCLUDED: ${{ inputs.include_excluded && 'true' || 'false' }}
+
+jobs:
+  prepare:
+    name: Build Linux regression bundle
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      bundle: ${{ steps.plan.outputs.bundle }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: aster-nixos-dev
+          skipPush: true
+      - name: Check runner and report handling
+        run: python3 tools/tests/test_linux_regression.py
+        env:
+          REGRESSION_CASE: ''
+          REGRESSION_GROUP: ''
+          REGRESSION_INCLUDE_EXCLUDED: 'false'
+      - name: Build bundle and plan workloads
+        id: plan
+        shell: bash
+        run: |
+          if [[ ! "$SHARDS" =~ ^[1-9][0-9]{0,2}$ ]] || ((SHARDS > 256)); then
+            echo "Expected 1 to 256 shards." >&2
+            exit 2
+          fi
+          bundle=$(nix-build test/initramfs/nix/linux-regression.nix --no-out-link)
+          bash tools/run_linux_regression.sh --bundle "$bundle" --plan-only --output plan
+          count=$(awk -F '\t' 'NR > 1 && $3 == "RUN" { n++ } END { print n ? n : 1 }' plan/cases.tsv)
+          ((count <= SHARDS)) || count=$SHARDS
+          echo "matrix=$(jq -cn --argjson n "$count" '[range($n)]')" >> "$GITHUB_OUTPUT"
+          echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+          # Transfer the runtime closure once, including the pinned QEMU and its libraries.
+          nix-store -qR "$bundle" | xargs nix-store --export | zstd -T0 -3 -o bundle.nar.zst
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-regression-bundle
+          path: bundle.nar.zst
+          compression-level: 0
+          if-no-files-found: error
+          overwrite: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-regression-plan
+          path: plan/cases.tsv
+          if-no-files-found: error
+          overwrite: true
+
+  run:
+    name: Linux regression shard ${{ matrix.shard }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-regression-bundle
+      - name: Restore the build and enable KVM
+        shell: bash
+        run: |
+          zstd -dc bundle.nar.zst | nix-store --import > /dev/null
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      - name: Run workloads
+        env:
+          BUNDLE: ${{ needs.prepare.outputs.bundle }}
+          INDEX: ${{ matrix.shard }}
+          COUNT: ${{ strategy.job-total }}
+        run: |
+          token=$(cat /proc/sys/kernel/random/uuid)
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
+          bash tools/run_linux_regression.sh --bundle "$BUNDLE" --shard-count "$COUNT" --shard-index "$INDEX" --output results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shard-${{ matrix.shard }}
+          path: results/
+          if-no-files-found: error
+          overwrite: true
+
+  report:
+    name: Linux regression report
+    needs: [prepare, run]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-regression-plan
+          path: plan
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shard-*
+          path: collected
+      - name: Print regression report
+        if: ${{ !cancelled() }}
+        env:
+          MATRIX: ${{ needs.prepare.outputs.matrix }}
+          SHARD_STATUS: ${{ needs.run.result }}
+        run: |
+          if [[ ! -s plan/cases.tsv ]]; then
+            echo "TEST SUMMARY"
+            echo "The build did not provide a workload manifest."
+            exit 1
+          fi
+          args=()
+          if [[ -n "$REGRESSION_CASE" ]]; then args+=(--allow-all-skipped); fi
+          python3 tools/linux_regression_report.py plan/cases.tsv collected --shards "$(jq length <<< "$MATRIX")" "${args[@]}"
+          [[ "$SHARD_STATUS" == success ]]

@@ -4,6 +4,8 @@
 
 set -e
 
+. "${REGRESSION_TEST_ROOT:-/test}/run_test_case.sh"
+
 check_file_size() {
     local file_name="$1"
     local expected_size="$2"
@@ -30,7 +32,7 @@ test_ext2() {
     cd ${ext2_dir}
 
     # Test case for the big file feature
-    for i in $(seq 1 10); do
+    for _iteration in $(seq 1 10); do
         truncate -s 500M ${test_file}
         check_file_size ${test_file} $((500 * 1024 * 1024))
         truncate -s 2K ${test_file}
@@ -44,12 +46,8 @@ test_ext2() {
 }
 
 test_fdatasync() {
-    ./fdatasync/fdatasync /
-    rm -f /test_fdatasync.txt
-    ./fdatasync/fdatasync /ext2
-    rm -f /ext2/test_fdatasync.txt
-    ./fdatasync/fdatasync /exfat
-    rm -f /exfat/test_fdatasync.txt
+    ./fdatasync/fdatasync "$1"
+    rm -f "${1%/}/test_fdatasync.txt"
 }
 
 test_mount_bind_file() {
@@ -85,97 +83,96 @@ test_mount_bind_file() {
     rm -f "$file_a" "$file_b"
 }
 
-echo "Start ext2 fs test......"
-test_ext2 "/ext2" "test_file.txt"
-./ext2/fallocate
-./ext2/file_io
-./ext2/mknod
-./ext2/namei
-./ext2/open_dir
-./ext2/open_unlink
-./ext2/permissions
-./ext2/readdir
-./ext2/rename
-./ext2/rmdir
-./ext2/shared_block_device
-./ext2/short_rw
-./ext2/sparse
-./ext2/sticky
-./ext2/symlink
-./ext2/unix_socket
-./ext2/xattr
-echo "All ext2 fs test passed."
+run_test_case test_ext2 "/ext2" "test_file.txt"
+run_test_case ./ext2/fallocate
+run_test_case ./ext2/file_io
+run_test_case ./ext2/mknod
+run_test_case ./ext2/namei
+run_test_case ./ext2/open_dir
+run_test_case ./ext2/open_unlink
+run_test_case ./ext2/permissions
+run_test_case ./ext2/readdir
+run_test_case ./ext2/rename
+run_test_case ./ext2/rmdir
+run_test_case ./ext2/shared_block_device
+run_test_case ./ext2/short_rw
+run_test_case ./ext2/sparse
+run_test_case ./ext2/sticky
+run_test_case ./ext2/symlink
+run_test_case ./ext2/unix_socket
+run_test_case_requiring CONFIG_EXT2_FS_XATTR ./ext2/xattr
+run_test_case test_fdatasync /
+run_test_case test_fdatasync /ext2
+run_test_case_requiring CONFIG_EXFAT_FS test_fdatasync /exfat
 
-echo "Start fdatasync test......"
-test_fdatasync
-echo "All fdatasync test passed."
+run_test_case test_mount_bind_file
 
-echo "Start mount bind file test......"
-test_mount_bind_file
-echo "All mount bind file test passed."
+run_test_case env TEST_TMPDIR=/tmp TEST_DIRECT=0 ./empty_write/empty_write
+run_test_case_requiring CONFIG_EXFAT_FS env TEST_TMPDIR=/exfat TEST_DIRECT=0 ./empty_write/empty_write
+run_test_case_requiring CONFIG_EXFAT_FS env TEST_TMPDIR=/exfat TEST_DIRECT=1 ./empty_write/empty_write
+run_test_case env TEST_TMPDIR=/ext2 TEST_DIRECT=0 ./empty_write/empty_write
+run_test_case env TEST_TMPDIR=/ext2 TEST_DIRECT=1 ./empty_write/empty_write
 
-TEST_TMPDIR=/tmp TEST_DIRECT=0 ./empty_write/empty_write
-TEST_TMPDIR=/exfat TEST_DIRECT=0 ./empty_write/empty_write
-TEST_TMPDIR=/exfat TEST_DIRECT=1 ./empty_write/empty_write
-TEST_TMPDIR=/ext2 TEST_DIRECT=0 ./empty_write/empty_write
-TEST_TMPDIR=/ext2 TEST_DIRECT=1 ./empty_write/empty_write
+run_test_case ./getcwd/getcwd
 
-./getcwd/getcwd
+run_test_case ./inotify/inotify_align
+run_test_case ./inotify/inotify_close
+run_test_case ./inotify/inotify_o_path
+run_test_case ./inotify/inotify_poll
+run_test_case ./inotify/inotify_unlink
 
-./inotify/inotify_align
-./inotify/inotify_close
-./inotify/inotify_o_path
-./inotify/inotify_poll
-./inotify/inotify_unlink
+run_test_case ./isolation/chroot
+run_test_case ./isolation/pivot_root
 
-./isolation/chroot
-./isolation/pivot_root
+run_test_case ./mount/listmount
+run_test_case ./mount/mount_api
+run_test_case ./mount/mount_capability
+run_test_case ./mount/mount_flag_enforcement
+run_test_case ./mount/mount_move
+run_test_case ./mount/mount_propagation
+run_test_case ./mount/mount_readonly
 
-./mount/listmount
-./mount/mount_api
-./mount/mount_capability
-./mount/mount_flag_enforcement
-./mount/mount_move
-./mount/mount_propagation
-./mount/mount_readonly
+run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/lchown_lower_symlink
+run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/link_lower_file
+run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/mknod_whiteout_rejected
+run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/ovl_test
+run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/readdir_small_buffer
+run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/rmdir_lower_only_nonempty
+run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/sparse_copyup_consistency
+run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/xino_dino_identity
 
-./overlayfs/lchown_lower_symlink
-./overlayfs/link_lower_file
-./overlayfs/mknod_whiteout_rejected
-./overlayfs/ovl_test
-./overlayfs/readdir_small_buffer
-./overlayfs/rmdir_lower_only_nonempty
-./overlayfs/sparse_copyup_consistency
-./overlayfs/xino_dino_identity
+run_test_case ./procfs/dentry_cache
+run_test_case ./procfs/fd
+run_test_case ./procfs/getdents
+run_test_case ./procfs/mountstats
+run_test_case_requiring CONFIG_SECURITY_YAMA ./procfs/pid_mem
+run_test_case ./procfs/proc_fd_open_fifo_after_setid
+run_test_case ./procfs/proc_sys_kernel
+run_test_case ./procfs/tid
 
-./procfs/dentry_cache
-./procfs/fd
-./procfs/getdents
-./procfs/mountstats
-./procfs/pid_mem
-./procfs/proc_fd_open_fifo_after_setid
-./procfs/proc_sys_kernel
-./procfs/tid
+run_test_case ./pseudofs/fallocate
+run_test_case ./pseudofs/memfd_access_err
+run_test_case ./pseudofs/memfd_create
+run_test_case ./pseudofs/pseudo_dentry
+run_test_case ./pseudofs/pseudo_dev_id
+run_test_case ./pseudofs/pseudo_inode
+run_test_case ./pseudofs/pseudo_mount
 
-./pseudofs/fallocate
-./pseudofs/memfd_access_err
-./pseudofs/memfd_create
-./pseudofs/pseudo_dentry
-./pseudofs/pseudo_dev_id
-./pseudofs/pseudo_inode
-./pseudofs/pseudo_mount
+run_test_case ./ramfs/readdir
 
-./ramfs/readdir
+run_test_case ./rename/permission
+run_test_case ./rename/same_inode
 
-./rename/permission
-./rename/same_inode
+run_test_case_requiring CONFIG_EXFAT_FS ./statx/btime
 
-./statx/btime
+run_test_case ./symlink/symlink
 
-./symlink/symlink
+run_test_case ./sync/sync
 
-./sync/sync
+run_test_case ./tmpfile/tmpfile
 
-./tmpfile/tmpfile
+run_test_case ./utimensat/utimensat
 
-./utimensat/utimensat
+run_test_case ./procfs/meminfo
+
+finish_test_cases

@@ -23,7 +23,7 @@
 static void *volatile g_alt_stack_base = NULL;
 static volatile int recursion_level = 0;
 static volatile bool sigstack_enabled = false;
-static volatile int stack_flags = 0;
+static volatile int stack_flags = SS_DISABLE;
 static volatile stack_t old_stack;
 
 int on_sig_stack(ucontext_t *uc)
@@ -98,7 +98,7 @@ FN_TEST(default_stack)
 		 default_stack.ss_size == 0 && default_stack.ss_sp == 0 &&
 			 default_stack.ss_flags == SS_DISABLE);
 }
-END_SETUP()
+END_TEST()
 
 FN_SETUP(sig_action)
 {
@@ -114,6 +114,9 @@ END_SETUP()
 
 FN_TEST(raise_with_sigstack_disabled)
 {
+	stack_t disabled_stack = { .ss_flags = SS_DISABLE };
+
+	TEST_SUCC(sigaltstack(&disabled_stack, NULL));
 	TEST_SUCC(raise(SIGUSR1));
 }
 END_TEST()
@@ -128,6 +131,7 @@ FN_TEST(alt_stack)
 
 	TEST_SUCC(sigaltstack(&alt_stack, NULL));
 	sigstack_enabled = true;
+	stack_flags = 0;
 }
 END_TEST()
 
@@ -153,8 +157,8 @@ FN_TEST(flag_ss_disable)
 
 	memset(&alt_stack, 0, sizeof(alt_stack));
 	TEST_RES(sigaltstack(NULL, &alt_stack),
-		 alt_stack.ss_flags = SS_DISABLE && alt_stack.ss_size == 0 &&
-				      alt_stack.ss_sp == 0);
+		 alt_stack.ss_flags == SS_DISABLE && alt_stack.ss_size == 0 &&
+			 alt_stack.ss_sp == 0);
 }
 END_TEST()
 
@@ -173,9 +177,9 @@ FN_TEST(flag_ss_autodisarm)
 	TEST_RES(raise(SIGUSR1), old_stack.ss_flags == SS_DISABLE);
 	memset(&alt_stack, 0, sizeof(alt_stack));
 	TEST_RES(sigaltstack(NULL, &alt_stack),
-		 alt_stack.ss_flags = SS_AUTODISARM &&
-				      alt_stack.ss_size == ALT_STACK_SIZE &&
-				      alt_stack.ss_sp == g_alt_stack_base);
+		 alt_stack.ss_flags == SS_AUTODISARM &&
+			 alt_stack.ss_size == ALT_STACK_SIZE &&
+			 alt_stack.ss_sp == g_alt_stack_base);
 }
 END_TEST()
 

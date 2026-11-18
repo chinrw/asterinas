@@ -4,12 +4,16 @@
 
 set -e
 
-./clock_nanosleep/nanosleep_err
+. "${REGRESSION_TEST_ROOT:-/test}/run_test_case.sh"
 
-./gettimeofday/gettimeofday
+run_test_case ./clock_nanosleep/nanosleep_err
 
-./itimer/setitimer
-./itimer/timer_create
+run_test_case ./gettimeofday/gettimeofday
 
-./timerfd/timerfd_clockid
-./timerfd/timerfd_readiness
+run_test_case ./itimer/setitimer
+run_test_case ./itimer/timer_create
+
+run_test_case ./timerfd/timerfd_clockid
+run_test_case ./timerfd/timerfd_readiness
+
+finish_test_cases

@@ -9,23 +9,32 @@ cd ${EPOLLTEST_DIR}
 
 echo "Start epoll_pwait test......"
 
-# Step 2: Run epoll_pwait in the background
+EPOLL_PID=""
+
+cleanup() {
+    if [ -n "$EPOLL_PID" ]; then
+        kill "$EPOLL_PID" 2>/dev/null || true
+        wait "$EPOLL_PID" 2>/dev/null || true
+    fi
+}
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+
 ./epoll_pwait &
 EPOLL_PID=$!
 
 echo "epoll_pwait PID: $EPOLL_PID"
 
-# Step 3: Wait for 1 seconds to let epoll_pwait initialize and block SIGUSR1
+# Give epoll_pwait time to initialize and block SIGUSR1.
 sleep 1
 
-# Step 4: Send SIGUSR1 to epoll_pwait
 kill -USR1 $EPOLL_PID
 echo "Sent SIGUSR1 to PID $EPOLL_PID"
 
-# Optional: Wait a bit more to see the output if the process is still running
-sleep 3
-
-# You can also wait till the subprocess epoll_pwait completely finishes
-# wait $EPOLL_PID
+EPOLL_STATUS=0
+wait "$EPOLL_PID" || EPOLL_STATUS=$?
+EPOLL_PID=""
 
 echo "Test completed."
+exit "$EPOLL_STATUS"
