@@ -136,8 +136,16 @@ This accounts for registered workloads, not every function or branch inside
 them. A fatal `CHECK` still terminates that program, so later constructor tests
 inside it have not run even though the host continues with the next workload.
 
-The benchmark kernel ships without loadable modules. Workloads that require a
-missing built-in feature are recorded as SKIP with its configuration symbol.
+The benchmark publishes its 6.16.0 kernel image and configuration. The bundle
+builds OverlayFS, exFAT, and AF_VSOCK as external modules using the Linux 6.16
+sources, the headers embedded in that image, and its exported symbols.
+Each workload loads its required module before its start marker. The exFAT
+workloads also mount the test disk. A missing driver or failed mount produces
+NOT_RUN. The VirtIO hardware RNG workload remains skipped.
+
+Without Yama the ordinary ptrace and procfs memory tests run. The
+`proc_mem_yama_scope` subtest skips the policy changes that require Yama.
+The results table names skipped subtests in the workload's details.
 The runner reports excluded TDX, graphics, virtual-console, input-device, and
 Asterinas-specific TCP tests. Missing fixtures required by the remaining tests
 are errors. When adding tests, register them with `run_test_case` in the existing group entry;

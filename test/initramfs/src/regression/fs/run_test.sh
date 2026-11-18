@@ -103,13 +103,13 @@ run_test_case ./ext2/unix_socket
 run_test_case_requiring CONFIG_EXT2_FS_XATTR ./ext2/xattr
 run_test_case test_fdatasync /
 run_test_case test_fdatasync /ext2
-run_test_case_requiring CONFIG_EXFAT_FS test_fdatasync /exfat
+run_test_case_with_linux_module exfat test_fdatasync /exfat
 
 run_test_case test_mount_bind_file
 
 run_test_case env TEST_TMPDIR=/tmp TEST_DIRECT=0 ./empty_write/empty_write
-run_test_case_requiring CONFIG_EXFAT_FS env TEST_TMPDIR=/exfat TEST_DIRECT=0 ./empty_write/empty_write
-run_test_case_requiring CONFIG_EXFAT_FS env TEST_TMPDIR=/exfat TEST_DIRECT=1 ./empty_write/empty_write
+run_test_case_with_linux_module exfat env TEST_TMPDIR=/exfat TEST_DIRECT=0 ./empty_write/empty_write
+run_test_case_with_linux_module exfat env TEST_TMPDIR=/exfat TEST_DIRECT=1 ./empty_write/empty_write
 run_test_case env TEST_TMPDIR=/ext2 TEST_DIRECT=0 ./empty_write/empty_write
 run_test_case env TEST_TMPDIR=/ext2 TEST_DIRECT=1 ./empty_write/empty_write
 
@@ -132,20 +132,20 @@ run_test_case ./mount/mount_move
 run_test_case ./mount/mount_propagation
 run_test_case ./mount/mount_readonly
 
-run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/lchown_lower_symlink
-run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/link_lower_file
-run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/mknod_whiteout_rejected
-run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/ovl_test
-run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/readdir_small_buffer
-run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/rmdir_lower_only_nonempty
-run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/sparse_copyup_consistency
-run_test_case_requiring CONFIG_OVERLAY_FS ./overlayfs/xino_dino_identity
+run_test_case_with_linux_module overlay ./overlayfs/lchown_lower_symlink
+run_test_case_with_linux_module overlay ./overlayfs/link_lower_file
+run_test_case_with_linux_module overlay ./overlayfs/mknod_whiteout_rejected
+run_test_case_with_linux_module overlay ./overlayfs/ovl_test
+run_test_case_with_linux_module overlay ./overlayfs/readdir_small_buffer
+run_test_case_with_linux_module overlay ./overlayfs/rmdir_lower_only_nonempty
+run_test_case_with_linux_module overlay ./overlayfs/sparse_copyup_consistency
+run_test_case_with_linux_module overlay ./overlayfs/xino_dino_identity
 
 run_test_case ./procfs/dentry_cache
 run_test_case ./procfs/fd
 run_test_case ./procfs/getdents
 run_test_case ./procfs/mountstats
-run_test_case_requiring CONFIG_SECURITY_YAMA ./procfs/pid_mem
+run_test_case ./procfs/pid_mem
 run_test_case ./procfs/proc_fd_open_fifo_after_setid
 run_test_case ./procfs/proc_sys_kernel
 run_test_case ./procfs/tid
@@ -163,7 +163,7 @@ run_test_case ./ramfs/readdir
 run_test_case ./rename/permission
 run_test_case ./rename/same_inode
 
-run_test_case_requiring CONFIG_EXFAT_FS ./statx/btime
+run_test_case_with_linux_module exfat ./statx/btime
 
 run_test_case ./symlink/symlink
 

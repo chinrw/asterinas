@@ -505,11 +505,14 @@ sys.exit(19 if mode == 'qemu_failure' else 0)
         self.assertEqual(result.returncode, 1)
         with (shard / "time/1.log").open("a") as log:
             log.write("assertion failed [got 1, expected 0]\n")
+        with (shard / "time/2.log").open("a") as log:
+            log.write("test_policy skipped: `scope == YAMA_SCOPE_UNAVAILABLE` is true\n")
         summary, logs = StringIO(), StringIO()
         with redirect_stdout(summary):
             self.assertTrue(report(shard / "cases.tsv", self.root, 1, console_output=logs))
         self.assertIn("TEST SUMMARY", summary.getvalue())
         self.assertIn("assertion failed [got 1, expected 0]", summary.getvalue())
+        self.assertIn("Skipped subtests: test_policy", summary.getvalue())
         self.assertNotIn("REGRESSION_CASE_START", summary.getvalue())
         self.assertIn("::group::FAIL time/1", logs.getvalue())
         self.assertIn("::group::PASS time/2", logs.getvalue())

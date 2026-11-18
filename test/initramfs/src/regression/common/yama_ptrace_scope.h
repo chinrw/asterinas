@@ -10,11 +10,20 @@
 
 #include "test.h"
 
+#define YAMA_SCOPE_UNAVAILABLE (-1)
 #define YAMA_SCOPE_NO_ATTACH 3
 
 static inline __attribute__((unused)) int read_yama_scope(void)
 {
-	int fd = CHECK(open("/proc/sys/kernel/yama/ptrace_scope", O_RDONLY));
+	const char *path = "/proc/sys/kernel/yama/ptrace_scope";
+#ifdef __asterinas__
+	int fd = CHECK(open(path, O_RDONLY));
+#else
+	// Linux can provide ptrace without the optional Yama LSM.
+	int fd = CHECK_WITH(open(path, O_RDONLY), _ret >= 0 || errno == ENOENT);
+	if (fd < 0)
+		return YAMA_SCOPE_UNAVAILABLE;
+#endif
 	char buf[32] = { 0 };
 	ssize_t nread = CHECK(read(fd, buf, sizeof(buf) - 1));
 	CHECK(close(fd));

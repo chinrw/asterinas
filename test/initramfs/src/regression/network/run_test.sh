@@ -40,7 +40,7 @@ run_test_case ./privileged_ports
 run_test_case ./send_buf_full
 run_test_case ./sendmmsg
 run_test_case ./socketpair
-run_test_case_requiring CONFIG_VSOCKETS ./socket_ioctl
+run_test_case_with_linux_module vsock ./socket_ioctl
 run_test_case ./sockoption
 run_test_case ./sockoption_short
 run_test_case ./sockoption_unix

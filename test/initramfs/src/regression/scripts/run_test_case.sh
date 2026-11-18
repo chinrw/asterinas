@@ -16,10 +16,15 @@ case "${REGRESSION_TEST_CASE:-}" in
 esac
 
 run_test_case() {
+    _register_test_case RUN "" "" "$@"
+}
+
+run_test_case_with_linux_module() {
+    # The module is prepared only for the selected workload in the benchmark guest.
     _register_test_case RUN "" "$@"
 }
 
-# The benchmark publishes a kernel without loadable modules.
+# Check requirements that must be built into the benchmark kernel.
 run_test_case_requiring() {
     _regression_config=$1
     shift
@@ -34,13 +39,14 @@ run_test_case_requiring() {
 skip_test_case() {
     _regression_skip_reason=$1
     shift
-    _register_test_case SKIP "$_regression_skip_reason" "$@"
+    _register_test_case SKIP "$_regression_skip_reason" "" "$@"
 }
 
 _register_test_case() {
     _regression_case_action=$1
     _regression_case_reason=$2
-    shift 2
+    _regression_module=$3
+    shift 3
     if [ "$#" -eq 0 ]; then
         echo "A regression case must name a command." >&2
         exit 2
@@ -68,6 +74,14 @@ _register_test_case() {
     if [ "$_regression_case_action" = SKIP ]; then
         printf 'Skipping %s/%s: %s\n' "$REGRESSION_TEST_GROUP" "$_regression_case_number" "$_regression_case_reason"
         return
+    fi
+
+    if [ -n "${REGRESSION_LINUX_MODULE_DIR:-}" ] && [ -n "$_regression_module" ]; then
+        /bin/busybox insmod "$REGRESSION_LINUX_MODULE_DIR/$_regression_module.ko"
+        if [ "$_regression_module" = exfat ]; then
+            mkdir -p /exfat
+            mount -t exfat /dev/vdb /exfat
+        fi
     fi
 
     printf 'REGRESSION_CASE_START %s %s\n' "$REGRESSION_TEST_GROUP" "$_regression_case_number"

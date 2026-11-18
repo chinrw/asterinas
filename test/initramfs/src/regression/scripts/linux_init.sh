@@ -8,6 +8,8 @@ export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 export REGRESSION_TEST_PLATFORM=linux
 export REGRESSION_BUILTIN_CONFIG=/etc/benchmark-linux.config
 export REGRESSION_BLOCK_DEVICES=virtio
+REGRESSION_LINUX_MODULE_DIR="/lib/modules/$(uname -r)"
+export REGRESSION_LINUX_MODULE_DIR
 
 group=setup
 case_number=0
@@ -83,11 +85,8 @@ for device in /dev/vda /dev/vdb /dev/vdc /dev/nvme0n1; do
     fi
 done
 mount -t ext2 /dev/vda /ext2
-if grep -qw exfat /proc/filesystems; then
-    mount -t exfat /dev/vdb /exfat
-else
-    rmdir /exfat
-fi
+# Keep this path absent until the exFAT fixture has mounted its test disk.
+rmdir /exfat
 
 ip link set lo up
 ip link set eth0 up

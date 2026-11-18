@@ -47,12 +47,12 @@ run_test_case ./prctl/thread_name
 run_test_case ./pthread/pthread_signal_test
 run_test_case ./pthread/pthread_test
 
-run_test_case_requiring CONFIG_SECURITY_YAMA ./ptrace/ptrace
-run_test_case_requiring CONFIG_SECURITY_YAMA ./ptrace/set_options
+run_test_case ./ptrace/ptrace
+run_test_case ./ptrace/set_options
 
 if [ "$(uname -m)" = "x86_64" ]; then
-    run_test_case_requiring CONFIG_SECURITY_YAMA ./ptrace/debugger
-    run_test_case_requiring CONFIG_SECURITY_YAMA ./ptrace/read_write_regs
+    run_test_case ./ptrace/debugger
+    run_test_case ./ptrace/read_write_regs
 fi
 
 run_test_case ./sched/sched_attr_getset

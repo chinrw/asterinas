@@ -18,6 +18,10 @@ let
     url = lib.removeSuffix "vmlinuz" kernelUrl + ".config";
     hash = "sha256-FElBiImIF4+F3krRvzjdqqOsDgsAiO1XcQM6J+uELKk=";
   };
+  modules = pkgs.callPackage ./benchmark-linux-modules {
+    stdenv = pkgs.gcc13Stdenv;
+    inherit kernel config;
+  };
   regression = pkgs.callPackage ./regression { testPlatform = "linux"; };
   initramfs = pkgs.callPackage ./initramfs.nix {
     busybox = pkgs.busybox;
@@ -69,6 +73,7 @@ pkgs.runCommand "linux-regression-6.16.0"
     cp ${../src/regression/scripts/linux_init.sh} root/linux-init
     chmod 0755 root/linux-init
     cp ${config} root/etc/benchmark-linux.config
+    cp -r ${modules}/lib/modules root/usr/lib/
 
     printf 'group\tcase\taction\tcommand\treason\n' > $out/cases.tsv
     for directory in root/test/*; do

@@ -51,17 +51,20 @@ def print_log(log, result, label, output):
     token = uuid.uuid4().hex
     print(f"::stop-commands::{token}", file=output)
     first_error = None
+    skipped_subtests = []
     with log.open(errors="replace", newline="\n") as source:
         for line in source:
             line = line.rstrip("\r\n")
             print(line, file=output)
+            if skipped := re.fullmatch(r"(test_\w+) skipped: (.+)", line):
+                skipped_subtests.append(f"{skipped[1]} ({skipped[2]})")
             if first_error is None and re.search(
                 r"failed \[|fatal error|^Error:", line, re.I
             ):
                 first_error = line
     print(f"::{token}::", file=output)
     print("::endgroup::", file=output)
-    return first_error
+    return first_error, skipped_subtests
 
 
 def report(
@@ -106,9 +109,18 @@ def report(
         name = case["command"].strip().removeprefix("./")
         label = f"{key} ({name})"
         if log.is_file():
-            first_error = print_log(log, result, label, console_output)
+            first_error, skipped_subtests = print_log(
+                log, result, label, console_output
+            )
             if result == "FAIL" and detail == "workload failed" and first_error:
                 detail = first_error
+            if skipped_subtests:
+                detail = " ".join(
+                    filter(
+                        None,
+                        [detail, "Skipped subtests: " + ", ".join(skipped_subtests)],
+                    )
+                )
         elif result in {"PASS", "FAIL"}:
             errors.append(f"Missing console log for {key}")
         totals[result] += 1
