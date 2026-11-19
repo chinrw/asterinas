@@ -126,7 +126,7 @@ an order-dependent result or using an older bundle.
 
 `results.tsv` gives each selected workload a PASS, FAIL, SKIP, or NOT_RUN result,
 its command, duration, exit status, and an explanation. Subsystem artifacts
-include the full guest console and result channel, per-case logs and
+include the kernel log, userspace console, result channel, per-case logs and
 `guest-times.tsv` with the measured wall time of each boot and its workloads.
 
 This accounts for registered workloads, not every function or branch inside

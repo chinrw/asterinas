@@ -322,7 +322,9 @@ done
 truncate -s 512M "$scratch/exfat.img"
 mkfs.exfat "$scratch/exfat.img" > "$output_dir/mkfs-exfat.log"
 
-boot_args="console=ttyS0 rdinit=/linux-init lsm=integrity net.ifnames=0 panic=1"
+kernel_console=ttyS0
+if [[ -f $bundle/separate-kernel-console ]]; then kernel_console=ttyS2; fi
+boot_args="console=$kernel_console rdinit=/linux-init lsm=integrity net.ifnames=0 panic=1"
 qemu_args=(
     -machine q35 -accel "$accel" -cpu "$cpu" -smp 4 -m 2048
     -nodefaults -no-reboot -display none -monitor none
@@ -361,11 +363,15 @@ for row in "${selected_rows[@]}"; do
     mkdir -p "$output_dir/$group"
     record=$output_dir/$group/$number.result
     log_file=$output_dir/$group/$number.log
+    kernel_serial=()
+    if [[ $kernel_console == ttyS2 ]]; then
+        kernel_serial=(-serial "file:$output_dir/$group/$number.kernel.log")
+    fi
     started=$SECONDS
     tee "$log_file" < "$scratch/qemu-log" &
     tee_pid=$!
     TMPDIR="$scratch" timeout --kill-after=10 "$case_timeout" "$qemu" "${qemu_args[@]}" \
-        -append "$boot_args regression_group=$group regression_case=$number" -serial "file:$record" \
+        -append "$boot_args regression_group=$group regression_case=$number" -serial "file:$record" "${kernel_serial[@]}" \
         > "$scratch/qemu-log" 2>&1 &
     vm_pid=$!
     if wait "$vm_pid"; then

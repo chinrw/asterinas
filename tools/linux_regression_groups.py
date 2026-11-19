@@ -206,6 +206,8 @@ def run_groups(cases, directory, timeout, command):
                 )
             control = folder / "guest.result"
             argv += ["-serial", f"file:{control}"]
+            if "console=ttyS2" in argv[idx].split():
+                argv += ["-serial", f"file:{folder / 'kernel.log'}"]
             print(f"Booting Linux for {group} ({len(members)} workloads)", flush=True)
             started = time.monotonic()
             interrupted = False

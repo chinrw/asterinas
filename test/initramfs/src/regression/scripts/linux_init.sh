@@ -63,7 +63,8 @@ export REGRESSION_TEST_CASE=$case_number
 
 mount -t sysfs sysfs /sys
 mount -t devtmpfs devtmpfs /dev
-exec < /dev/console > /dev/console 2>&1
+# Keep test output and its boundary records on ttyS0 while printk uses ttyS2.
+exec < /dev/ttyS0 > /dev/ttyS0 2>&1
 mkdir -p /dev/pts /dev/shm
 mount -t devpts devpts /dev/pts
 chmod 0666 /dev/pts/ptmx

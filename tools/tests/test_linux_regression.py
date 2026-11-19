@@ -70,6 +70,12 @@ group = re.search(r'regression_group=([a-z0-9_]+)', cmdline)[1]
 case = re.search(r'regression_case=([0-9]+)', cmdline)[1]
 record = next(arg[5:] for arg in args if arg.startswith('file:'))
 mode = os.environ.get('REGRESSION_FIXTURE_MODE', 'pass')
+if mode == 'kernel_console':
+    ports = [args[i+1] for i, arg in enumerate(args) if arg == '-serial']
+    assert 'console=ttyS2' in cmdline.split() and len(ports) == 3
+    assert ports[0] == 'stdio' and ports[1] == 'file:' + record
+    assert ports[2].startswith('file:') and ports[2] != ports[1]
+    pathlib.Path(ports[2][5:]).write_text('fixture printk diagnostic')
 with pathlib.Path(os.environ['REGRESSION_FIXTURE_CALLS']).open('a') as calls:
     calls.write(f'{group} {case}\\n')
 if batch := re.search(r'regression_batch=([0-9,]+)', cmdline):
@@ -609,6 +615,23 @@ sys.exit(19 if mode == 'qemu_failure' else 0)
         rejected = subprocess.run(command, capture_output=True, text=True)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("explicit workload registration required", rejected.stderr)
+
+    def test_kernel_messages_are_captured_separately_in_both_modes(self):
+        (self.bundle / "separate-kernel-console").touch()
+        for mode, filename in [("subsystem", "kernel.log"), ("case", "1.kernel.log")]:
+            with self.subTest(mode=mode):
+                directory = self.root / mode
+                shard = directory / "shard-0"
+                run = self.run_runner("kernel_console", "--group", "hello_world", "--case", "1",
+                                      "--output", str(shard), guest_mode=mode)
+                self.assertEqual(run.returncode, 0, run.stdout)
+                logs_dir = shard / "hello_world"
+                self.assertIn("fixture printk diagnostic", (logs_dir / filename).read_text())
+                self.assertNotIn("fixture printk diagnostic", (logs_dir / "1.log").read_text())
+                output = StringIO()
+                with redirect_stdout(StringIO()):
+                    self.assertFalse(report(shard / "cases.tsv", directory, 1, mode=mode, console_output=output))
+                self.assertEqual(output.getvalue().count("fixture printk diagnostic"), 1)
 
     def test_invalid_shards_are_rejected(self):
         for count, index in [("0", "0"), ("3", "3"), ("4", "-1"), ("257", "0")]:

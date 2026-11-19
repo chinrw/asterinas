@@ -73,7 +73,7 @@ pkgs.runCommand "linux-regression-6.16.0"
     ln -sfn ${pkgs.coreutils}/bin/timeout root/usr/bin/timeout
     ln -sfn ${pkgs.util-linux}/bin/script root/usr/bin/script
     ln -sfn ${pkgs.iproute2}/bin/ip root/usr/bin/ip
-    touch $out/subsystem-v1
+    touch $out/subsystem-v1 $out/separate-kernel-console
     cp ${../src/regression/scripts/linux_init.sh} root/linux-init
     chmod 0755 root/linux-init
     cp ${config} root/etc/benchmark-linux.config

@@ -126,6 +126,8 @@ def report(
         label = f"{key} ({case['command'].strip().removeprefix('./')})"
         if mode == "subsystem" and action == "RUN" and folder not in printed_groups:
             printed_groups.add(folder)
+            if (folder / "kernel.log").is_file():
+                print_log(folder / "kernel.log", "Kernel", case["group"], console_output)
             if (folder / "guest.log").is_file():
                 print_log(
                     folder / "guest.log", "Subsystem", case["group"], console_output
@@ -134,6 +136,8 @@ def report(
                 errors.append(f"Missing subsystem console for {case['group']}")
             if (folder / "guest.error").is_file():
                 errors.append((folder / "guest.error").read_text().strip())
+        if mode == "case" and log.with_suffix(".kernel.log").is_file():
+            print_log(log.with_suffix(".kernel.log"), "Kernel", label, console_output)
         if log.is_file():
             if mode == "case":
                 print_log(log, result, label, console_output)
