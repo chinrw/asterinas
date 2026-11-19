@@ -12,6 +12,8 @@ import re
 import sys
 import uuid
 
+from linux_regression_groups import shard_owners
+
 
 def read_rows(path):
     with path.open(newline="") as source:
@@ -50,20 +52,25 @@ def print_log(log, result, label, output):
     # Guest output is arbitrary text and must not issue Actions commands.
     token = uuid.uuid4().hex
     print(f"::stop-commands::{token}", file=output)
+    with log.open(errors="replace", newline="\n") as source:
+        for line in source:
+            print(line.rstrip("\r\n"), file=output)
+    print(f"::{token}::", file=output)
+    print("::endgroup::", file=output)
+
+
+def log_details(log):
     first_error = None
     skipped_subtests = []
     with log.open(errors="replace", newline="\n") as source:
         for line in source:
             line = line.rstrip("\r\n")
-            print(line, file=output)
             if skipped := re.fullmatch(r"(test_\w+) skipped: (.+)", line):
                 skipped_subtests.append(f"{skipped[1]} ({skipped[2]})")
             if first_error is None and re.search(
                 r"failed \[|fatal error|^Error:", line, re.I
             ):
                 first_error = line
-    print(f"::{token}::", file=output)
-    print("::endgroup::", file=output)
     return first_error, skipped_subtests
 
 
@@ -74,6 +81,7 @@ def report(
     allow_all_skipped=False,
     summary_path=None,
     console_output=None,
+    mode=None,
 ):
     cases = read_rows(manifest)
     expected = {workload(case) for case in cases}
@@ -81,14 +89,22 @@ def report(
         raise ValueError("Empty manifest or duplicate workload IDs")
 
     results, errors = collect_results(directory, shards, expected)
+    recorded_modes = {
+        line.removeprefix("guest_mode=")
+        for metadata in directory.glob("shard-*/environment.txt")
+        for line in metadata.read_text().splitlines()
+        if line.startswith("guest_mode=")
+    }
+    if mode is None:
+        mode = next(iter(sorted(recorded_modes)), "case")
+    if recorded_modes - {mode}:
+        errors.append("Shard guest modes disagree with the report")
     totals = Counter()
-    assigned = Counter()
+    printed_groups = set()
     table = []
-    for case in cases:
+    for case, owner in zip(cases, shard_owners(cases, shards, mode)):
         key = workload(case)
         action = case["action"]
-        owner = assigned[action] % shards
-        assigned[action] += 1
         index, row = results.get(key, (owner, None))
         result, duration, detail = "MISSING", "-", "No workload result was collected"
         if row is not None:
@@ -105,13 +121,23 @@ def report(
             ):
                 errors.append(f"Result for {key} does not match the manifest")
 
-        log = directory / f"shard-{index}" / case["group"] / (case["case"] + ".log")
-        name = case["command"].strip().removeprefix("./")
-        label = f"{key} ({name})"
+        folder = directory / f"shard-{index}" / case["group"]
+        log = folder / (case["case"] + ".log")
+        label = f"{key} ({case['command'].strip().removeprefix('./')})"
+        if mode == "subsystem" and action == "RUN" and folder not in printed_groups:
+            printed_groups.add(folder)
+            if (folder / "guest.log").is_file():
+                print_log(
+                    folder / "guest.log", "Subsystem", case["group"], console_output
+                )
+            else:
+                errors.append(f"Missing subsystem console for {case['group']}")
+            if (folder / "guest.error").is_file():
+                errors.append((folder / "guest.error").read_text().strip())
         if log.is_file():
-            first_error, skipped_subtests = print_log(
-                log, result, label, console_output
-            )
+            if mode == "case":
+                print_log(log, result, label, console_output)
+            first_error, skipped_subtests = log_details(log)
             if result == "FAIL" and detail == "workload failed" and first_error:
                 detail = first_error
             if skipped_subtests:
@@ -131,6 +157,14 @@ def report(
     # Details can also contain assertion text supplied by a guest.
     token = uuid.uuid4().hex
     print(f"::stop-commands::{token}")
+    if mode == "subsystem":
+        print("\nSUBSYSTEM TIMINGS")
+        print("SUBSYSTEM       WORKLOADS  GUEST WALL TIME")
+        for path in sorted(directory.glob("shard-*/guest-times.tsv")):
+            for item in read_rows(path):
+                print(
+                    f"{item['group']:<15} {item['workloads']:>9}  {item['wall_seconds']}s"
+                )
     width = max(len(row[0]) for row in table)
     print("\nTEST RESULTS")
     print(f"{'TEST':<{width}}  RESULT   TIME  DETAILS")
@@ -172,6 +206,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--console-output", type=argparse.FileType("w", encoding="utf-8")
     )
+    parser.add_argument(
+        "--mode",
+        choices=("subsystem", "case"),
+        default=os.environ.get("REGRESSION_GUEST_MODE"),
+    )
     args = parser.parse_args()
     sys.exit(
         report(
@@ -181,5 +220,6 @@ if __name__ == "__main__":
             args.allow_all_skipped,
             os.environ.get("GITHUB_STEP_SUMMARY"),
             args.console_output,
+            args.mode,
         )
     )

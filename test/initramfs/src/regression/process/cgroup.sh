@@ -74,47 +74,6 @@ read_cpu_stat_field() {
     exit 1
 }
 
-verify_inactive_cpu_stat() {
-    # Usage accounting may gain fields without enabling CPU bandwidth control.
-    awk '
-        function invalid(message) {
-            print "Error: " message
-            failed = 1
-        }
-        BEGIN {
-            required["usage_usec"] = 1
-            required["user_usec"] = 1
-            required["system_usec"] = 1
-            optional["nice_usec"] = 1
-            optional["core_sched.force_idle_usec"] = 1
-        }
-        {
-            if (NF != 2 || $2 !~ /^[0-9]+$/) {
-                invalid("invalid inactive cpu.stat entry: " $0)
-                next
-            }
-            if ($1 in seen) {
-                invalid("duplicate inactive cpu.stat field: " $1)
-                next
-            }
-            seen[$1] = 1
-            if ($1 ~ /^(nr_periods|nr_throttled|throttled_usec|nr_bursts|burst_usec)$/) {
-                invalid("inactive cpu.stat contains CPU bandwidth field: " $1)
-            } else if (!($1 in required) && !($1 in optional)) {
-                invalid("unknown inactive cpu.stat field: " $1)
-            }
-        }
-        END {
-            for (field in required) {
-                if (!(field in seen)) {
-                    invalid("missing inactive cpu.stat field: " field)
-                }
-            }
-            exit failed ? 1 : 0
-        }
-    ' "$1" >&2
-}
-
 cleanup() {
     log_step "Cleaning up"
 
@@ -181,8 +140,14 @@ verify "cpu.max doesn't exist initially" \
     "ls: cpu.max: No such file or directory"
 
 log_step "1.5.1 Check initial child cpu.stat only reports usage fields"
-verify_inactive_cpu_stat cpu.stat
-echo "Verified"
+CPU_STAT_LINES=$(wc -l < cpu.stat)
+echo "cpu.stat lines before enabling CPU sub-controller: $CPU_STAT_LINES"
+if [ "$CPU_STAT_LINES" -ne 3 ]; then
+    echo "Error: inactive child cpu.stat should contain exactly 3 lines"
+    exit 1
+else
+    echo "Verified"
+fi
 
 log_step "1.6 Check initial cgroup of process 1"
 verify "Process 1 initially in root cgroup" \

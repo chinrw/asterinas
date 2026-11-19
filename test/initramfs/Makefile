@@ -155,8 +155,9 @@ x86_64_pkgs:
 		-A benchmark.schbench \
 		-A benchmark.sqlite-speedtest1 \
 		-A benchmark.sysbench \
-		-A conformance.ltp \
+		-A conformance.gvisor \
 		-A conformance.kselftest \
+		-A conformance.ltp \
 		-A conformance.pjdfstest \
 		-A conformance.xfstests \
 		-A regression.package
@@ -220,8 +221,8 @@ initramfs_pkgs:
 
 $(EXT2_IMAGE):
 	@mkdir -p $(BUILD_DIR)
-	@dd if=/dev/zero of=$(EXT2_IMAGE) bs=2G count=1
-	@mke2fs $(EXT2_IMAGE)
+	@truncate -s 2G $(EXT2_IMAGE)
+	@mke2fs -t ext2 -F $(EXT2_IMAGE)
 
 $(EXFAT_IMAGE):
 	@mkdir -p $(BUILD_DIR)
@@ -230,12 +231,12 @@ $(EXFAT_IMAGE):
 
 $(LTP_DEV_IMAGE):
 	@mkdir -p $(BUILD_DIR)
-	@dd if=/dev/zero of=$(LTP_DEV_IMAGE) bs=512M count=1
+	@truncate -s 512M $(LTP_DEV_IMAGE)
 	@mke2fs -t ext2 -F $(LTP_DEV_IMAGE)
 
 $(SSD_IMAGE):
 	@mkdir -p $(BUILD_DIR)
-	@dd if=/dev/zero of=$(SSD_IMAGE) bs=2G count=1
+	@truncate -s 2G $(SSD_IMAGE)
 	@mke2fs -t ext2 -F $(SSD_IMAGE)
 
 $(XFSTESTS_TEST_IMAGE):

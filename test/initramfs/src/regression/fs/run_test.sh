@@ -32,7 +32,7 @@ test_ext2() {
     cd ${ext2_dir}
 
     # Test case for the big file feature
-    for _iteration in $(seq 1 10); do
+    for i in $(seq 1 10); do
         truncate -s 500M ${test_file}
         check_file_size ${test_file} $((500 * 1024 * 1024))
         truncate -s 2K ${test_file}
@@ -132,6 +132,9 @@ run_test_case ./mount/mount_move
 run_test_case ./mount/mount_propagation
 run_test_case ./mount/mount_readonly
 
+run_test_case env TEST_TMPDIR=/tmp ./name_max/name_max
+run_test_case env TEST_TMPDIR=/ext2 ./name_max/name_max
+
 run_test_case_with_linux_module overlay ./overlayfs/lchown_lower_symlink
 run_test_case_with_linux_module overlay ./overlayfs/link_lower_file
 run_test_case_with_linux_module overlay ./overlayfs/mknod_whiteout_rejected
@@ -169,10 +172,13 @@ run_test_case ./symlink/symlink
 
 run_test_case ./sync/sync
 
+if [ "$(uname -m)" = x86_64 ]; then
+    run_test_case ./sysfs/device/mem
+    run_test_case ./sysfs/device/pci
+fi
+
 run_test_case ./tmpfile/tmpfile
 
 run_test_case ./utimensat/utimensat
-
-run_test_case ./procfs/meminfo
 
 finish_test_cases

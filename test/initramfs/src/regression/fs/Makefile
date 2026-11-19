@@ -8,6 +8,7 @@ SUBDIRS := \
 	inotify \
 	isolation \
 	mount \
+	name_max \
 	overlayfs \
 	procfs \
 	pseudofs \
@@ -16,6 +17,7 @@ SUBDIRS := \
 	statx \
 	symlink \
 	sync \
+	sysfs \
 	tmpfile \
 	utimensat \
 

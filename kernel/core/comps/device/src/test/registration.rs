@@ -2,7 +2,7 @@
 
 //! Device registration tests.
 
-use alloc::sync::Arc;
+use alloc::{boxed::Box, sync::Arc};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use aster_systree::SysObj;
@@ -149,9 +149,10 @@ fn bus_device_registration_and_probe() {
 
     // 2. Register the driver and an observer that counts class notifications.
     let driver = bus
-        .register_driver(Arc::new(ToyDiskDriver {
+        .register_driver(Box::new(ToyDiskDriver {
             match_data: ToyMatch { vendor: 1 },
             class: class.clone(),
+            suppress_bind_attrs: false,
         }))
         .unwrap();
     let observer = Arc::new(CountingObserver {

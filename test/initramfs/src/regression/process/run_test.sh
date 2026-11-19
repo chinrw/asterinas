@@ -18,6 +18,7 @@ run_test_case ./clone3/clone_parent
 run_test_case ./clone3/clone_process
 
 run_test_case ./cpu_affinity/cpu_affinity
+run_test_case ./cpu_affinity/permission
 
 run_test_case ./execve/execve
 run_test_case ./execve/execve_comm
@@ -58,6 +59,7 @@ fi
 run_test_case ./sched/sched_attr_getset
 run_test_case ./sched/sched_param_getset
 run_test_case ./sched/sched_param_idle
+run_test_case ./sched/sched_set_permission
 run_test_case ./sched/setpriority_permission
 
 run_test_case ./signal/kill

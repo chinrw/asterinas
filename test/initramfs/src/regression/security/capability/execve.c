@@ -569,7 +569,9 @@ FN_TEST(file_caps_ignored_on_shebang_script)
 	pid_t pid;
 	int status;
 
-	TEST_RES(dprintf(script_fd, "#!%s --script\n", child_path), _ret > 0);
+	TEST_RES(dprintf(script_fd, "#!%s %s %s %s\n", child_path, CAPS_NONE,
+			 CAPS_NONE, CAPS_NONE),
+		 _ret > 0);
 	TEST_SUCC(fchmod(script_fd, 0755));
 	TEST_SUCC(close(script_fd));
 	TEST_SUCC(setxattr(script_path, SECURITY_CAPABILITY_XATTR, &file_caps,
@@ -578,8 +580,7 @@ FN_TEST(file_caps_ignored_on_shebang_script)
 	pid = TEST_SUCC(fork());
 	if (pid == 0) {
 		CHECK(setresuid(nobody, nobody, nobody));
-		CHECK(execl(script_path, script_path, CAPS_NONE, CAPS_NONE,
-			    CAPS_NONE, NULL));
+		CHECK(execl(script_path, script_path, NULL));
 	}
 
 	TEST_RES(waitpid(pid, &status, 0),

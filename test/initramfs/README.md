@@ -30,10 +30,6 @@ Most tests in this directory are compiled and packaged using [Nix](https://nixos
 
 > **Note**: If you are adding a new test to the `regression` directory, ensure that it supports multiple architectures. Some of the existing tests lack proper architecture-specific handling.
 
-### Conformance Test Suite - gVisor Exception
-
-While most tests rely on `Nix` for compilation, the `gvisor` conformance test suite currently cannot be built with `Nix`. Instead, the `gvisor` tests are compiled in the Docker image. For details, refer to `tools/dev_env/docker/kernel-dev/Dockerfile`.
-
 ### Linux Kernel Selftest (kselftest)
 
 The `kselftest` suite builds a subset of Linux's in-tree selftests
@@ -74,19 +70,14 @@ The build artifacts (initramfs) can be found in the `test/initramfs/build` direc
 
 The Linux regression runner checks the in-house tests against a fixed x86-64
 Linux 6.16.0 kernel image shared with the benchmarks. It builds the tests and initramfs with the
-repository's pinned Nix dependencies, then boots a fresh QEMU guest for each
-registered workload. A workload is a test program or a compound shell test,
+repository's pinned Nix dependencies, then boots one QEMU guest per subsystem
+with runnable workloads. A workload is a test program or a compound shell test,
 such as a server/client pair. It does not build the Asterinas kernel.
 This check validates the tests on a reference platform; Asterinas runtime tests
 are still needed to validate the same behavior on that kernel.
 
-The x86-64 reference profile uses four-level paging (`la57=off`). It does not
-validate 57-bit virtual addresses. Permission-sensitive mmap and exec tests
-explicitly remove `CAP_SYS_RAWIO`, including the exec bounding set when needed.
-The guest sets the mmap floor to 64 KiB so page one exercises the same denial as on Asterinas.
-File-backed RSS tests use `TEST_TMPDIR=/ext2`. These workload preconditions are
-shared by the Linux and Asterinas test entries, rather than weakening their
-assertions to accommodate the guest's initial privileges or root filesystem.
+The x86-64 guest uses four-level paging and a 64 KiB minimum mmap address.
+Its Q35 VGA, NVMe, and block-device PCI slots match the device-model tests.
 
 On an x86-64 Linux host with Nix and access to `/dev/kvm`, run from the repository
 root:
@@ -119,18 +110,24 @@ Use `--bundle PATH` to reuse a bundle previously built with
 snapshots of dedicated ext2, exFAT, and NVMe images. Tests do not access host
 block devices.
 
-Each group registers its workloads through `run_test_case` in the existing
-`run_test.sh`. The bundle collects this list without executing tests, and the
-host selects each workload in a fresh VM with fresh disk snapshots. A failing
-workload does not prevent later workloads in the same group from running.
-The ordinary Asterinas suite retains its existing stop-on-error behavior.
+The Linux bundle derives its manifest from the group entry scripts. A script
+that lists literal executable paths can be used unchanged. The Linux build
+wraps each path in the copy installed in the guest. Groups with arguments,
+architecture checks or compound commands explicitly register their workloads
+with `run_test_case`. Unsupported syntax in a simple entry fails the build.
+
+Within each subsystem the guest runs the selected workloads in order, each
+in a separate process and PTY. Mounted filesystems and other guest kernel state
+persist across workloads. A failed or timed-out workload lets the next one
+run. If the guest exits early, completed results are retained, an interrupted
+workload fails and all unstarted workloads are marked NOT_RUN. Other subsystems
+continue. Use `--mode case` to start a clean VM per workload when investigating
+an order-dependent result or using an older bundle.
 
 `results.tsv` gives each selected workload a PASS, FAIL, SKIP, or NOT_RUN result,
-its command, exit status, and an explanation. A workload passes only when it
-starts, reports a successful completion, and QEMU exits successfully. Setup
-failures are NOT_RUN, and a timeout after the workload starts is FAIL. Cancelling
-the runner records the workloads whose completion was not collected. Any FAIL
-or NOT_RUN makes the host return nonzero.
+its command, duration, exit status, and an explanation. Subsystem artifacts
+include the full guest console and result channel, per-case logs and
+`guest-times.tsv` with the measured wall time of each boot and its workloads.
 
 This accounts for registered workloads, not every function or branch inside
 them. A fatal `CHECK` still terminates that program, so later constructor tests
@@ -143,9 +140,6 @@ Each workload loads its required module before its start marker. The exFAT
 workloads also mount the test disk. A missing driver or failed mount produces
 NOT_RUN. The VirtIO hardware RNG workload remains skipped.
 
-Without Yama the ordinary ptrace and procfs memory tests run. The
-`proc_mem_yama_scope` subtest skips the policy changes that require Yama.
-The results table names skipped subtests in the workload's details.
 The runner reports excluded TDX, graphics, virtual-console, input-device, and
 Asterinas-specific TCP tests. Missing fixtures required by the remaining tests
 are errors. When adding tests, register them with `run_test_case` in the existing group entry;
@@ -172,11 +166,11 @@ Use `--exclusions PATH` to validate an alternative temporary-exclusion table.
 Results retain the original registered manifest, the effective selected manifest,
 the exclusion table, and its hash.
 
-The workflow builds one bundle and distributes runnable workloads in manifest
-order across four GitHub Actions shards. Set the repository variable
-`LINUX_REGRESSION_SHARDS` or the manual workflow input `shards` to change the
-count. A manual run can also select a group or workload and include temporary
-exclusions. Capability and hardware exclusions remain visible in the report.
+The workflow builds one bundle and assigns whole subsystems to four GitHub
+Actions shards, balancing the number of runnable workloads. Case mode uses
+round-robin workload assignment. Set `LINUX_REGRESSION_SHARDS` or the manual
+`shards` input to change the count. Manual runs also support `mode` (subsystem
+or case), group and workload selectors, and temporary-exclusion validation.
 
 Open **Linux regression report → Test summary** in Actions for the English results
 table and totals. Expand **Full workload logs** in the same job to inspect any

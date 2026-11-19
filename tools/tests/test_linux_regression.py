@@ -31,6 +31,7 @@ class LinuxRegressionRunnerTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.bundle = self.root / "bundle"
         self.bundle.mkdir()
+        (self.bundle / "subsystem-v1").touch()
         self.exclusions = self.root / "exclusions.tsv"
         self.exclusions.write_text("group\tcommand\tcategory\treason\trestore_when\n")
         for name in ("bzImage", "initramfs.cpio.gz", "kernel.config"):
@@ -71,6 +72,28 @@ record = next(arg[5:] for arg in args if arg.startswith('file:'))
 mode = os.environ.get('REGRESSION_FIXTURE_MODE', 'pass')
 with pathlib.Path(os.environ['REGRESSION_FIXTURE_CALLS']).open('a') as calls:
     calls.write(f'{group} {case}\\n')
+if batch := re.search(r'regression_batch=([0-9,]+)', cmdline):
+    numbers = batch[1].split(',')
+    out = pathlib.Path(record)
+    def emit(line):
+        with out.open('a') as stream:
+            print(line, file=stream)
+        print(line, flush=True)
+    print('Guest boot output')
+    bad = False
+    for i, number in enumerate(numbers):
+        emit(f'BATCH_BEGIN {group} {number} {i}.00')
+        print(f'REGRESSION_CASE_START {group} {number}', flush=True)
+        if mode == 'poweroff' and group == 'time' and number == '2':
+            sys.exit(0)
+        status = 17 if mode == 'first_case_failure' and group == 'time' and number == '1' else 0
+        bad |= bool(status)
+        emit(f'BATCH_END {group} {number} {status} {i}.20')
+    with out.open('a') as stream:
+        print(f'LINUX_REGRESSION_RESULT {group} {case} {int(bad)}', file=stream)
+        if mode == 'duplicate_final':
+            print(f'LINUX_REGRESSION_RESULT {group} {case} {int(bad)}', file=stream)
+    sys.exit(0)
 if mode == 'crash_before_start':
     sys.exit(134)
 if mode != 'missing_start':
@@ -110,14 +133,14 @@ sys.exit(19 if mode == 'qemu_failure' else 0)
         path.chmod(0o755)
         return path
 
-    def run_runner(self, mode="pass", *options):
+    def run_runner(self, mode="pass", *options, guest_mode="case"):
         self.output = self.root / "output"
         return subprocess.run(
             [
                 "bash", str(RUNNER), "--bundle", str(self.bundle),
                 "--exclusions", str(self.exclusions),
                 "--output", str(self.output), "--accel", "tcg",
-                "--timeout", "1", *options,
+                "--timeout", "1", *(["--mode", guest_mode] if guest_mode else []), *options,
             ],
             env=self.fixture_environment(mode),
             text=True,
@@ -127,8 +150,10 @@ sys.exit(19 if mode == 'qemu_failure' else 0)
         )
 
     def fixture_environment(self, mode):
+        environment = os.environ.copy()
+        environment.pop("REGRESSION_GUEST_MODE", None)
         return dict(
-            os.environ,
+            environment,
             QEMU=str(self.qemu),
             REGRESSION_FIXTURE_MODE=mode,
             REGRESSION_FIXTURE_CALLS=str(self.root / "qemu-calls"),
@@ -251,7 +276,7 @@ sys.exit(19 if mode == 'qemu_failure' else 0)
                 "bash", str(RUNNER), "--bundle", str(self.bundle),
                 "--exclusions", str(self.exclusions),
                 "--output", str(output), "--accel", "tcg",
-                "--timeout", "30", "--group", "time",
+                "--timeout", "30", "--mode", "case", "--group", "time",
             ],
             env=self.fixture_environment("cancel"),
             text=True,
@@ -517,6 +542,61 @@ sys.exit(19 if mode == 'qemu_failure' else 0)
         self.assertIn("::group::FAIL time/1", logs.getvalue())
         self.assertIn("::group::PASS time/2", logs.getvalue())
         self.assertNotIn("TEST SUMMARY", logs.getvalue())
+
+    def test_default_reuses_one_guest_per_subsystem_and_continues(self):
+        result = self.run_runner("first_case_failure", guest_mode=None)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(self.calls(), ["hello_world 1", "time 1"])
+        rows = {(r["group"], r["case"]): r["result"] for r in self.results()}
+        self.assertEqual(rows[("time", "1")], "FAIL")
+        self.assertEqual(rows[("time", "2")], "PASS")
+        self.assertIn("BATCH_END time 2", (self.output / "time/2.log").read_text())
+
+    def test_early_group_shutdown_preserves_completed_cases(self):
+        with (self.bundle / "cases.tsv").open("a") as plan:
+            plan.write("time\t3\tRUN\t./third\t\n")
+        result = self.run_runner("poweroff", "--group", "time", "--mode", "subsystem")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(self.calls(), ["time 1"])
+        self.assertEqual([r["result"] for r in self.results()], ["PASS", "FAIL", "NOT_RUN"])
+        self.assertTrue((self.output / "time/guest.error").is_file())
+
+    def test_corrupt_group_completion_fails_report_even_after_passes(self):
+        shard = self.root / "shard-0"
+        result = self.run_runner("duplicate_final", "--output", str(shard), "--mode", "subsystem")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        summary, logs = StringIO(), StringIO()
+        with redirect_stdout(summary):
+            self.assertTrue(report(shard / "cases.tsv", self.root, 1, mode="subsystem", console_output=logs))
+        self.assertIn("invalid guest session", summary.getvalue())
+        self.assertEqual(logs.getvalue().count("Guest boot output"), 2)
+
+    def test_group_shards_keep_whole_groups_and_report_all_cases(self):
+        for i in range(2):
+            result = self.run_runner("pass", "--mode", "subsystem", "--output", str(self.root / f"shard-{i}"),
+                                     "--shard-count", "2", "--shard-index", str(i))
+            self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertCountEqual(self.calls(), ["time 1", "hello_world 1"])
+        with redirect_stdout(StringIO()):
+            self.assertFalse(report(self.bundle / "cases.tsv", self.root, 2, mode="subsystem"))
+
+    def test_previous_bundle_defaults_to_case_mode(self):
+        (self.bundle / "subsystem-v1").unlink()
+        result = self.run_runner("pass", "--group", "time", guest_mode=None)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(self.calls(), ["time 1", "time 2"])
+
+    def test_simple_entry_generator_includes_new_commands_and_rejects_shell_control_flow(self):
+        script = self.root / "time/run_test.sh"
+        script.parent.mkdir()
+        script.write_text("#!/bin/sh\nset -e\n./a\n./b\n")
+        command = [sys.executable, str(TOOLS.parent / "test/initramfs/nix/linux-regression-entries.py"), str(script)]
+        subprocess.run(command, check=True)
+        self.assertIn("run_test_case ./a\nrun_test_case ./b\n", script.read_text())
+        script.write_text("#!/bin/sh\n./a &\n./b\n")
+        rejected = subprocess.run(command, capture_output=True, text=True)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("explicit workload registration required", rejected.stderr)
 
     def test_invalid_shards_are_rejected(self):
         for count, index in [("0", "0"), ("3", "3"), ("4", "-1"), ("257", "0")]:

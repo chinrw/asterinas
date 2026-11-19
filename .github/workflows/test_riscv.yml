@@ -7,6 +7,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   basic-test:
     runs-on: ubuntu-latest
@@ -51,6 +55,7 @@ jobs:
       matrix:
         include:
           - test_id: 'boot-debug-smp4'
+            release: false
             smp: 4
 
           - test_id: 'boot-release'
@@ -74,4 +79,5 @@ jobs:
           auto_test: ${{ (startsWith(matrix.test_id, 'boot') && 'boot') || 'conformance' }}
           release: ${{ !contains(matrix.release, 'false') }}
           arch: 'riscv64'
+          smp: ${{ matrix.smp }}
           conformance_test_suite: 'ltp'

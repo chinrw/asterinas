@@ -13,6 +13,8 @@ export REGRESSION_LINUX_MODULE_DIR
 
 group=setup
 case_number=0
+batch=
+case_timeout=180
 
 finish() {
     status=$?
@@ -40,6 +42,8 @@ echo 65536 > /proc/sys/vm/mmap_min_addr
 for option in $(cat /proc/cmdline); do
     case "$option" in
         regression_group=*) group=${option#regression_group=} ;;
+        regression_batch=*) batch=${option#regression_batch=} ;;
+        regression_timeout=*) case_timeout=${option#regression_timeout=} ;;
         regression_case=*) case_number=${option#regression_case=} ;;
     esac
 done
@@ -99,4 +103,25 @@ cat /proc/mounts
 
 # Give the workload its own controlling PTY. Releasing a session that owns
 # ttyS0 can flush pending console output before the host receives it.
-/usr/bin/script --quiet --return --command "/bin/sh /test/run_regression_test.sh $group" /dev/null < /dev/null
+if [ -z "$batch" ]; then
+    /usr/bin/script --quiet --return --command "/bin/sh /test/run_regression_test.sh $group" /dev/null < /dev/null
+    exit $?
+fi
+
+case "$batch" in *[!0-9,]*|,*|*,|*,,*) exit 2 ;; esac
+case "$case_timeout" in ''|0*|*[!0-9]*) exit 2 ;; esac
+group_failed=0
+for number in $(echo "$batch" | tr , ' '); do
+    export REGRESSION_TEST_CASE=$number
+    read -r begin _ < /proc/uptime
+    printf '\nBATCH_BEGIN %s %s %s\n' "$group" "$number" "$begin"
+    printf 'BATCH_BEGIN %s %s %s\n' "$group" "$number" "$begin" > /dev/ttyS1
+    rc=0
+    /bin/busybox timeout -k 5 "$case_timeout" /usr/bin/script --quiet --return \
+        --command "/bin/sh /test/run_regression_test.sh $group" /dev/null < /dev/null || rc=$?
+    read -r end _ < /proc/uptime
+    printf '\nBATCH_END %s %s %s %s\n' "$group" "$number" "$rc" "$end"
+    printf 'BATCH_END %s %s %s %s\n' "$group" "$number" "$rc" "$end" > /dev/ttyS1
+    if [ "$rc" -ne 0 ]; then group_failed=1; fi
+done
+exit "$group_failed"

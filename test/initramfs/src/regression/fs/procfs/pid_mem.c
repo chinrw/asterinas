@@ -141,7 +141,6 @@ END_TEST()
 FN_TEST(proc_mem_yama_scope)
 {
 	int old_scope = read_yama_scope();
-	SKIP_TEST_IF(old_scope == YAMA_SCOPE_UNAVAILABLE);
 
 	// `YAMA_SCOPE_NO_ATTACH` is immutable once set.
 	SKIP_TEST_IF(old_scope == YAMA_SCOPE_NO_ATTACH);

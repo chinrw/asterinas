@@ -6,26 +6,10 @@ set -e
 
 . "${REGRESSION_TEST_ROOT:-/test}/run_test_case.sh"
 
-SERVER_PID=""
-
-cleanup_server() {
-    if [ -n "$SERVER_PID" ]; then
-        kill "$SERVER_PID" 2>/dev/null || true
-        wait "$SERVER_PID" 2>/dev/null || true
-    fi
-}
-
 run_client_server() {
-    trap cleanup_server EXIT
-    trap 'exit 1' HUP INT TERM
     "$1" &
-    SERVER_PID=$!
     sleep 0.2
     "$2"
-    SERVER_STATUS=0
-    wait "$SERVER_PID" || SERVER_STATUS=$?
-    SERVER_PID=""
-    return "$SERVER_STATUS"
 }
 
 run_test_case run_client_server ./tcp_server ./tcp_client

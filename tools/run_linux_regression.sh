@@ -10,6 +10,7 @@ selected_group=${REGRESSION_GROUP:-}
 selected_case=${REGRESSION_CASE:-}
 exclusions_file=$repo_root/test/initramfs/linux-regression-exclusions.tsv
 include_excluded=${REGRESSION_INCLUDE_EXCLUDED:-false}
+guest_mode=${REGRESSION_GUEST_MODE:-}
 plan_only=false
 shard_count=1
 shard_index=0
@@ -21,10 +22,11 @@ usage() {
     cat <<'EOF'
 Usage: run_linux_regression.sh [OPTIONS]
 
-Build and run each registered regression workload in a fresh Linux VM.
+Run registered Linux regression workloads, sharing one VM per subsystem by default.
 
 Options:
   --bundle PATH      Reuse a previously built Linux regression bundle
+  --mode MODE        subsystem (default) or case for a fresh VM per workload
   --plan-only        Write the effective workload manifest without starting guests
   --shard-count N    Distribute workloads across N shards (default: 1)
   --shard-index I    Run the zero-based shard I (default: 0)
@@ -34,7 +36,7 @@ Options:
   --include-excluded Run workloads listed in that table as well
   --output PATH      Write logs and results here (must be empty)
   --accel MODE       QEMU accelerator: kvm (default) or tcg
-  --timeout SECONDS  Time limit for each workload VM (default: 180)
+  --timeout SECONDS  Time limit for each workload (default: 180)
   -h, --help         Show this help message
 
 Set QEMU to select a different qemu-system-x86_64 executable.
@@ -43,10 +45,11 @@ EOF
 
 while (($#)); do
     case "$1" in
-        --bundle|--shard-count|--shard-index|--group|--case|--exclusions|--output|--accel|--timeout)
+        --bundle|--mode|--shard-count|--shard-index|--group|--case|--exclusions|--output|--accel|--timeout)
             [[ $# -ge 2 ]] || { echo "missing argument for $1" >&2; exit 2; }
             case "$1" in
                 --bundle) bundle=$2 ;;
+                --mode) guest_mode=$2 ;;
                 --shard-count) shard_count=$2 ;;
                 --shard-index) shard_index=$2 ;;
                 --group) selected_group=$2 ;;
@@ -65,6 +68,7 @@ while (($#)); do
     esac
 done
 
+[[ -z $guest_mode || $guest_mode == subsystem || $guest_mode == case ]] || { echo "Expected --mode subsystem or case" >&2; exit 2; }
 [[ $accel == kvm || $accel == tcg ]] || { echo "invalid accelerator: $accel" >&2; exit 2; }
 [[ $case_timeout =~ ^[1-9][0-9]*$ ]] || { echo "timeout must be a positive number of seconds" >&2; exit 2; }
 [[ $include_excluded == true || $include_excluded == false ]] || { echo "Invalid exclusion setting" >&2; exit 2; }
@@ -117,6 +121,10 @@ cleanup() {
         wait "$tee_pid" 2>/dev/null || true
     fi
     if [[ -n $results_file ]]; then
+        # Subsystem guests write completed cases before proceeding to the next group.
+        while IFS=$'\t' read -r group number _; do
+            completed_cases[$group/$number]=1
+        done < "$results_file"
         for row in "${selected_rows[@]}"; do
             IFS=$'\t' read -r group number action command reason <<< "$row"
             if [[ ! -v completed_cases[$group/$number] ]]; then
@@ -146,6 +154,14 @@ bundle=$(realpath "$bundle")
 for file in bzImage initramfs.cpio.gz groups cases.tsv kernel.config; do
     [[ -s $bundle/$file ]] || { echo "missing bundle file: $bundle/$file" >&2; exit 1; }
 done
+# Existing bundles predate the subsystem serial protocol and support case mode.
+if [[ -z $guest_mode ]]; then
+    guest_mode=case
+    if [[ -f $bundle/subsystem-v1 ]]; then guest_mode=subsystem; fi
+elif [[ $guest_mode == subsystem && ! -f $bundle/subsystem-v1 && $plan_only == false ]]; then
+    echo "This bundle predates subsystem mode; rebuild it or use --mode case." >&2
+    exit 2
+fi
 export PATH="$bundle/host-tools/bin:$PATH"
 qemu=${QEMU:-qemu-system-x86_64}
 # The shared x86-64 regression scenarios currently assume four-level paging.
@@ -252,27 +268,17 @@ if [[ $plan_only == true ]]; then
 fi
 
 if ((shard_count > 1)); then
-    shard_rows=()
-    runnable=0
-    skipped=0
-    for row in "${selected_rows[@]}"; do
-        IFS=$'\t' read -r group number action _ <<< "$row"
-        if [[ $action == RUN ]]; then
-            owner=$((runnable++ % shard_count))
-        else
-            owner=$((skipped++ % shard_count))
-        fi
-        if ((owner == shard_index)); then
-            shard_rows+=("$row")
-        fi
-    done
-    selected_rows=("${shard_rows[@]}")
+    printf '%s\n' "$header" "${selected_rows[@]}" > "$scratch/selected.tsv"
+    python3 "$repo_root/tools/linux_regression_groups.py" select "$scratch/selected.tsv" \
+        "$guest_mode" "$shard_count" "$shard_index" > "$scratch/shard.tsv"
+    mapfile -t selected_rows < "$scratch/shard.tsv"
 fi
 
 {
     printf 'source_revision=%s\nbundle=%s\naccelerator=%s\n' \
         "$(git -C "$repo_root" rev-parse HEAD)" "$bundle" "$accel"
     printf 'include_excluded=%s\ncpu_profile=%s\n' "$include_excluded" "$cpu"
+    printf 'guest_mode=%s\n' "$guest_mode"
     uname -a
     "$qemu" --version
     sha256sum "$repo_root/tools/run_linux_regression.sh" "$exclusions_file"
@@ -316,6 +322,36 @@ done
 truncate -s 512M "$scratch/exfat.img"
 mkfs.exfat "$scratch/exfat.img" > "$output_dir/mkfs-exfat.log"
 
+boot_args="console=ttyS0 rdinit=/linux-init lsm=integrity net.ifnames=0 panic=1"
+qemu_args=(
+    -machine q35 -accel "$accel" -cpu "$cpu" -smp 4 -m 2048
+    -nodefaults -no-reboot -display none -monitor none
+    -device VGA,bus=pcie.0,addr=0x1
+    -kernel "$bundle/bzImage" -initrd "$bundle/initramfs.cpio.gz"
+    -serial stdio -snapshot
+    -drive "if=none,format=raw,id=ext2,file=$scratch/ext2.img"
+    -device virtio-blk-pci,bus=pcie.0,addr=0x6,drive=ext2
+    -drive "if=none,format=raw,id=exfat,file=$scratch/exfat.img"
+    -device virtio-blk-pci,bus=pcie.0,addr=0x7,drive=exfat
+    -drive "if=none,format=raw,id=aux,file=$scratch/aux.img"
+    -device virtio-blk-pci,bus=pcie.0,addr=0x8,drive=aux
+    -drive "if=none,format=raw,id=nvme,file=$scratch/nvme.img"
+    -device nvme,bus=pcie.0,addr=0x4,drive=nvme,serial=regression
+    -netdev user,id=net0 -device virtio-net-pci,netdev=net0
+    -object rng-random,id=rng0,filename=/dev/urandom
+    -device virtio-rng-pci,rng=rng0
+)
+
+if [[ $guest_mode == subsystem ]]; then
+    TMPDIR="$scratch" python3 "$repo_root/tools/linux_regression_groups.py" run \
+        "$output_dir/cases.tsv" "$output_dir" "$case_timeout" "$qemu" "${qemu_args[@]}" -append "$boot_args" &
+    vm_pid=$!
+    status=0
+    wait "$vm_pid" || status=$?
+    vm_pid=
+    exit "$status"
+fi
+
 failed=0
 mkfifo "$scratch/qemu-log"
 for row in "${selected_rows[@]}"; do
@@ -328,23 +364,8 @@ for row in "${selected_rows[@]}"; do
     started=$SECONDS
     tee "$log_file" < "$scratch/qemu-log" &
     tee_pid=$!
-    TMPDIR="$scratch" timeout --kill-after=10 "$case_timeout" "$qemu" \
-        -machine q35 -accel "$accel" -cpu "$cpu" -smp 4 -m 2048 \
-        -nodefaults -no-reboot -display none -monitor none \
-        -kernel "$bundle/bzImage" -initrd "$bundle/initramfs.cpio.gz" \
-        -append "console=ttyS0 rdinit=/linux-init regression_group=$group regression_case=$number lsm=integrity net.ifnames=0 panic=1" \
-        -serial stdio -serial "file:$record" -snapshot \
-        -drive "if=none,format=raw,id=ext2,file=$scratch/ext2.img" \
-        -device virtio-blk-pci,drive=ext2 \
-        -drive "if=none,format=raw,id=exfat,file=$scratch/exfat.img" \
-        -device virtio-blk-pci,drive=exfat \
-        -drive "if=none,format=raw,id=aux,file=$scratch/aux.img" \
-        -device virtio-blk-pci,drive=aux \
-        -drive "if=none,format=raw,id=nvme,file=$scratch/nvme.img" \
-        -device nvme,drive=nvme,serial=regression \
-        -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
-        -object rng-random,id=rng0,filename=/dev/urandom \
-        -device virtio-rng-pci,rng=rng0 \
+    TMPDIR="$scratch" timeout --kill-after=10 "$case_timeout" "$qemu" "${qemu_args[@]}" \
+        -append "$boot_args regression_group=$group regression_case=$number" -serial "file:$record" \
         > "$scratch/qemu-log" 2>&1 &
     vm_pid=$!
     if wait "$vm_pid"; then

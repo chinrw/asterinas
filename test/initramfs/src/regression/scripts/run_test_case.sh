@@ -77,8 +77,10 @@ _register_test_case() {
     fi
 
     if [ -n "${REGRESSION_LINUX_MODULE_DIR:-}" ] && [ -n "$_regression_module" ]; then
-        /bin/busybox insmod "$REGRESSION_LINUX_MODULE_DIR/$_regression_module.ko"
-        if [ "$_regression_module" = exfat ]; then
+        if [ ! -d "/sys/module/$_regression_module" ]; then
+            /bin/busybox insmod "$REGRESSION_LINUX_MODULE_DIR/$_regression_module.ko"
+        fi
+        if [ "$_regression_module" = exfat ] && ! grep -q "^/dev/vdb /exfat exfat " /proc/mounts; then
             mkdir -p /exfat
             mount -t exfat /dev/vdb /exfat
         fi

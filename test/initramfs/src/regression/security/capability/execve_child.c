@@ -14,27 +14,11 @@ static uint64_t inheritable;
 FN_SETUP(parse_cmdline)
 {
 	FILE *fp;
-	int first;
 
 	fp = CHECK_WITH(fopen("/proc/self/cmdline", "r"), _ret != NULL);
 
 	while (CHECK_WITH(fgetc(fp), _ret != EOF) != '\0')
 		;
-
-	first = CHECK_WITH(fgetc(fp), _ret != EOF);
-	CHECK(ungetc(first, fp));
-	if (first == '-') {
-		const char script_mode[] = "--script";
-		char argument[sizeof(script_mode)];
-
-		CHECK_WITH(fread(argument, 1, sizeof(argument), fp),
-			   _ret == sizeof(argument));
-		CHECK_WITH(memcmp(argument, script_mode, sizeof(script_mode)),
-			   _ret == 0);
-		// The kernel inserts the script pathname after the interpreter argument.
-		while (CHECK_WITH(fgetc(fp), _ret != EOF) != '\0')
-			;
-	}
 
 	CHECK_WITH(fscanf(fp, "%lx\n", &effective), _ret == 1);
 	CHECK_WITH(fgetc(fp), _ret == '\0');

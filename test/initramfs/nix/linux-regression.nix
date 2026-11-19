@@ -50,6 +50,7 @@ pkgs.runCommand "linux-regression-6.16.0"
     nativeBuildInputs = [
       pkgs.cpio
       pkgs.gzip
+      pkgs.python3
     ];
   }
   ''
@@ -70,10 +71,13 @@ pkgs.runCommand "linux-regression-6.16.0"
     done
     ln -sfn ${pkgs.util-linux}/bin/script root/usr/bin/script
     ln -sfn ${pkgs.iproute2}/bin/ip root/usr/bin/ip
+    touch $out/subsystem-v1
     cp ${../src/regression/scripts/linux_init.sh} root/linux-init
     chmod 0755 root/linux-init
     cp ${config} root/etc/benchmark-linux.config
     cp -r ${modules}/lib/modules root/usr/lib/
+
+    python3 ${./linux-regression-entries.py} root/test/*/run_test.sh
 
     printf 'group\tcase\taction\tcommand\treason\n' > $out/cases.tsv
     for directory in root/test/*; do

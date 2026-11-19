@@ -4,14 +4,12 @@
 
 set -e
 
-. "${REGRESSION_TEST_ROOT:-/test}/run_test_case.sh"
+./futex/futex_requeue
 
-run_test_case ./pipe/pipe_err
-run_test_case ./pipe/process_pipe_available
-run_test_case ./pipe/short_rw
+./pipe/pipe_err
+./pipe/process_pipe_available
+./pipe/short_rw
 
-run_test_case ./sem/sem
+./sem/sem
 
-run_test_case ./shm/posix_shm
-
-finish_test_cases
+./shm/posix_shm

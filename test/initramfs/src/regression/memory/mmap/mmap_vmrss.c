@@ -15,15 +15,6 @@
 #define NUM_PAGES 1024
 #define TOTAL_SIZE (PAGE_SIZE * NUM_PAGES)
 
-FN_SETUP(workdir)
-{
-	const char *workdir = getenv("TEST_TMPDIR");
-
-	if (workdir)
-		CHECK(chdir(workdir));
-}
-END_SETUP()
-
 // The RSS count in Linux may differ slightly from the expected value,
 // because its per-CPU counters are updated lazily.
 #ifdef __asterinas__
