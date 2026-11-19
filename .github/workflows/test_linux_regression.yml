@@ -115,7 +115,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux-regression-plan
-          path: plan/cases.tsv
+          path: plan/
           if-no-files-found: error
           overwrite: true
 
@@ -181,6 +181,10 @@ jobs:
           if [[ ! -s plan/cases.tsv ]]; then
             echo "TEST SUMMARY"
             echo "The build did not provide a workload manifest."
+            exit 1
+          fi
+          if ! grep -Eq '^kernel_console=ttyS(0|2)$' plan/environment.txt; then
+            echo "Missing kernel console setting in the workload plan."
             exit 1
           fi
           args=()

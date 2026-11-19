@@ -59,6 +59,18 @@ def print_log(log, result, label, output):
     print("::endgroup::", file=output)
 
 
+def print_kernel_log(path, directory, label, output, required, errors):
+    if not path.is_file():
+        problem = "Missing"
+    elif path.stat().st_size == 0:
+        problem = "Empty"
+    else:
+        print_log(path, "Kernel", label, output)
+        return
+    if required:
+        errors.append(f"{problem} kernel log: {path.relative_to(directory)}")
+
+
 def log_details(log):
     first_error = None
     skipped_subtests = []
@@ -89,12 +101,18 @@ def report(
         raise ValueError("Empty manifest or duplicate workload IDs")
 
     results, errors = collect_results(directory, shards, expected)
-    recorded_modes = {
-        line.removeprefix("guest_mode=")
-        for metadata in directory.glob("shard-*/environment.txt")
-        for line in metadata.read_text().splitlines()
-        if line.startswith("guest_mode=")
-    }
+    recorded_modes = set()
+    require_kernel_log = False
+    metadata_paths = set(directory.glob("shard-*/environment.txt"))
+    plan_metadata = manifest.parent / "environment.txt"
+    if plan_metadata.is_file():
+        metadata_paths.add(plan_metadata)
+    for metadata in metadata_paths:
+        for line in metadata.read_text().splitlines():
+            if line.startswith("guest_mode="):
+                recorded_modes.add(line.removeprefix("guest_mode="))
+            if line == "kernel_console=ttyS2":
+                require_kernel_log = True
     if mode is None:
         mode = next(iter(sorted(recorded_modes)), "case")
     if recorded_modes - {mode}:
@@ -126,8 +144,14 @@ def report(
         label = f"{key} ({case['command'].strip().removeprefix('./')})"
         if mode == "subsystem" and action == "RUN" and folder not in printed_groups:
             printed_groups.add(folder)
-            if (folder / "kernel.log").is_file():
-                print_log(folder / "kernel.log", "Kernel", case["group"], console_output)
+            print_kernel_log(
+                folder / "kernel.log",
+                directory,
+                case["group"],
+                console_output,
+                require_kernel_log,
+                errors,
+            )
             if (folder / "guest.log").is_file():
                 print_log(
                     folder / "guest.log", "Subsystem", case["group"], console_output
@@ -136,8 +160,15 @@ def report(
                 errors.append(f"Missing subsystem console for {case['group']}")
             if (folder / "guest.error").is_file():
                 errors.append((folder / "guest.error").read_text().strip())
-        if mode == "case" and log.with_suffix(".kernel.log").is_file():
-            print_log(log.with_suffix(".kernel.log"), "Kernel", label, console_output)
+        if mode == "case" and action == "RUN":
+            print_kernel_log(
+                log.with_suffix(".kernel.log"),
+                directory,
+                label,
+                console_output,
+                require_kernel_log,
+                errors,
+            )
         if log.is_file():
             if mode == "case":
                 print_log(log, result, label, console_output)
@@ -187,6 +218,10 @@ def report(
                 f"\n{len(cases)} workloads registered. Open **Test summary** for individual results and **Full workload logs** for their console output.",
                 file=output,
             )
+            if errors:
+                print("\nReport errors:\n", file=output)
+                for message in errors:
+                    print(f"- {message}", file=output)
             print("\n| Result | Workloads |\n| --- | ---: |", file=output)
             for result in ("PASS", "FAIL", "SKIP", "NOT_RUN", "MISSING"):
                 print(f"| {result} | {totals[result]} |", file=output)

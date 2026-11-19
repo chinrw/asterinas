@@ -633,6 +633,39 @@ sys.exit(19 if mode == 'qemu_failure' else 0)
                     self.assertFalse(report(shard / "cases.tsv", directory, 1, mode=mode, console_output=output))
                 self.assertEqual(output.getvalue().count("fixture printk diagnostic"), 1)
 
+    def test_missing_and_empty_kernel_logs_fail_both_modes(self):
+        (self.bundle / "separate-kernel-console").touch()
+        plan = self.root / "plan"
+        planned = self.run_runner("pass", "--plan-only", "--output", str(plan))
+        self.assertEqual(planned.returncode, 0, planned.stdout)
+        self.assertIn("kernel_console=ttyS2", (plan / "environment.txt").read_text())
+
+        for mode, filename in [("subsystem", "kernel.log"), ("case", "1.kernel.log")]:
+            directory = self.root / mode
+            shard = directory / "shard-0"
+            run = self.run_runner("kernel_console", "--output", str(shard), guest_mode=mode)
+            self.assertEqual(run.returncode, 0, run.stdout)
+            self.assertIn("kernel_console=ttyS2", (shard / "environment.txt").read_text())
+            # The build's plan also identifies the channel if shard metadata is lost.
+            (shard / "environment.txt").unlink()
+            log = shard / "hello_world" / filename
+            saved = log.read_bytes()
+            log.unlink()
+            for condition in ("Missing", "Empty", "Restored"):
+                with self.subTest(mode=mode, condition=condition):
+                    if condition == "Empty":
+                        log.touch()
+                    elif condition == "Restored":
+                        log.write_bytes(saved)
+                    summary = StringIO()
+                    with redirect_stdout(summary):
+                        failed = report(plan / "cases.tsv", directory, 1, mode=mode, console_output=StringIO())
+                    self.assertEqual(failed, condition != "Restored", summary.getvalue())
+                    if failed:
+                        message = f"{condition} kernel log: shard-0/hello_world/{filename}"
+                        self.assertEqual(summary.getvalue().count(message), 1)
+                    self.assertNotIn("kernel log: shard-0/device", summary.getvalue())
+
     def test_invalid_shards_are_rejected(self):
         for count, index in [("0", "0"), ("3", "3"), ("4", "-1"), ("257", "0")]:
             result = self.run_runner("pass", "--shard-count", count, "--shard-index", index)

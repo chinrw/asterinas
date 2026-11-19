@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 
-"""Recover kheaders and Module.symvers from the benchmark's stripped x86-64 ELF."""
+"""Recover kheaders and Module.symvers from the kernel's stripped x86-64 ELF."""
 
 import io
 import lzma
@@ -26,7 +26,7 @@ def extract_headers(elf):
             continue
         Path("benchmark-headers.tar").write_bytes(archive)
         return
-    raise ValueError("Missing embedded kheaders in the benchmark kernel")
+    raise ValueError("Missing embedded kheaders in the kernel")
 
 
 def write_exports(elf):

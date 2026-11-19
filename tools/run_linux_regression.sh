@@ -262,6 +262,10 @@ for group in "${groups[@]}"; do
 done
 [[ ${#selected_rows[@]} -gt 0 ]] || { echo "no matching workloads" >&2; exit 2; }
 
+kernel_console=ttyS0
+if [[ -f $bundle/separate-kernel-console ]]; then kernel_console=ttyS2; fi
+printf 'kernel_console=%s\n' "$kernel_console" > "$output_dir/environment.txt"
+
 if [[ $plan_only == true ]]; then
     printf '%s\n' "$header" "${selected_rows[@]}" > "$output_dir/cases.tsv"
     exit 0
@@ -283,7 +287,7 @@ fi
     "$qemu" --version
     sha256sum "$repo_root/tools/run_linux_regression.sh" "$exclusions_file"
     sha256sum "$bundle/bzImage" "$bundle/initramfs.cpio.gz"
-} > "$output_dir/environment.txt"
+} >> "$output_dir/environment.txt"
 cp "$bundle/kernel.config" "$output_dir/kernel.config"
 cp "$bundle/cases.tsv" "$output_dir/registered-cases.tsv"
 cp "$exclusions_file" "$output_dir/linux-exclusions.tsv"
@@ -322,8 +326,6 @@ done
 truncate -s 512M "$scratch/exfat.img"
 mkfs.exfat "$scratch/exfat.img" > "$output_dir/mkfs-exfat.log"
 
-kernel_console=ttyS0
-if [[ -f $bundle/separate-kernel-console ]]; then kernel_console=ttyS2; fi
 boot_args="console=$kernel_console rdinit=/linux-init lsm=integrity net.ifnames=0 panic=1"
 qemu_args=(
     -machine q35 -accel "$accel" -cpu "$cpu" -smp 4 -m 2048

@@ -69,7 +69,7 @@ The build artifacts (initramfs) can be found in the `test/initramfs/build` direc
 ## Running Regression Tests on Linux
 
 The Linux regression runner checks the in-house tests against a fixed x86-64
-Linux 6.16.0 kernel image shared with the benchmarks. It builds the tests and initramfs with the
+Linux 6.16.0 kernel image. It builds the tests and initramfs with the
 repository's pinned Nix dependencies, then boots one QEMU guest per subsystem
 with runnable workloads. A workload is a test program or a compound shell test,
 such as a server/client pair. It does not build the Asterinas kernel.
@@ -133,8 +133,7 @@ This accounts for registered workloads, not every function or branch inside
 them. A fatal `CHECK` still terminates that program, so later constructor tests
 inside it have not run even though the host continues with the next workload.
 
-The benchmark publishes its 6.16.0 kernel image and configuration. The bundle
-builds OverlayFS, exFAT, and AF_VSOCK as external modules using the Linux 6.16
+The bundle builds OverlayFS, exFAT, and AF_VSOCK as external modules using the Linux 6.16
 sources, the headers embedded in that image, and its exported symbols.
 Each workload loads its required module before its start marker. The exFAT
 workloads also mount the test disk. A missing driver or failed mount produces
@@ -176,7 +175,9 @@ Open **Linux regression report → Test summary** in Actions for the English res
 table and totals. Expand **Full workload logs** in the same job to inspect any
 workload's console output. A failed workload does not stop other workloads or shards. A missing
 shard, result, or completed workload log fails the combined check. Each shard
-also retains its original console files and results as an artifact.
+also retains its original console files and results as an artifact. With a separate
+kernel console, the report requires a nonempty kernel log for every subsystem
+with runnable workloads, or for every runnable case in case mode.
 
 After updating the kernel, tests, or fixtures, explicitly rerun the affected
 temporary exclusions and remove entries whose restoration conditions are met.

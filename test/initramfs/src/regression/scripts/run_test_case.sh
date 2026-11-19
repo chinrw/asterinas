@@ -20,17 +20,17 @@ run_test_case() {
 }
 
 run_test_case_with_linux_module() {
-    # The module is prepared only for the selected workload in the benchmark guest.
+    # The module is prepared only for the selected workload in the Linux guest.
     _register_test_case RUN "" "$@"
 }
 
-# Check requirements that must be built into the benchmark kernel.
+# Check requirements that must be built into the kernel.
 run_test_case_requiring() {
     _regression_config=$1
     shift
     if [ -n "${REGRESSION_BUILTIN_CONFIG:-}" ] &&
         ! grep -Fxq "$_regression_config=y" "$REGRESSION_BUILTIN_CONFIG"; then
-        skip_test_case "[kernel config] The benchmark kernel lacks built-in $_regression_config." "$@"
+        skip_test_case "[kernel config] The kernel lacks built-in $_regression_config." "$@"
     else
         run_test_case "$@"
     fi
