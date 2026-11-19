@@ -87,8 +87,11 @@ if batch := re.search(r'regression_batch=([0-9,]+)', cmdline):
         if mode == 'poweroff' and group == 'time' and number == '2':
             sys.exit(0)
         status = 17 if mode == 'first_case_failure' and group == 'time' and number == '1' else 0
+        elapsed = 0.2
+        if mode == 'batch_timeout' and group == 'time' and number == '1':
+            status, elapsed = 124, 1.0
         bad |= bool(status)
-        emit(f'BATCH_END {group} {number} {status} {i}.20')
+        emit(f'BATCH_END {group} {number} {status} {i+elapsed:.2f}')
     with out.open('a') as stream:
         print(f'LINUX_REGRESSION_RESULT {group} {case} {int(bad)}', file=stream)
         if mode == 'duplicate_final':
@@ -551,6 +554,15 @@ sys.exit(19 if mode == 'qemu_failure' else 0)
         self.assertEqual(rows[("time", "1")], "FAIL")
         self.assertEqual(rows[("time", "2")], "PASS")
         self.assertIn("BATCH_END time 2", (self.output / "time/2.log").read_text())
+
+    def test_subsystem_timeout_is_reported_and_the_next_workload_runs(self):
+        result = self.run_runner("batch_timeout", "--group", "time", "--mode", "subsystem")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        first, second = self.results()
+        self.assertEqual((first["result"], first["test_status"]), ("FAIL", "124"))
+        self.assertIn("timed out", first["reason"])
+        self.assertEqual(second["result"], "PASS")
+        self.assertEqual(self.calls(), ["time 1"])
 
     def test_early_group_shutdown_preserves_completed_cases(self):
         with (self.bundle / "cases.tsv").open("a") as plan:

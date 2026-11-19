@@ -117,7 +117,8 @@ for number in $(echo "$batch" | tr , ' '); do
     printf '\nBATCH_BEGIN %s %s %s\n' "$group" "$number" "$begin"
     printf 'BATCH_BEGIN %s %s %s\n' "$group" "$number" "$begin" > /dev/ttyS1
     rc=0
-    /bin/busybox timeout -k 5 "$case_timeout" /usr/bin/script --quiet --return \
+    # GNU timeout reports the deadline even if script handles TERM and exits zero.
+    /usr/bin/timeout --kill-after=5 "$case_timeout" /usr/bin/script --quiet --return \
         --command "/bin/sh /test/run_regression_test.sh $group" /dev/null < /dev/null || rc=$?
     read -r end _ < /proc/uptime
     printf '\nBATCH_END %s %s %s %s\n' "$group" "$number" "$rc" "$end"

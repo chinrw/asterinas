@@ -101,7 +101,7 @@ def split_console(console, group, numbers):
     return markers, starts
 
 
-def collect_group(group, cases, folder, qemu_status, results):
+def collect_group(group, cases, folder, qemu_status, results, timeout):
     numbers = {case["case"] for case in cases}
     markers, starts = split_console(folder / "guest.log", group, numbers)
     control = folder / "guest.result"
@@ -140,6 +140,8 @@ def collect_group(group, cases, folder, qemu_status, results):
                     status, reason = (
                         ("PASS", "") if code == "0" else ("FAIL", "workload failed")
                     )
+                    if code in {"124", "137"} and duration >= timeout:
+                        reason = f"Workload timed out after {timeout}s"
                 elif began:
                     reason = "Duplicate workload start"
         failed |= status != "PASS"
@@ -212,7 +214,7 @@ def run_groups(cases, directory, timeout, command):
             except KeyboardInterrupt:
                 rc = 130
                 interrupted = True
-            bad, error = collect_group(group, members, folder, rc, results)
+            bad, error = collect_group(group, members, folder, rc, results, timeout)
             source.flush()
             if error:
                 (folder / "guest.error").write_text(error + "\n")

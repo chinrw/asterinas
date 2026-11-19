@@ -142,8 +142,8 @@ NOT_RUN. The VirtIO hardware RNG workload remains skipped.
 
 The runner reports excluded TDX, graphics, virtual-console, input-device, and
 Asterinas-specific TCP tests. Missing fixtures required by the remaining tests
-are errors. When adding tests, register them with `run_test_case` in the existing group entry;
-do not maintain a separate Linux copy of the complete test list.
+are errors. Add new workloads to the existing group entry so both platforms
+continue to use the same test list.
 
 Temporary Linux exclusions are maintained in
 [`linux-regression-exclusions.tsv`](linux-regression-exclusions.tsv).

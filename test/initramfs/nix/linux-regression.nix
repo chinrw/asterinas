@@ -32,6 +32,7 @@ let
   };
 
   guestTools = [
+    pkgs.coreutils
     pkgs.util-linux
     pkgs.iproute2
   ];
@@ -69,6 +70,7 @@ pkgs.runCommand "linux-regression-6.16.0"
         cp -r "$dependency" root/nix/store/
       fi
     done
+    ln -sfn ${pkgs.coreutils}/bin/timeout root/usr/bin/timeout
     ln -sfn ${pkgs.util-linux}/bin/script root/usr/bin/script
     ln -sfn ${pkgs.iproute2}/bin/ip root/usr/bin/ip
     touch $out/subsystem-v1
