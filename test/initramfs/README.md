@@ -11,7 +11,8 @@ initramfs/
 │   ├── benchmark/     # Nix expressions for `benchmark`
 │   ├── conformance/   # Nix expressions for `conformance`
 │   ├── regression/    # Nix expressions for `regression`
-│   └── initramfs.nix  # Nix expression for packaging initramfs
+│   ├── initramfs.nix  # Nix expression for packaging initramfs
+│   └── linux-regression.nix # Nix bundle for running regression tests on Linux
 ├── src/
 │   ├── benchmark/     # Third-party benchmark suites to compare Asterinas against Linux
 │   ├── conformance/   # Third-party test suites to verify Linux compatibility
@@ -21,7 +22,8 @@ initramfs/
 │   ├── regression/    # In-house syscall and subsystem regression tests
 │   └── boot_hello.sh  # Minimal boot smoke test script
 ├── Makefile
-└── README.md
+├── README.md
+└── linux-regression-exclusions.tsv # Known test executables skipped on Linux
 ```
 
 ## Building and Packaging Tests
@@ -53,6 +55,21 @@ back into `hash`.
 default blocklist; `blocklists.ext2` and `blocklists.exfat` hold
 filesystem-specific extras. See the header of `blocklists` for the
 entry format.
+
+### Running Regression Tests on Linux
+
+Running the in-house regression suite in a Linux QEMU VM requires an `x86_64` Linux host, Nix, and read/write access to `/dev/kvm`.
+
+Run the suite with:
+
+```bash
+./tools/run_linux_regression.sh
+```
+
+Pass `--help` to see available options such as `--timeout` and `--output`.
+
+Excluded test executables are listed in `linux-regression-exclusions.tsv`.
+Update this file whenever you rename or remove an excluded test executable.
 
 ### Multi-Architecture Support
 

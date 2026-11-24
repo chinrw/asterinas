@@ -1,0 +1,53 @@
+name: Test Linux regression
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - test/initramfs/**
+      - distro/nixpkgs.nix
+      - flake.nix
+      - flake.lock
+      - tools/dev_env/nix/packages/qemu.nix
+      - tools/run_linux_regression.sh
+      - .github/workflows/test_linux_regression.yml
+  push:
+    branches:
+      - main
+    paths:
+      - test/initramfs/**
+      - distro/nixpkgs.nix
+      - flake.nix
+      - flake.lock
+      - tools/dev_env/nix/packages/qemu.nix
+      - tools/run_linux_regression.sh
+      - .github/workflows/test_linux_regression.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux-regression:
+    name: Linux regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: aster-nixos-dev
+          extraPullNames: aster-nixos-release
+          skipPush: true
+      - name: Run Linux regression suite
+        run: ./tools/run_linux_regression.sh --output results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-regression-results
+          path: results/
+          retention-days: 14
