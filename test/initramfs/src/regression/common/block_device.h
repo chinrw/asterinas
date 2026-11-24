@@ -11,15 +11,19 @@
  * in guest Asterinas via /dev/vda (or similar) and in host Linux via
  * /dev/loop0 (or similar). These correspond to the same device image, where
  * the underlying file system is prepared as part of the build process.
+ * Linux regression VMs set `REGRESSION_BLOCK_DEVICES=virtio` to access their
+ * dedicated /dev/vda, /dev/vdb, and /dev/vdc directly.
  *
  * The device can be mounted using mount_block_device(). After use, the mount
  * can be cleaned up and the device can be closed via umount_block_device() and
  * close_block_device(), respectively.
  */
 
-#include <sys/mount.h>
-#include <stdio.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <sys/mount.h>
 #include <unistd.h>
 
 enum block_device {
@@ -28,60 +32,55 @@ enum block_device {
 	BLOCK_VDC_EXT2,
 };
 
-#ifdef __asterinas__
+struct block_device_spec {
+	const char *virtio_path;
+	const char *image_path;
+};
 
-static int open_block_device(enum block_device dev)
+static const struct block_device_spec *block_device_spec(enum block_device dev)
 {
-	switch (dev) {
-	case BLOCK_VDA_EXT2:
-		return open("/dev/vda", O_RDWR);
-	case BLOCK_VDB_EXFAT:
-		return open("/dev/vdb", O_RDWR);
-	case BLOCK_VDC_EXT2:
-		return open("/dev/vdc", O_RDWR);
+	static const struct block_device_spec specs[] = {
+		[BLOCK_VDA_EXT2] = { "/dev/vda",
+				     "./test/initramfs/build/ext2.img" },
+		[BLOCK_VDB_EXFAT] = { "/dev/vdb",
+				      "./test/initramfs/build/exfat.img" },
+		[BLOCK_VDC_EXT2] = { "/dev/vdc",
+				     "./test/initramfs/build/ltp_dev.img" },
+	};
+
+	if ((size_t)dev >= sizeof(specs) / sizeof(specs[0])) {
+		errno = ENODEV;
+		return NULL;
 	}
-
-	errno = ENODEV;
-	return -1;
+	return &specs[dev];
 }
 
-static int close_block_device(int fd)
-{
-	return close(fd);
-}
+#ifndef __asterinas__
 
-#else /* __asterinas__ */
-
-#include <sys/ioctl.h>
 #include <linux/loop.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
 
 #include "test.h"
 
-static int open_block_device(enum block_device dev)
+static bool should_use_virtio_block_devices(void)
 {
-	int img_fd, ctrl_fd, loop_fd;
-	int id;
+	const char *mode = getenv("REGRESSION_BLOCK_DEVICES");
+
+	return mode && strcmp(mode, "virtio") == 0;
+}
+
+static int open_loop_block_device(const char *image_path)
+{
+	int img_fd = CHECK(open(image_path, O_RDWR));
+	int ctrl_fd = CHECK(open("/dev/loop-control", O_RDWR));
+	int id = CHECK(ioctl(ctrl_fd, LOOP_CTL_GET_FREE));
 	char loop_path[20];
+	int loop_fd;
 
-	img_fd = -1;
-	switch (dev) {
-	case BLOCK_VDA_EXT2:
-		img_fd = CHECK(open("./test/initramfs/build/ext2.img", O_RDWR));
-		break;
-	case BLOCK_VDB_EXFAT:
-		img_fd =
-			CHECK(open("./test/initramfs/build/exfat.img", O_RDWR));
-		break;
-	case BLOCK_VDC_EXT2:
-		img_fd = CHECK(
-			open("./test/initramfs/build/ltp_dev.img", O_RDWR));
-		break;
-	}
-
-	ctrl_fd = CHECK(open("/dev/loop-control", O_RDWR));
-	id = CHECK(ioctl(ctrl_fd, LOOP_CTL_GET_FREE));
 	CHECK(close(ctrl_fd));
-
 	snprintf(loop_path, sizeof(loop_path), "/dev/loop%d", id);
 	loop_fd = CHECK(open(loop_path, O_RDWR));
 	CHECK(ioctl(loop_fd, LOOP_SET_FD, img_fd));
@@ -90,15 +89,29 @@ static int open_block_device(enum block_device dev)
 	return loop_fd;
 }
 
-static int close_block_device(int fd)
-{
-	CHECK(ioctl(fd, LOOP_CLR_FD));
-	CHECK(close(fd));
+#endif /* !__asterinas__ */
 
-	return 0;
+static int open_block_device(enum block_device dev)
+{
+	const struct block_device_spec *spec = block_device_spec(dev);
+
+	if (!spec)
+		return -1;
+#ifndef __asterinas__
+	if (!should_use_virtio_block_devices())
+		return open_loop_block_device(spec->image_path);
+#endif
+	return open(spec->virtio_path, O_RDWR);
 }
 
-#endif /* __asterinas__ */
+static int close_block_device(int fd)
+{
+#ifndef __asterinas__
+	if (!should_use_virtio_block_devices())
+		CHECK(ioctl(fd, LOOP_CLR_FD));
+#endif
+	return close(fd);
+}
 
 static int __attribute__((unused)) mount_block_device(int fd, const char *path,
 						      const char *fs, int flags)
