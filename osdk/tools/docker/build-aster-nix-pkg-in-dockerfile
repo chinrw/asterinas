@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# SPDX-License-Identifier: MPL-2.0
+
+set -euo pipefail
+
+if [[ "$#" -ne 2 ]]; then
+    echo "Usage: $0 <package> <dest>" >&2
+    exit 2
+fi
+
+pkg="$1"
+dest="$2"
+flake_dir="/tmp/asterinas"
+
+# `prebuilt-nix-packages` deletes `/nix/var/nix/gcroots/auto/*`.
+# A named root keeps this output alive across that cleanup.
+gc_root="/nix/var/nix/gcroots/${pkg}"
+nix build --accept-flake-config --no-update-lock-file \
+    --out-link "${gc_root}" "path:${flake_dir}#${pkg}"
+
+mkdir -p "$(dirname "${dest}")"
+ln -sfn "${gc_root}" "${dest}"
+rm -rf "${flake_dir}"

@@ -20,9 +20,9 @@ RUN wget https://raw.githubusercontent.com/asterinas/linux_binary_cache/8e6e8ad3
 #= Download VDSO files =====================================================
 
 WORKDIR /root
-RUN git clone https://github.com/asterinas/linux_vdso.git && \
-    cd linux_vdso && \
-    git checkout 8af5717
+COPY flake.nix flake.lock /tmp/asterinas/
+COPY tools/dev_env/nix /tmp/asterinas/tools/dev_env/nix
+RUN build-aster-nix-pkg-in-dockerfile vdso /root/linux_vdso
 
 ENV VDSO_LIBRARY_DIR="/root/linux_vdso"
 
