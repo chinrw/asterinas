@@ -14,6 +14,7 @@ on:
   push:
     branches:
       - main
+      - validate/linux-6.16-builtin-kernel
     paths:
       - test/initramfs/**
       - distro/nixpkgs.nix

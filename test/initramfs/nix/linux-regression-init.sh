@@ -46,6 +46,7 @@ for dev in /dev/vda /dev/vdb /dev/vdc /dev/nvme0n1; do
 done
 
 mount -t ext2 /dev/vda /ext2
+mount -t exfat /dev/vdb /exfat
 ip link set lo up
 # Keep eth0 up without an IPv4 address because netlink_route expects only loopback addresses.
 ip link set eth0 up

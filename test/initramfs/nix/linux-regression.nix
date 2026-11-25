@@ -17,8 +17,8 @@ let
   };
   kernel = pkgs.fetchurl {
     name = "vmlinuz-${kernelVersion}";
-    url = "https://raw.githubusercontent.com/asterinas/linux_binary_cache/8e6e8ad382aac7e605d7a058811d09bce478cd7d/${kernelVersion}/vmlinuz";
-    hash = "sha256-HT6KiGY7ygemKqdpVZ9JFT3b3aEGKwziwdydd7BtJOc=";
+    url = "https://raw.githubusercontent.com/chinrw/linux_binary_cache/23d4809f1a9c43482cf416e549ee5839cba6711f/${kernelVersion}/vmlinuz";
+    hash = "sha256-u9mhKSs3vlSR+0VuHyneuCSE8d50YpQIVQ77QRgTO1s=";
   };
   inherit (initramfsPkgs) regression initramfs;
 
