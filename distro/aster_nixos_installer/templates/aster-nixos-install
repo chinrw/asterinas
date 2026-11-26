@@ -156,6 +156,7 @@ COMMON_NIX_ARGS=(
 
 NIX_SYSTEM="@aster-target-platform@"
 NIXPKGS_PATH="@aster-nixpkgs@"
+NIXOS_CHANNEL="@aster-channel@"
 
 # Pre-build the NixOS system closure on the host
 # so that the result is cached in the host's Nix store.
@@ -173,12 +174,17 @@ SYSTEM_CLOSURE=$(nix-build "${NIXPKGS_PATH}/nixos" -A system \
 export PATH=${PATH}:/run/current-system/sw/bin
 nixos-install --root ${BUILD_DIR} --no-root-passwd \
     --system "${SYSTEM_CLOSURE}" \
+    --channel "${NIXOS_CHANNEL}" \
     "${COMMON_NIX_ARGS[@]}"
 
-# Retain only the current system generation. Reusing the disk image otherwise
-# preserves old system closures in its Nix store after every installation.
+# Retain only the current system and channel generations. Reusing the disk
+# image otherwise preserves old system closures and `nixpkgs` trees in its Nix
+# store after every installation.
 nix-env --store "${BUILD_DIR}" \
     -p "${BUILD_DIR}/nix/var/nix/profiles/system" \
+    --delete-generations old
+nix-env --store "${BUILD_DIR}" \
+    -p "${BUILD_DIR}/nix/var/nix/profiles/per-user/root/channels" \
     --delete-generations old
 nix-store --store "${BUILD_DIR}" --gc
 echo "Congratulations! Asterinas NixOS has been installed successfully!"

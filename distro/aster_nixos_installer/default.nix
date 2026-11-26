@@ -15,6 +15,16 @@ let
     path = ../../target/osdk/iso_root/boot/asterinas-osdk-bin;
   };
   etc-nixos = builtins.path { path = ../etc_nixos; };
+  nixpkgs-path = builtins.storePath pkgs.path;
+  # Wrap `nixpkgs` under `nixos/` without a top-level `default.nix` so
+  # `nixos-install --channel` exposes the `nixos` attribute set to `nix-env`
+  # while sharing the `nixpkgs` store path already in the disk image.
+  nixos-channel = pkgs.linkFarm "nixos-channel" [
+    {
+      name = "nixos";
+      path = nixpkgs-path;
+    }
+  ];
 
   aster_configuration = pkgs.replaceVarsWith {
     src = ./templates/aster_configuration.nix;
@@ -32,9 +42,10 @@ let
   aster_nixos_install = pkgs.replaceVarsWith {
     src = ./templates/aster-nixos-install;
     replacements = {
+      aster-channel = nixos-channel;
       aster-configuration = aster_configuration;
       aster-etc-nixos = etc-nixos;
-      aster-nixpkgs = builtins.storePath pkgs.path;
+      aster-nixpkgs = nixpkgs-path;
       aster-target-platform = target_platform;
       aster-substituters = extra-substituters;
       aster-trusted-public-keys = extra-trusted-public-keys;
