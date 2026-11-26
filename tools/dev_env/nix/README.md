@@ -61,9 +61,9 @@ Review the lock diff, then run the validation commands below.
 If Nix reports that `nix-command` or `flakes` is disabled,
 add `--extra-experimental-features 'nix-command flakes'` to the command.
 
-The [OSDK Docker image](../../../osdk/tools/docker/Dockerfile)
-creates its `nixpkgs` and `nixos` channels from the locked revision when built.
-Updating `flake.lock` does not change the channels in published Docker images,
+The [prebuilt Nix packages Docker image](../docker/prebuilt-nix-packages/Dockerfile)
+pins its `nixpkgs` store path and prebuilt packages from `flake.lock` when built.
+Updating `flake.lock` does not update published Docker images,
 so rebuild the Docker image chain to pick up the new revision.
 The "Check nixpkgs source" step in the
 [Test Nix flake workflow](../../../.github/workflows/test_nix_flake.yml)
@@ -81,17 +81,19 @@ The shell omits klint, because no build or check target invokes it.
 
 ## Docker builds
 
-The [OSDK Docker image](../../../osdk/tools/docker/Dockerfile) installs Nix with flakes enabled,
-registers the `nixpkgs` and `nixos` channels from `flake.lock`,
+The [OSDK Docker image](../../../osdk/tools/docker/Dockerfile) installs Nix with flakes enabled
 and installs [`build-aster-nix-pkg-in-dockerfile`](../../../osdk/tools/docker/build-aster-nix-pkg-in-dockerfile)
 into `/usr/local/bin`.
 Dockerfiles use that helper to build flake outputs such as `.#qemu` and `.#vdso`.
 The helper accepts the flake's Cachix configuration so Nix can download cached
 outputs, and creates a named garbage-collection root under `/nix/var/nix/gcroots/`.
 
-Preserve those named roots when changing cleanup steps in the
-[prebuilt Nix packages Docker image](../docker/prebuilt-nix-packages/Dockerfile),
-which removes automatic roots before building the test packages.
+The [prebuilt Nix packages Docker image](../docker/prebuilt-nix-packages/Dockerfile)
+also records the locked `nixpkgs` source at `/nix/var/nix/gcroots/nixpkgs`,
+points `nix-path`, `/etc/nix/registry.json`, and `/root/.nix-defexpr/nixpkgs` at it,
+and caches the global flake registry at `/etc/nix/flake-registry.json`.
+Preserve `/nix/var/nix/gcroots/*` when changing cleanup steps in that Dockerfile,
+which removes `/nix/var/nix/gcroots/auto/*` before building the test packages.
 Do not run garbage collection after the final `initramfs_pkgs`
 build or in downstream Dockerfiles.
 That build leaves unrooted dependencies such as `stdenvNoCC` in the store for CI.

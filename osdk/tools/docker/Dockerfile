@@ -213,32 +213,14 @@ FROM osdk-base AS osdk-final
 # Install klint. Pin the Klint commit compatible with the Asterinas toolchain.
 RUN cargo install klint --git https://github.com/Rust-for-Linux/klint --rev 3b092315
 
-# Install Nix and register channels.
+# Install Nix.
 #
 # * `--daemon`: required for the root user.
 # * `--no-channel-add`: skip the installer's default `nixpkgs-unstable` channel
-#   because we register the channels pinned by `flake.lock` below.
+#   because Nix builds in the Docker images pin `nixpkgs` through `flake.lock`.
 RUN bash -c 'sh <(curl -L https://nixos.org/nix/install) --daemon --yes --no-channel-add' \
     && echo 'experimental-features = nix-command flakes' >> /etc/nix/nix.conf
 ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
-COPY flake.lock /tmp/asterinas/flake.lock
-RUN <<'EOF'
-set -eu
-nixpkgs_url="$(python3 - <<'PYTHON'
-import json
-
-with open("/tmp/asterinas/flake.lock") as f:
-    lock = json.load(f)
-node = lock["nodes"][lock["root"]]["inputs"]["nixpkgs"]
-source = lock["nodes"][node]["locked"]
-print(f"https://github.com/{source['owner']}/{source['repo']}/archive/{source['rev']}.tar.gz")
-PYTHON
-)"
-nix-channel --add "$nixpkgs_url" nixpkgs
-nix-channel --add "$nixpkgs_url" nixos
-nix-channel --update
-rm -rf /tmp/asterinas
-EOF
 
 # Install `build-aster-nix-pkg-in-dockerfile`.
 COPY --chmod=755 osdk/tools/docker/build-aster-nix-pkg-in-dockerfile /usr/local/bin/build-aster-nix-pkg-in-dockerfile
