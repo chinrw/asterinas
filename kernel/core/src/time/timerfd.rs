@@ -148,12 +148,13 @@ impl TimerfdFile {
 
         timer_guard.set_interval(interval);
 
-        // Cancel the timer and clear the ticks counter.
-        timer_guard.cancel();
+        // Clear the ticks counter and invalidate readiness.
         self.ticks.store(0, Ordering::Relaxed);
         self.pollee.invalidate();
 
-        if expire_time != Duration::ZERO {
+        if expire_time == Duration::ZERO {
+            timer_guard.cancel();
+        } else {
             if flags.contains(TFDSetTimeFlags::TFD_TIMER_CANCEL_ON_SET) {
                 // TODO: Currently this flag has no effect since the system time cannot be changed.
                 // Once add the support for modifying the system time, the corresponding logics for
